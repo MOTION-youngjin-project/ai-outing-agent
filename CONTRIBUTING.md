@@ -17,6 +17,31 @@ main                          배포/최종 안정 버전, develop에서 검증�
 - 작업 시작 전 `develop`에서 최신 pull 후 분기 (`main`이 아님)
 - 역할은 미리 나누지 않음 — 원하는 기능 브랜치를 아무나 잡아서 작업
 
+## GitHub Desktop으로 작업하기
+
+이 팀은 커맨드라인 대신 GitHub Desktop을 사용한다.
+
+**처음 한 번만**
+
+1. `File > Clone Repository` → `MOTION-youngjin-project/ai-outing-agent` 클론
+2. 상단 `Current Branch` 드롭다운 → `develop` 선택
+3. 터미널(VSCode 하단)에서:
+   ```bash
+   npm install
+   cp .env.example .env.local
+   ```
+   `.env.local`에 `GEMINI_API_KEY` 등 키 채워넣기 (키는 팀 채널에서 별도 공유)
+4. `npm run dev`로 `localhost:3000` 뜨는지 확인
+
+**작업할 때마다**
+
+1. `Current Branch` → `develop` → 상단 `Fetch origin`/`Pull origin`으로 최신화
+2. `Current Branch` → `New Branch`(`Ctrl+Shift+N`) → **`develop` 기준으로** `feature/기능이름` 브랜치 생성
+3. 코드 작업 후 `Changes` 탭에서 커밋 메시지 작성(형식은 아래 커밋 컨벤션 참고) → `Commit to feature/기능이름`
+4. 상단 `Publish branch`(최초) 또는 `Push origin`
+5. 상단 `Create Pull Request` → 브라우저에서 **base를 반드시 `develop`으로 지정** (`main` 아님)
+6. 리뷰 요청 → 아래 PR 절차대로 병합
+
 ## PR 대상 정리
 
 - 평소 작업: `feature/xxx` → `develop`
