@@ -1,0 +1,5 @@
+# 담당 영역별 리뷰어 지정 (GitHub 아이디로 채워넣기)
+# /src/lib/tools/   @담당자A
+# /src/lib/rag/     @담당자B
+# /prisma/          @담당자C
+# /src/lib/parking/ @담당자D
