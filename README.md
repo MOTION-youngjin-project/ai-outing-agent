@@ -26,7 +26,7 @@ src/lib/parking/             주차장 확장 모듈 (독립적으로 붙였다 
 prisma/                      schema.prisma, 마이그레이션
 ```
 
-팀 역할 분배 시 위 폴더 단위로 나누면 충돌 없이 작업 가능 (예: A=agent/tools, B=rag, C=prisma/DB, D=프론트 UI). 실제 담당자는 `.github/CODEOWNERS`에 채워 넣기.
+역할은 미리 나누지 않고, 각자 원하는 기능을 `feature/xxx` 브랜치로 잡아서 작업 (위 폴더 단위로 나뉘어 있어서 겹칠 일이 적음).
 
 ## 시작하기
 
