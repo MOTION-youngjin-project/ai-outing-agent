@@ -20,7 +20,7 @@ function decodeEntities(text: string): string {
 // 실제 HTML 태그(<p>, <br/> 등, 알파벳으로 시작)만 제거한다.
 // 이 API는 <공간드림 1472> 처럼 제목에 꺾쇠괄호를 장식용으로 쓰는 경우가 있어,
 // 모든 <...>를 태그로 취급하면 제목 일부가 잘려나간다.
-function stripTags(text: string): string {
+export function stripTags(text: string): string {
   return decodeEntities(text).replace(/<\/?[a-zA-Z][^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 

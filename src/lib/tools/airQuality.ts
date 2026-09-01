@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { normalizeSido } from "@/lib/region";
+import { normalizeSido } from "../region.ts";
 
 // 한국환경공단 에어코리아 - 시도별 실시간 측정정보 조회
 // https://www.data.go.kr/data/15073861/openapi.do
@@ -10,7 +10,7 @@ const AIRKOREA_URL =
   "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty";
 
 // PM10 24시간 등급 기준 (에어코리아 통합대기환경지수 기준, ㎍/m³)
-function gradeFromPm10(pm10: number): string {
+export function gradeFromPm10(pm10: number): string {
   if (pm10 <= 30) return "좋음";
   if (pm10 <= 80) return "보통";
   if (pm10 <= 150) return "나쁨";

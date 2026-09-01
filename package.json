@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "self-check": "node --experimental-strip-types scripts/self-check.ts"
   },
   "dependencies": {
     "@langchain/core": "^1.2.9",

@@ -1,0 +1,103 @@
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+
+// 대구광역시 통합주차정보시스템 - 민간주차장 API(주차장정보 조회)
+// https://pis.daegu.go.kr/api/mingan/prkInfo
+// 대구광역시 관할 구/군 단위로만 조회 가능. 인증은 쿼리스트링이 아니라 Authentication 헤더.
+const PARKING_URL = "https://pis.daegu.go.kr/api/mingan/prkInfo";
+
+const DISTRICT_CODES: Record<string, string> = {
+  중구: "150",
+  동구: "151",
+  서구: "152",
+  남구: "153",
+  북구: "154",
+  수성구: "155",
+  달서구: "156",
+  달성군: "157",
+  군위군: "361",
+};
+
+type ParkingItem = {
+  prkInfo: { pkltNm: string; sysgrpyYn: string };
+  prkFcltInfo: { lotnoAddr: string; prkNocmprt: number };
+  prkOperInfo: { crgLevySeNm: string | null; gnrlOneHrCrg: number | null };
+};
+
+async function fetchOnce(sggCd: string, apiKey: string) {
+  const params = new URLSearchParams({ sggCd });
+  const res = await fetch(`${PARKING_URL}?${params}`, {
+    headers: { accept: "application/json;charset=UTF-8", Authentication: apiKey },
+    signal: AbortSignal.timeout(8000),
+  });
+  const data = await res.json();
+
+  if (data?.resultCode !== "200") {
+    throw new Error(`대구 주차정보 API 오류: ${data?.message ?? "알 수 없는 오류"}`);
+  }
+  return (data?.data ?? []) as ParkingItem[];
+}
+
+export function formatFee(crgLevySeNm: string | null, gnrlOneHrCrg: number | null): string {
+  if (crgLevySeNm === "무료") return "무료";
+  if (gnrlOneHrCrg) return `시간당 ${gnrlOneHrCrg}원`;
+  return crgLevySeNm ?? "요금정보 없음";
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchParking(sggCd: string) {
+  const apiKey = process.env.DAEGU_PARKING_API_KEY;
+  if (!apiKey) throw new Error("DAEGU_PARKING_API_KEY가 설정되지 않았습니다.");
+
+  const MAX_ATTEMPTS = 3;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await fetchOnce(sggCd, apiKey);
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_ATTEMPTS) await sleep(500);
+    }
+  }
+  throw lastError;
+}
+
+export const parkingTool = tool(
+  async ({ district }) => {
+    const sggCd = DISTRICT_CODES[district];
+    if (!sggCd) {
+      return `"${district}"은(는) 대구광역시 구/군이 아닙니다. 이 도구는 대구광역시(중구·동구·서구·남구·북구·수성구·달서구·달성군·군위군) 내 주차장만 조회 가능합니다.`;
+    }
+
+    try {
+      const items = await fetchParking(sggCd);
+      if (items.length === 0) return `${district}에 등록된 주차장 정보를 찾을 수 없습니다.`;
+
+      const list = items
+        .slice(0, 5)
+        .map((i) => {
+          const fee = formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg);
+          const realtime = i.prkInfo.sysgrpyYn === "Y" ? "실시간 잔여면수 제공" : "실시간 정보 없음";
+          return `- ${i.prkInfo.pkltNm} (${i.prkFcltInfo.lotnoAddr}, 주차구획 ${i.prkFcltInfo.prkNocmprt}면, ${fee}, ${realtime})`;
+        })
+        .join("\n");
+
+      return `${district} 주차장 목록 중 일부입니다 (전체 ${items.length}곳, 좌표/거리 기반 정렬은 지원 안 함):\n${list}`;
+    } catch (err) {
+      return `주차장 조회에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  },
+  {
+    name: "search_daegu_parking",
+    description:
+      "대구광역시 구/군 단위로 주차장 목록(위치, 요금, 주차 가능 대수)을 조회한다. " +
+      "대구 외 지역은 지원하지 않는다. 실시간 잔여 주차면수는 일부 주차장만 제공되므로 " +
+      "제공 여부를 사용자에게 함께 알려줘라.",
+    schema: z.object({
+      district: z
+        .enum(["중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군"])
+        .describe("주차장을 조회할 대구광역시 구/군"),
+    }),
+  }
+);

@@ -4,9 +4,13 @@ import { airQualityTool } from "./tools/airQuality";
 import { weatherTool } from "./tools/weather";
 import { culturePortalTool } from "./tools/culturePortal";
 import { facilityInfoTool } from "./tools/facilityInfo";
+import { parkingTool } from "./tools/parking";
 
 const SYSTEM_PROMPT =
-  "너는 나들이 장소를 추천하는 에이전트다. 사용자가 대기질이나 날씨를 직접 언급하지 않아도 " +
+  "너는 나들이 장소를 추천하는 에이전트다. 지역(시/도)이 대화에서 한 번도 언급되지 않았으면 " +
+  "임의로 지역을 추측하거나 도구를 호출하지 말고, 먼저 어느 지역으로 나들이 가는지 되물어라. " +
+  "지역이 이미 언급됐으면(이번 메시지든 이전 대화든) 매번 다시 묻지 말고 그 지역 기준으로 진행해라.\n\n" +
+  "사용자가 대기질이나 날씨를 직접 언급하지 않아도 " +
   "'날씨가 별로다', '컨디션이 안 좋다' 같은 애매한 표현이 나오면 먼저 get_air_quality와 get_weather 도구로 확인하고, " +
   "미세먼지가 나쁘거나 비/눈 예보가 있으면 실내 활동으로, 둘 다 좋으면 야외 활동으로 판단해서 이유와 함께 추천해라.\n\n" +
   "동반자 유형에 따라 추천 방향을 다르게 해라: 아이/영유아 동반이면 유모차·수유실 등 편의시설이 갖춰진 곳을, " +
@@ -19,7 +23,9 @@ const SYSTEM_PROMPT =
   "제약을 어떻게 반영했는지 이유에 포함해라. 시간이 짧으면 추천 장소 개수도 1~2곳으로 줄여라.\n\n" +
   "속도가 중요하다: 서로 의존하지 않는 도구(예: get_air_quality와 get_weather, " +
   "또는 search_culture_events와 search_family_facility_info)는 한 턴에 동시에 같이 호출해라. " +
-  "한 번에 하나씩 순차로 호출하지 마라.";
+  "한 번에 하나씩 순차로 호출하지 마라.\n\n" +
+  "장소를 추천한 뒤 사용자가 주차를 물어보면 search_daegu_parking으로 확인해라. " +
+  "단, 이 도구는 대구광역시만 지원하므로 다른 지역이면 지원하지 않는다고 솔직히 말해라.";
 
 // ponytail: 무료 티어 쿼터는 모델별로 따로 있어서(실측 확인), 쿼터 소진 시
 // 다음 모델로 순서대로 재시도. 유료 결제 전환 시 이 체인은 필요 없어짐.
@@ -68,7 +74,7 @@ export async function runAgent(history: ChatTurn[]) {
 
     const agent = createAgent({
       model: llm,
-      tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool],
+      tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool, parkingTool],
       systemPrompt: SYSTEM_PROMPT,
     });
 
