@@ -1,5 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { normalizeSido } from "@/lib/region";
 
 // 한국환경공단 에어코리아 - 시도별 실시간 측정정보 조회
 // https://www.data.go.kr/data/15073861/openapi.do
@@ -8,33 +9,12 @@ import { z } from "zod";
 const AIRKOREA_URL =
   "https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty";
 
-const SIDO_NAMES = [
-  "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
-  "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
-];
-
-// 도(道) 정식 명칭은 축약형을 부분 문자열로 포함하지 않는다 (예: "충청북도".includes("충북") === false).
-const SIDO_ALIASES: Record<string, string> = {
-  충청북도: "충북",
-  충청남도: "충남",
-  전라북도: "전북",
-  전라남도: "전남",
-  경상북도: "경북",
-  경상남도: "경남",
-};
-
 // PM10 24시간 등급 기준 (에어코리아 통합대기환경지수 기준, ㎍/m³)
 function gradeFromPm10(pm10: number): string {
   if (pm10 <= 30) return "좋음";
   if (pm10 <= 80) return "보통";
   if (pm10 <= 150) return "나쁨";
   return "매우나쁨";
-}
-
-function normalizeSido(region: string): string | null {
-  const alias = Object.entries(SIDO_ALIASES).find(([full]) => region.includes(full));
-  if (alias) return alias[1];
-  return SIDO_NAMES.find((sido) => region.includes(sido)) ?? null;
 }
 
 async function fetchOnce(sidoName: string, apiKey: string) {
