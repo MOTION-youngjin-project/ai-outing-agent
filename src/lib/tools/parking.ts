@@ -6,6 +6,10 @@ import { z } from "zod";
 // 대구광역시 관할 구/군 단위로만 조회 가능. 인증은 쿼리스트링이 아니라 Authentication 헤더.
 const PARKING_URL = "https://pis.daegu.go.kr/api/mingan/prkInfo";
 
+export const DAEGU_DISTRICTS = [
+  "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
+] as const;
+
 const DISTRICT_CODES: Record<string, string> = {
   중구: "150",
   동구: "151",
@@ -63,27 +67,48 @@ async function fetchParking(sggCd: string) {
   throw lastError;
 }
 
+export type ParkingSpot = {
+  name: string;
+  address: string;
+  capacity: number;
+  fee: string;
+  hasRealtime: boolean;
+};
+
+// LangChain 도구와 /api/parking 라우트가 공유하는 구조화된 조회 함수.
+// 좌표는 API가 주지만 기준점(사용자가 실제로 서있는 위치)이 없어 거리순 정렬은 지원하지 않는다.
+export async function getDaeguParking(district: string): Promise<ParkingSpot[]> {
+  const sggCd = DISTRICT_CODES[district];
+  if (!sggCd) return [];
+
+  const items = await fetchParking(sggCd);
+  return items.slice(0, 5).map((i) => ({
+    name: i.prkInfo.pkltNm,
+    address: i.prkFcltInfo.lotnoAddr,
+    capacity: i.prkFcltInfo.prkNocmprt,
+    fee: formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg),
+    hasRealtime: i.prkInfo.sysgrpyYn === "Y",
+  }));
+}
+
 export const parkingTool = tool(
   async ({ district }) => {
-    const sggCd = DISTRICT_CODES[district];
-    if (!sggCd) {
+    if (!DISTRICT_CODES[district]) {
       return `"${district}"은(는) 대구광역시 구/군이 아닙니다. 이 도구는 대구광역시(중구·동구·서구·남구·북구·수성구·달서구·달성군·군위군) 내 주차장만 조회 가능합니다.`;
     }
 
     try {
-      const items = await fetchParking(sggCd);
-      if (items.length === 0) return `${district}에 등록된 주차장 정보를 찾을 수 없습니다.`;
+      const spots = await getDaeguParking(district);
+      if (spots.length === 0) return `${district}에 등록된 주차장 정보를 찾을 수 없습니다.`;
 
-      const list = items
-        .slice(0, 5)
-        .map((i) => {
-          const fee = formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg);
-          const realtime = i.prkInfo.sysgrpyYn === "Y" ? "실시간 잔여면수 제공" : "실시간 정보 없음";
-          return `- ${i.prkInfo.pkltNm} (${i.prkFcltInfo.lotnoAddr}, 주차구획 ${i.prkFcltInfo.prkNocmprt}면, ${fee}, ${realtime})`;
+      const list = spots
+        .map((s) => {
+          const realtime = s.hasRealtime ? "실시간 잔여면수 제공" : "실시간 정보 없음";
+          return `- ${s.name} (${s.address}, 주차구획 ${s.capacity}면, ${s.fee}, ${realtime})`;
         })
         .join("\n");
 
-      return `${district} 주차장 목록 중 일부입니다 (전체 ${items.length}곳, 좌표/거리 기반 정렬은 지원 안 함):\n${list}`;
+      return `${district} 주차장 목록 중 일부입니다 (좌표/거리 기반 정렬은 지원 안 함):\n${list}`;
     } catch (err) {
       return `주차장 조회에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
     }
@@ -96,7 +121,7 @@ export const parkingTool = tool(
       "제공 여부를 사용자에게 함께 알려줘라.",
     schema: z.object({
       district: z
-        .enum(["중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군"])
+        .enum(DAEGU_DISTRICTS)
         .describe("주차장을 조회할 대구광역시 구/군"),
     }),
   }

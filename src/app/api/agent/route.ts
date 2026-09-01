@@ -9,8 +9,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const reply = await runAgent(history as ChatTurn[]);
-    return NextResponse.json({ reply });
+    const recommendation = await runAgent(history as ChatTurn[]);
+    return NextResponse.json({ recommendation });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
