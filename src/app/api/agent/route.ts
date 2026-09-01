@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runAgent } from "@/lib/agent";
+import { runAgent, type ChatTurn } from "@/lib/agent";
 
 export async function POST(req: NextRequest) {
-  const { message } = await req.json();
+  const { history } = await req.json();
 
-  if (!message || typeof message !== "string") {
-    return NextResponse.json({ error: "message가 필요합니다." }, { status: 400 });
+  if (!Array.isArray(history) || history.length === 0) {
+    return NextResponse.json({ error: "history가 필요합니다." }, { status: 400 });
   }
 
   try {
-    const reply = await runAgent(message);
+    const reply = await runAgent(history as ChatTurn[]);
     return NextResponse.json({ reply });
   } catch (err) {
     console.error(err);

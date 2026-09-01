@@ -51,7 +51,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-export async function runAgent(input: string) {
+export type ChatTurn = { role: "user" | "assistant"; content: string };
+
+// history는 지금까지의 대화(사용자가 방금 보낸 메시지 포함) 전체를 받는다.
+// 단일 메시지만 넘기면 "거기", "다른 곳도" 같은 후속 질문의 맥락을 에이전트가 전혀
+// 모르게 된다 (5순위 대화 맥락 기억 요구사항과 직결).
+export async function runAgent(history: ChatTurn[]) {
   let lastError: unknown;
 
   for (const model of MODEL_FALLBACK_CHAIN) {
@@ -69,7 +74,7 @@ export async function runAgent(input: string) {
 
     try {
       const result = await withTimeout(
-        agent.invoke({ messages: [{ role: "user", content: input }] }),
+        agent.invoke({ messages: history }),
         25000
       );
       const last = result.messages[result.messages.length - 1];
@@ -88,8 +93,6 @@ const SUGGEST_SYSTEM_PROMPT =
   "다음은 사용자와 나들이 추천 AI 에이전트의 대화 내역이다. 이 맥락을 이어서 사용자가 다음에 입력할 법한 " +
   "짧고 자연스러운 후속 메시지를 하나만 제안해라. 방금 추천받은 내용에 대한 후속 질문(예: 거기 주차는 어디에 " +
   "하는지, 다른 곳도 있는지, 더 저렴한 곳은 없는지)이 자연스럽다. 설명이나 따옴표 없이 문장 하나만 출력해라.";
-
-export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 // 대화 맥락 기반 다음 입력 제안. UX 보조 기능이라 실패해도 조용히 빈 문자열을 반환한다
 // (에이전트 응답 자체를 막을 만큼 중요하지 않음).

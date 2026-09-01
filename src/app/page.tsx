@@ -45,7 +45,7 @@ export default function Home() {
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ history: historyWithUser }),
       });
       const data = await res.json();
       const reply = res.ok ? data.reply : `오류: ${data.error ?? "알 수 없는 오류"}`;
