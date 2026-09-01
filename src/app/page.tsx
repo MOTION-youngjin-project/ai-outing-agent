@@ -1,21 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
 type Message = { role: "user" | "assistant"; content: string };
+
+const SUGGESTIONS = [
+  "서울에서 애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
+  "대구에서 여자친구랑 데이트할만한 곳 있어?",
+  "요즘 날씨가 별로네, 실내에서 놀만한 곳 있어?",
+  "돈 안 쓰고 반나절만 나갔다 올 데 있어?",
+];
+
+function randomSuggestion() {
+  return SUGGESTIONS[Math.floor(Math.random() * SUGGESTIONS.length)];
+}
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  // 서버/클라이언트 초기 렌더가 일치해야 하므로 고정값으로 시작하고, 마운트 후에만 랜덤화한다.
+  const [suggestion, setSuggestion] = useState(SUGGESTIONS[0]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
+    setSuggestion(randomSuggestion());
+  }, []);
+
+  function acceptSuggestion() {
+    if (!input && suggestion) setInput(suggestion);
+  }
 
   async function sendMessage() {
     const text = input.trim();
     if (!text || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    const historyWithUser: Message[] = [...messages, { role: "user", content: text }];
+    setMessages(historyWithUser);
     setInput("");
+    setSuggestion(""); // 새 맥락 기반 제안이 올 때까지 이전 정적 예시를 보여주지 않음
     setLoading(true);
 
     try {
@@ -26,7 +49,20 @@ export default function Home() {
       });
       const data = await res.json();
       const reply = res.ok ? data.reply : `오류: ${data.error ?? "알 수 없는 오류"}`;
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      const historyWithReply: Message[] = [...historyWithUser, { role: "assistant", content: reply }];
+      setMessages(historyWithReply);
+
+      // 대화 맥락 기반 다음 입력 제안 — 실패해도 채팅 자체엔 영향 없게 별도로 처리
+      fetch("/api/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ history: historyWithReply }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.suggestion) setSuggestion(d.suggestion);
+        })
+        .catch(() => {});
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -72,12 +108,24 @@ export default function Home() {
           }}
           className="mt-4 flex gap-2"
         >
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="어디 갈까?"
-            className="flex-1 rounded-full border border-zinc-300 px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-          />
+          <div className="relative flex-1">
+            {!input && (
+              <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
+                {suggestion}
+              </div>
+            )}
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (!input && (e.key === "ArrowRight" || e.key === "Tab")) {
+                  e.preventDefault();
+                  acceptSuggestion();
+                }
+              }}
+              className="relative w-full rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
+            />
+          </div>
           <button
             type="submit"
             disabled={loading}

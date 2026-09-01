@@ -8,6 +8,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "message가 필요합니다." }, { status: 400 });
   }
 
-  const reply = await runAgent(message);
-  return NextResponse.json({ reply });
+  try {
+    const reply = await runAgent(message);
+    return NextResponse.json({ reply });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "에이전트 처리 중 오류가 발생했습니다." },
+      { status: 500 }
+    );
+  }
 }
