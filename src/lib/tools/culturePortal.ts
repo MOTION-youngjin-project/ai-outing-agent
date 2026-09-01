@@ -45,7 +45,9 @@ async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
     pageNo: "1",
   });
 
-  const res = await fetch(`${CULTURE_URL}?${params}`);
+  const res = await fetch(`${CULTURE_URL}?${params}`, {
+    signal: AbortSignal.timeout(8000),
+  });
   const xml = await res.text();
 
   const resultCode = extractTag(xml, "resultCode");

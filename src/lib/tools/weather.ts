@@ -13,7 +13,7 @@ const PTY_LABEL: Record<string, string> = { "0": "없음", "1": "비", "2": "비
 function latestBaseDateTime(now: Date): { base_date: string; base_time: string } {
   const times = [2, 5, 8, 11, 14, 17, 20, 23];
   const d = new Date(now.getTime() - 10 * 60 * 1000); // 10분 버퍼
-  let hour = d.getHours();
+  const hour = d.getHours();
   let base = [...times].reverse().find((t) => t <= hour);
 
   if (base === undefined) {
@@ -40,7 +40,9 @@ async function fetchOnce(nx: number, ny: number, apiKey: string) {
     ny: String(ny),
   });
 
-  const res = await fetch(`${KMA_URL}?serviceKey=${apiKey}&${params}`);
+  const res = await fetch(`${KMA_URL}?serviceKey=${apiKey}&${params}`, {
+    signal: AbortSignal.timeout(8000),
+  });
   const data = await res.json();
 
   const errMsg = data?.OpenAPI_ServiceResponse?.cmmMsgHeader?.errMsg;

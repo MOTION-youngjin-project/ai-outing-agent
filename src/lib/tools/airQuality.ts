@@ -26,7 +26,9 @@ async function fetchOnce(sidoName: string, apiKey: string) {
     ver: "1.3",
   });
 
-  const res = await fetch(`${AIRKOREA_URL}?serviceKey=${apiKey}&${params}`);
+  const res = await fetch(`${AIRKOREA_URL}?serviceKey=${apiKey}&${params}`, {
+    signal: AbortSignal.timeout(8000),
+  });
   const data = await res.json();
 
   // 정상 응답과 서비스 오류(SERVICETIMEOUT_ERROR 등) 응답은 JSON 구조 자체가 다르다.
