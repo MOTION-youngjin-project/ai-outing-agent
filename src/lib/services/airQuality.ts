@@ -4,6 +4,7 @@ import { fetchAirQuality } from "@/lib/tools/airQuality";
 import { findOrCreateSidoRegion, getOrCreateDataSource } from "./shared";
 
 export interface CachedAirQuality {
+  id: string;
   pm10Value: number | null;
   overallGrade: string;
   freshnessStatus: "fresh" | "stale";
@@ -28,6 +29,7 @@ export async function getCachedAirQuality(regionName: string): Promise<CachedAir
 
   if (latest && isFresh) {
     return {
+      id: latest.id.toString(),
       pm10Value: latest.pm10Value ? latest.pm10Value.toNumber() : null,
       overallGrade: latest.overallGrade,
       freshnessStatus: "fresh",
@@ -38,7 +40,7 @@ export async function getCachedAirQuality(regionName: string): Promise<CachedAir
     const { pm10, grade } = await fetchAirQuality(sidoName);
     const source = await getOrCreateDataSource("AIRKOREA", "에어코리아", "open_api");
 
-    await prisma.airQualitySnapshot.create({
+    const saved = await prisma.airQualitySnapshot.create({
       data: {
         sourceId: source.id,
         regionId: region.id,
@@ -49,10 +51,11 @@ export async function getCachedAirQuality(regionName: string): Promise<CachedAir
       },
     });
 
-    return { pm10Value: pm10, overallGrade: grade, freshnessStatus: "fresh" };
+    return { id: saved.id.toString(), pm10Value: pm10, overallGrade: grade, freshnessStatus: "fresh" };
   } catch {
     if (!latest) return null;
     return {
+      id: latest.id.toString(),
       pm10Value: latest.pm10Value ? latest.pm10Value.toNumber() : null,
       overallGrade: latest.overallGrade,
       freshnessStatus: "stale",

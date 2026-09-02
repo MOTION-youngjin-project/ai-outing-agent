@@ -4,6 +4,7 @@ import { fetchWeather, latestBaseDateTime } from "@/lib/tools/weather";
 import { findOrCreateSidoRegion, getOrCreateDataSource } from "./shared";
 
 export interface CachedWeather {
+  id: string;
   temperatureC: number | null;
   precipitationProbability: number | null;
   summary: string;
@@ -42,6 +43,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
 
   if (latest && isFresh) {
     return {
+      id: latest.id.toString(),
       temperatureC: latest.temperatureC ? latest.temperatureC.toNumber() : null,
       precipitationProbability: latest.precipitationProbability
         ? latest.precipitationProbability.toNumber()
@@ -61,7 +63,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
     const precipitationProbability = fetched.pop ? Number(fetched.pop) : null;
     const summary = toSummary(fetched.sky, fetched.pty);
 
-    await prisma.weatherSnapshot.create({
+    const saved = await prisma.weatherSnapshot.create({
       data: {
         sourceId: source.id,
         regionId: region.id,
@@ -73,10 +75,11 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
       },
     });
 
-    return { temperatureC, precipitationProbability, summary, freshnessStatus: "fresh" };
+    return { id: saved.id.toString(), temperatureC, precipitationProbability, summary, freshnessStatus: "fresh" };
   } catch {
     if (!latest) return null;
     return {
+      id: latest.id.toString(),
       temperatureC: latest.temperatureC ? latest.temperatureC.toNumber() : null,
       precipitationProbability: latest.precipitationProbability
         ? latest.precipitationProbability.toNumber()

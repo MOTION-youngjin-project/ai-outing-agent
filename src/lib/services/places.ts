@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDataSource } from "./shared";
+import type { Place } from "../../../generated/prisma/client";
 
 // 카카오 로컬 - 키워드로 장소 검색
 // https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword
@@ -72,12 +73,72 @@ export interface CachedPlace {
   websiteUrl: string | null;
 }
 
+function toCachedPlace(place: Place): CachedPlace {
+  return {
+    id: place.publicId,
+    name: place.name,
+    roadAddress: place.roadAddress,
+    latitude: place.latitude.toNumber(),
+    longitude: place.longitude.toNumber(),
+    categorySummary: place.categorySummary,
+    phone: place.phone,
+    websiteUrl: place.websiteUrl,
+  };
+}
+
 // 대구/서울 같은 시/도 이름이 주소 맨 앞에 있으면 해당 Region과 연결(가벼운 best-effort,
 // 못 찾으면 그냥 null로 둔다 — 정교한 주소 파싱은 이번 범위 밖).
 async function findRegionByAddressPrefix(address: string) {
   const firstToken = address.split(" ")[0];
   if (!firstToken) return null;
   return prisma.region.findFirst({ where: { name: { contains: firstToken } } });
+}
+
+// 카카오 문서 하나를 places/place_source_records에 cache-aside로 upsert하고 Place 행을 반환한다.
+async function upsertPlaceFromDoc(doc: KakaoDocument, sourceId: bigint): Promise<Place> {
+  const existingRecord = await prisma.placeSourceRecord.findUnique({
+    where: { sourceId_externalPlaceKey: { sourceId, externalPlaceKey: doc.id } },
+    include: { place: true },
+  });
+
+  const isFresh = existingRecord?.expiresAt ? existingRecord.expiresAt > new Date() : false;
+  if (existingRecord && isFresh) return existingRecord.place;
+
+  const address = doc.road_address_name || doc.address_name;
+  const region = address ? await findRegionByAddressPrefix(address) : null;
+
+  const placeData = {
+    name: doc.place_name,
+    normalizedName: normalizePlaceName(doc.place_name),
+    categorySummary: doc.category_name || null,
+    roadAddress: doc.road_address_name || null,
+    jibunAddress: doc.address_name || null,
+    latitude: Number(doc.y),
+    longitude: Number(doc.x),
+    phone: doc.phone || null,
+    websiteUrl: doc.place_url || null,
+    regionId: region?.id,
+  };
+
+  const place = existingRecord
+    ? await prisma.place.update({ where: { id: existingRecord.place.id }, data: placeData })
+    : await prisma.place.create({ data: placeData });
+
+  const payloadHash = crypto.createHash("sha256").update(JSON.stringify(doc)).digest("hex");
+  await prisma.placeSourceRecord.upsert({
+    where: { sourceId_externalPlaceKey: { sourceId, externalPlaceKey: doc.id } },
+    update: { payloadHash, rawPayloadJson: doc, expiresAt: new Date(Date.now() + PLACE_TTL_MS) },
+    create: {
+      placeId: place.id,
+      sourceId,
+      externalPlaceKey: doc.id,
+      payloadHash,
+      rawPayloadJson: doc,
+      expiresAt: new Date(Date.now() + PLACE_TTL_MS),
+    },
+  });
+
+  return place;
 }
 
 // 카카오 로컬 검색을 항상 실시간으로 호출하고(검색 결과 자체는 캐시하지 않음),
@@ -88,75 +149,29 @@ export async function searchAndCachePlaces(query: string): Promise<CachedPlace[]
 
   const results: CachedPlace[] = [];
   for (const doc of documents) {
-    const payloadHash = crypto.createHash("sha256").update(JSON.stringify(doc)).digest("hex");
-
-    const existingRecord = await prisma.placeSourceRecord.findUnique({
-      where: { sourceId_externalPlaceKey: { sourceId: source.id, externalPlaceKey: doc.id } },
-      include: { place: true },
-    });
-
-    const isFresh = existingRecord?.expiresAt ? existingRecord.expiresAt > new Date() : false;
-    if (existingRecord && isFresh) {
-      const p = existingRecord.place;
-      results.push({
-        id: p.publicId,
-        name: p.name,
-        roadAddress: p.roadAddress,
-        latitude: p.latitude.toNumber(),
-        longitude: p.longitude.toNumber(),
-        categorySummary: p.categorySummary,
-        phone: p.phone,
-        websiteUrl: p.websiteUrl,
-      });
-      continue;
-    }
-
-    const address = doc.road_address_name || doc.address_name;
-    const region = address ? await findRegionByAddressPrefix(address) : null;
-    const latitude = Number(doc.y);
-    const longitude = Number(doc.x);
-
-    const placeData = {
-      name: doc.place_name,
-      normalizedName: normalizePlaceName(doc.place_name),
-      categorySummary: doc.category_name || null,
-      roadAddress: doc.road_address_name || null,
-      jibunAddress: doc.address_name || null,
-      latitude,
-      longitude,
-      phone: doc.phone || null,
-      websiteUrl: doc.place_url || null,
-      regionId: region?.id,
-    };
-
-    const place = existingRecord
-      ? await prisma.place.update({ where: { id: existingRecord.place.id }, data: placeData })
-      : await prisma.place.create({ data: placeData });
-
-    await prisma.placeSourceRecord.upsert({
-      where: { sourceId_externalPlaceKey: { sourceId: source.id, externalPlaceKey: doc.id } },
-      update: { payloadHash, rawPayloadJson: doc, expiresAt: new Date(Date.now() + PLACE_TTL_MS) },
-      create: {
-        placeId: place.id,
-        sourceId: source.id,
-        externalPlaceKey: doc.id,
-        payloadHash,
-        rawPayloadJson: doc,
-        expiresAt: new Date(Date.now() + PLACE_TTL_MS),
-      },
-    });
-
-    results.push({
-      id: place.publicId,
-      name: place.name,
-      roadAddress: place.roadAddress,
-      latitude,
-      longitude,
-      categorySummary: place.categorySummary,
-      phone: place.phone,
-      websiteUrl: place.websiteUrl,
-    });
+    results.push(toCachedPlace(await upsertPlaceFromDoc(doc, source.id)));
   }
-
   return results;
+}
+
+// LLM이 이름만 준 장소를 실제 좌표 있는 Place로 매칭한다(예: 추천 결과를 places/
+// route_places에 저장하려 할 때). 완벽한 매칭은 보장 못 하지만, 동명이인 장소로
+// 잘못 연결될 위험을 아래 두 가지로 낮춘다:
+//   1. 검색어에 지역명을 같이 붙여서(예: "대구 대구미술관") 카카오 자체 관련도
+//      랭킹이 그 지역 결과를 우선하게 만든다 — 단순 "대구미술관" 검색보다 정확.
+//   2. 카카오가 여러 결과를 주면, 이름이 정확히 일치하는 결과를 최우선으로 고른다
+//      (부분 일치보다 정확 일치 우선). 정확히 일치하는 게 없으면 그제서야 첫 결과.
+// 그래도 못 찾으면(검색 결과 0건) null — 호출부가 그 장소는 DB 연결 없이 건너뛴다.
+export async function resolvePlaceByName(name: string, regionName?: string | null): Promise<Place | null> {
+  const query = regionName ? `${regionName} ${name}` : name;
+  const documents = await fetchPlaces(query);
+  if (documents.length === 0) return null;
+
+  const best =
+    documents.find((d) => d.place_name === name) ??
+    documents.find((d) => d.place_name.includes(name) || name.includes(d.place_name)) ??
+    documents[0];
+
+  const source = await getOrCreateDataSource("PLACE_SEARCH", "장소 검색 API (Kakao Local)", "search_api");
+  return upsertPlaceFromDoc(best, source.id);
 }
