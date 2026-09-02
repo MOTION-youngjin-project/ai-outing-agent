@@ -1,0 +1,574 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum RequestMode {
+  question
+  popular
+  retry
+
+  @@map("request_mode")
+}
+
+enum EnvironmentMode {
+  indoor
+  outdoor
+  mixed
+
+  @@map("environment_mode")
+}
+
+enum RunStatus {
+  pending
+  running
+  completed
+  partial
+  failed
+
+  @@map("run_status")
+}
+
+enum ToolCallStatus {
+  requested
+  succeeded
+  failed
+  timed_out
+
+  @@map("tool_call_status")
+}
+
+enum DataFreshnessStatus {
+  fresh
+  stale
+  unavailable
+
+  @@map("data_freshness_status")
+}
+
+model DataSource {
+  id                  BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  code                String                @unique @db.VarChar(40)
+  name                String                @db.VarChar(100)
+  sourceType          String                @map("source_type") @db.VarChar(40)
+  baseUrl             String?               @map("base_url") @db.VarChar(500)
+  enabled             Boolean               @default(true)
+  timeoutMs           Int                   @default(5000) @map("timeout_ms")
+  maxRetryCount       Int                   @default(1) @map("max_retry_count") @db.SmallInt
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamp(0)
+  placeSourceRecords  PlaceSourceRecord[]
+  placeImages         PlaceImage[]
+  ingestionEvents     PlaceIngestionEvent[]
+  culturalEvents      CulturalEvent[]
+  parkingLots         ParkingLot[]
+  airQualitySnapshots AirQualitySnapshot[]
+  weatherSnapshots    WeatherSnapshot[]
+  ragDocuments        RagDocument[]
+  toolCalls           ToolCall[]
+
+  @@map("data_sources")
+}
+
+model Region {
+  id                    BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
+  parentId              BigInt?                @map("parent_id") @db.UnsignedBigInt
+  regionCode            String                 @unique @map("region_code") @db.VarChar(20)
+  name                  String                 @db.VarChar(100)
+  level                 String                 @db.VarChar(20)
+  latitude              Decimal?               @db.Decimal(10, 7)
+  longitude             Decimal?               @db.Decimal(10, 7)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamp(0)
+  parent                Region?                @relation("RegionHierarchy", fields: [parentId], references: [id])
+  children              Region[]               @relation("RegionHierarchy")
+  places                Place[]
+  parkingLots           ParkingLot[]
+  airQualitySnapshots   AirQualitySnapshot[]
+  weatherSnapshots      WeatherSnapshot[]
+  agentRuns             AgentRun[]
+  popularRouteTemplates PopularRouteTemplate[]
+
+  @@index([parentId, name])
+  @@map("regions")
+}
+
+model PlaceCategory {
+  id            BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  parentId      BigInt?             @map("parent_id") @db.UnsignedBigInt
+  code          String              @unique @db.VarChar(50)
+  name          String              @db.VarChar(100)
+  indoorDefault Boolean             @default(false) @map("indoor_default")
+  parent        PlaceCategory?      @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children      PlaceCategory[]     @relation("CategoryHierarchy")
+  placeLinks    PlaceCategoryLink[]
+
+  @@map("place_categories")
+}
+
+model Place {
+  id                         BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  publicId                   String                       @unique @default(uuid()) @map("public_id") @db.Char(36)
+  regionId                   BigInt?                      @map("region_id") @db.UnsignedBigInt
+  name                       String                       @db.VarChar(200)
+  normalizedName             String                       @map("normalized_name") @db.VarChar(200)
+  categorySummary            String?                      @map("category_summary") @db.VarChar(300)
+  roadAddress                String?                      @map("road_address") @db.VarChar(500)
+  jibunAddress               String?                      @map("jibun_address") @db.VarChar(500)
+  postalCode                 String?                      @map("postal_code") @db.VarChar(20)
+  latitude                   Decimal                      @db.Decimal(10, 7)
+  longitude                  Decimal                      @db.Decimal(10, 7)
+  phone                      String?                      @db.VarChar(50)
+  websiteUrl                 String?                      @map("website_url") @db.VarChar(500)
+  shortDescription           String?                      @map("short_description") @db.VarChar(1000)
+  description                String?                      @db.Text
+  businessStatus             String                       @default("unknown") @map("business_status") @db.VarChar(30)
+  priceLevel                 Int?                         @map("price_level") @db.SmallInt
+  averageRating              Decimal?                     @map("average_rating") @db.Decimal(3, 2)
+  reviewCount                Int                          @default(0) @map("review_count")
+  reservationAvailable       Boolean?                     @map("reservation_available")
+  parkingAvailable           Boolean?                     @map("parking_available")
+  createdAt                  DateTime                     @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt                  DateTime                     @default(now()) @map("updated_at") @db.Timestamp(0)
+  lastVerifiedAt             DateTime?                    @map("last_verified_at") @db.Timestamp(0)
+  isActive                   Boolean                      @default(true) @map("is_active")
+  region                     Region?                      @relation(fields: [regionId], references: [id])
+  sourceRecords              PlaceSourceRecord[]
+  images                     PlaceImage[]
+  businessHours              PlaceBusinessHour[]
+  menus                      PlaceMenu[]
+  facilities                 PlaceFacility[]
+  ingestionEvents            PlaceIngestionEvent[]
+  categoryLinks              PlaceCategoryLink[]
+  culturalEvents             CulturalEvent[]
+  routeStops                 RoutePlace[]
+  anchoredParkingSuggestions RouteParkingRecommendation[] @relation("ParkingAnchorPlace")
+  templateStops              PopularRouteTemplatePlace[]
+
+  @@index([normalizedName, latitude, longitude])
+  @@index([regionId, isActive])
+  @@index([latitude, longitude])
+  @@map("places")
+}
+
+model PlaceSourceRecord {
+  id                BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  placeId           BigInt     @map("place_id") @db.UnsignedBigInt
+  sourceId          BigInt     @map("source_id") @db.UnsignedBigInt
+  externalPlaceKey  String     @map("external_place_key") @db.VarChar(200)
+  sourcePageUrl     String?    @map("source_page_url") @db.VarChar(1000)
+  sourceRating      Decimal?   @map("source_rating") @db.Decimal(3, 2)
+  sourceReviewCount Int?       @map("source_review_count")
+  rawPayloadJson    Json?      @map("raw_payload_json")
+  payloadHash       String     @map("payload_hash") @db.VarChar(64)
+  sourceUpdatedAt   DateTime?  @map("source_updated_at") @db.Timestamp(0)
+  fetchedAt         DateTime   @default(now()) @map("fetched_at") @db.Timestamp(0)
+  expiresAt         DateTime?  @map("expires_at") @db.Timestamp(0)
+  place             Place      @relation(fields: [placeId], references: [id])
+  source            DataSource @relation(fields: [sourceId], references: [id])
+
+  @@unique([sourceId, externalPlaceKey])
+  @@index([placeId, sourceId])
+  @@index([expiresAt])
+  @@map("place_source_records")
+}
+
+model PlaceImage {
+  id             BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  placeId        BigInt      @map("place_id") @db.UnsignedBigInt
+  sourceId       BigInt?     @map("source_id") @db.UnsignedBigInt
+  sourceImageKey String?     @map("source_image_key") @db.VarChar(250)
+  originalUrl    String      @map("original_url") @db.VarChar(1500)
+  storedUrl      String?     @map("stored_url") @db.VarChar(1500)
+  thumbnailUrl   String?     @map("thumbnail_url") @db.VarChar(1500)
+  altText        String?     @map("alt_text") @db.VarChar(500)
+  mimeType       String?     @map("mime_type") @db.VarChar(80)
+  widthPx        Int?        @map("width_px")
+  heightPx       Int?        @map("height_px")
+  sortOrder      Int         @default(0) @map("sort_order") @db.SmallInt
+  isPrimary      Boolean     @default(false) @map("is_primary")
+  licenseInfo    String?     @map("license_info") @db.VarChar(300)
+  capturedAt     DateTime?   @map("captured_at") @db.Timestamp(0)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamp(0)
+  place          Place       @relation(fields: [placeId], references: [id])
+  source         DataSource? @relation(fields: [sourceId], references: [id])
+
+  @@unique([sourceId, sourceImageKey])
+  @@index([placeId, sortOrder])
+  @@map("place_images")
+}
+
+model PlaceBusinessHour {
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  placeId        BigInt    @map("place_id") @db.UnsignedBigInt
+  dayOfWeek      Int       @map("day_of_week") @db.SmallInt
+  sequenceNo     Int       @default(1) @map("sequence_no") @db.SmallInt
+  openTime       DateTime? @map("open_time") @db.Time(0)
+  closeTime      DateTime? @map("close_time") @db.Time(0)
+  breakStartTime DateTime? @map("break_start_time") @db.Time(0)
+  breakEndTime   DateTime? @map("break_end_time") @db.Time(0)
+  lastOrderTime  DateTime? @map("last_order_time") @db.Time(0)
+  isClosed       Boolean   @default(false) @map("is_closed")
+  note           String?   @db.VarChar(300)
+  effectiveFrom  DateTime? @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to") @db.Date
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamp(0)
+  place          Place     @relation(fields: [placeId], references: [id])
+
+  @@unique([placeId, dayOfWeek, sequenceNo])
+  @@map("place_business_hours")
+}
+
+model PlaceMenu {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  placeId     BigInt   @map("place_id") @db.UnsignedBigInt
+  name        String   @db.VarChar(200)
+  description String?  @db.VarChar(1000)
+  price       Int?
+  imageUrl    String?  @map("image_url") @db.VarChar(1500)
+  isSignature Boolean  @default(false) @map("is_signature")
+  isAvailable Boolean  @default(true) @map("is_available")
+  sortOrder   Int      @default(0) @map("sort_order") @db.SmallInt
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamp(0)
+  place       Place    @relation(fields: [placeId], references: [id])
+
+  @@index([placeId, sortOrder])
+  @@map("place_menus")
+}
+
+model PlaceFacility {
+  placeId      BigInt    @map("place_id") @db.UnsignedBigInt
+  facilityCode String    @map("facility_code") @db.VarChar(60)
+  available    Boolean
+  detail       String?   @db.VarChar(500)
+  verifiedAt   DateTime? @map("verified_at") @db.Timestamp(0)
+  place        Place     @relation(fields: [placeId], references: [id])
+
+  @@id([placeId, facilityCode])
+  @@map("place_facilities")
+}
+
+model PlaceCategoryLink {
+  placeId    BigInt        @map("place_id") @db.UnsignedBigInt
+  categoryId BigInt        @map("category_id") @db.UnsignedBigInt
+  isPrimary  Boolean       @default(false) @map("is_primary")
+  place      Place         @relation(fields: [placeId], references: [id])
+  category   PlaceCategory @relation(fields: [categoryId], references: [id])
+
+  @@id([placeId, categoryId])
+  @@map("place_category_links")
+}
+
+model CulturalEvent {
+  id              BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  sourceId        BigInt       @map("source_id") @db.UnsignedBigInt
+  sourceEventKey  String       @map("source_event_key") @db.VarChar(150)
+  venuePlaceId    BigInt?      @map("venue_place_id") @db.UnsignedBigInt
+  title           String       @db.VarChar(300)
+  genre           String?      @db.VarChar(100)
+  startAt         DateTime?    @map("start_at") @db.Timestamp(0)
+  endAt           DateTime?    @map("end_at") @db.Timestamp(0)
+  feeInfo         String?      @map("fee_info") @db.VarChar(300)
+  ageLimit        String?      @map("age_limit") @db.VarChar(100)
+  bookingUrl      String?      @map("booking_url") @db.VarChar(500)
+  sourceUpdatedAt DateTime?    @map("source_updated_at") @db.Timestamp(0)
+  syncedAt        DateTime     @default(now()) @map("synced_at") @db.Timestamp(0)
+  source          DataSource   @relation(fields: [sourceId], references: [id])
+  venuePlace      Place?       @relation(fields: [venuePlaceId], references: [id])
+  routeStops      RoutePlace[]
+
+  @@unique([sourceId, sourceEventKey])
+  @@index([startAt, endAt])
+  @@map("cultural_events")
+}
+
+model ParkingLot {
+  id                     BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  sourceId               BigInt                       @map("source_id") @db.UnsignedBigInt
+  sourceParkingKey       String                       @map("source_parking_key") @db.VarChar(150)
+  regionId               BigInt?                      @map("region_id") @db.UnsignedBigInt
+  name                   String                       @db.VarChar(200)
+  address                String?                      @db.VarChar(500)
+  latitude               Decimal                      @db.Decimal(10, 7)
+  longitude              Decimal                      @db.Decimal(10, 7)
+  totalSpaces            Int?                         @map("total_spaces")
+  availableSpaces        Int?                         @map("available_spaces")
+  feeInfo                String?                      @map("fee_info") @db.VarChar(300)
+  operatingHoursJson     Json?                        @map("operating_hours_json")
+  congestionStatus       String?                      @map("congestion_status") @db.VarChar(30)
+  realtimeSupported      Boolean                      @default(false) @map("realtime_supported")
+  observedAt             DateTime?                    @map("observed_at") @db.Timestamp(0)
+  syncedAt               DateTime                     @default(now()) @map("synced_at") @db.Timestamp(0)
+  source                 DataSource                   @relation(fields: [sourceId], references: [id])
+  region                 Region?                      @relation(fields: [regionId], references: [id])
+  parkingRecommendations RouteParkingRecommendation[]
+
+  @@unique([sourceId, sourceParkingKey])
+  @@index([latitude, longitude])
+  @@map("parking_lots")
+}
+
+model AirQualitySnapshot {
+  id                BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  sourceId          BigInt                @map("source_id") @db.UnsignedBigInt
+  regionId          BigInt                @map("region_id") @db.UnsignedBigInt
+  stationName       String?               @map("station_name") @db.VarChar(120)
+  pm10Value         Decimal?              @map("pm10_value") @db.Decimal(8, 2)
+  pm10Grade         Int?                  @map("pm10_grade") @db.SmallInt
+  pm25Value         Decimal?              @map("pm25_value") @db.Decimal(8, 2)
+  pm25Grade         Int?                  @map("pm25_grade") @db.SmallInt
+  overallGrade      String                @map("overall_grade") @db.VarChar(30)
+  measuredAt        DateTime              @map("measured_at") @db.Timestamp(0)
+  fetchedAt         DateTime              @default(now()) @map("fetched_at") @db.Timestamp(0)
+  freshnessStatus   DataFreshnessStatus   @default(fresh) @map("freshness_status")
+  rawPayloadHash    String?               @map("raw_payload_hash") @db.VarChar(64)
+  source            DataSource            @relation(fields: [sourceId], references: [id])
+  region            Region                @relation(fields: [regionId], references: [id])
+  currentRoutes     RecommendationRoute[] @relation("CurrentAirQuality")
+  destinationRoutes RecommendationRoute[] @relation("DestinationAirQuality")
+
+  @@index([regionId, measuredAt])
+  @@map("air_quality_snapshots")
+}
+
+model WeatherSnapshot {
+  id                       BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  sourceId                 BigInt                @map("source_id") @db.UnsignedBigInt
+  regionId                 BigInt                @map("region_id") @db.UnsignedBigInt
+  forecastAt               DateTime              @map("forecast_at") @db.Timestamp(0)
+  temperatureC             Decimal?              @map("temperature_c") @db.Decimal(5, 2)
+  precipitationProbability Decimal?              @map("precipitation_probability") @db.Decimal(5, 2)
+  precipitationMm          Decimal?              @map("precipitation_mm") @db.Decimal(8, 2)
+  windSpeedMps             Decimal?              @map("wind_speed_mps") @db.Decimal(6, 2)
+  summary                  String?               @db.VarChar(200)
+  fetchedAt                DateTime              @default(now()) @map("fetched_at") @db.Timestamp(0)
+  freshnessStatus          DataFreshnessStatus   @default(fresh) @map("freshness_status")
+  source                   DataSource            @relation(fields: [sourceId], references: [id])
+  region                   Region                @relation(fields: [regionId], references: [id])
+  recommendationRoutes     RecommendationRoute[]
+
+  @@index([regionId, forecastAt])
+  @@map("weather_snapshots")
+}
+
+model RagDocument {
+  id              BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  sourceId        BigInt     @map("source_id") @db.UnsignedBigInt
+  externalKey     String?    @map("external_key") @db.VarChar(200)
+  title           String     @db.VarChar(300)
+  sourceUrl       String?    @map("source_url") @db.VarChar(1000)
+  documentType    String?    @map("document_type") @db.VarChar(80)
+  publishedAt     DateTime?  @map("published_at") @db.Timestamp(0)
+  sourceUpdatedAt DateTime?  @map("source_updated_at") @db.Timestamp(0)
+  checksum        String     @db.VarChar(64)
+  metadataJson    Json?      @map("metadata_json")
+  indexedAt       DateTime   @default(now()) @map("indexed_at") @db.Timestamp(0)
+  isActive        Boolean    @default(true) @map("is_active")
+  source          DataSource @relation(fields: [sourceId], references: [id])
+  chunks          RagChunk[]
+
+  @@unique([sourceId, externalKey])
+  @@index([checksum])
+  @@map("rag_documents")
+}
+
+model RagChunk {
+  id            BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  documentId    BigInt         @map("document_id") @db.UnsignedBigInt
+  chunkIndex    Int            @map("chunk_index")
+  content       String         @db.Text
+  embedding     Json?
+  tokenCount    Int?           @map("token_count")
+  metadataJson  Json?          @map("metadata_json")
+  document      RagDocument    @relation(fields: [documentId], references: [id])
+  ragRetrievals RagRetrieval[]
+
+  @@unique([documentId, chunkIndex])
+  @@map("rag_chunks")
+}
+
+model AgentRun {
+  id                   String                @id @default(uuid()) @db.Char(36)
+  sessionKeyHash       String?               @map("session_key_hash") @db.VarChar(64)
+  requestMode          RequestMode           @map("request_mode")
+  currentRegionId      BigInt?               @map("current_region_id") @db.UnsignedBigInt
+  environmentMode      EnvironmentMode?      @map("environment_mode")
+  status               RunStatus             @default(pending)
+  routeCount           Int                   @default(0) @map("route_count") @db.SmallInt
+  dataUpdatedAt        DateTime?             @map("data_updated_at") @db.Timestamp(0)
+  startedAt            DateTime              @default(now()) @map("started_at") @db.Timestamp(0)
+  completedAt          DateTime?             @map("completed_at") @db.Timestamp(0)
+  expiresAt            DateTime              @map("expires_at") @db.Timestamp(0)
+  errorCode            String?               @map("error_code") @db.VarChar(80)
+  errorSummary         String?               @map("error_summary") @db.VarChar(500)
+  currentRegion        Region?               @relation(fields: [currentRegionId], references: [id])
+  ingestionEvents      PlaceIngestionEvent[]
+  toolCalls            ToolCall[]
+  recommendationRoutes RecommendationRoute[]
+
+  @@index([sessionKeyHash, startedAt])
+  @@index([status, startedAt])
+  @@index([expiresAt])
+  @@map("agent_runs")
+}
+
+model PlaceIngestionEvent {
+  id               BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  agentRunId       String?    @map("agent_run_id") @db.Char(36)
+  sourceId         BigInt     @map("source_id") @db.UnsignedBigInt
+  externalPlaceKey String     @map("external_place_key") @db.VarChar(200)
+  placeId          BigInt?    @map("place_id") @db.UnsignedBigInt
+  ingestionAction  String     @map("ingestion_action") @db.VarChar(30)
+  payloadHash      String     @map("payload_hash") @db.VarChar(64)
+  receivedAt       DateTime   @default(now()) @map("received_at") @db.Timestamp(0)
+  completedAt      DateTime?  @map("completed_at") @db.Timestamp(0)
+  errorSummary     String?    @map("error_summary") @db.VarChar(500)
+  agentRun         AgentRun?  @relation(fields: [agentRunId], references: [id])
+  source           DataSource @relation(fields: [sourceId], references: [id])
+  place            Place?     @relation(fields: [placeId], references: [id])
+
+  @@index([agentRunId, receivedAt])
+  @@index([sourceId, externalPlaceKey, receivedAt])
+  @@map("place_ingestion_events")
+}
+
+model ToolCall {
+  id                BigInt         @id @default(autoincrement()) @db.UnsignedBigInt
+  agentRunId        String         @map("agent_run_id") @db.Char(36)
+  sourceId          BigInt?        @map("source_id") @db.UnsignedBigInt
+  toolName          String         @map("tool_name") @db.VarChar(100)
+  status            ToolCallStatus
+  attemptNo         Int            @default(1) @map("attempt_no") @db.SmallInt
+  requestParamsHash String?        @map("request_params_hash") @db.VarChar(64)
+  resultSummary     Json?          @map("result_summary")
+  startedAt         DateTime       @default(now()) @map("started_at") @db.Timestamp(0)
+  completedAt       DateTime?      @map("completed_at") @db.Timestamp(0)
+  latencyMs         Int?           @map("latency_ms")
+  errorCode         String?        @map("error_code") @db.VarChar(80)
+  errorSummary      String?        @map("error_summary") @db.VarChar(500)
+  agentRun          AgentRun       @relation(fields: [agentRunId], references: [id])
+  source            DataSource?    @relation(fields: [sourceId], references: [id])
+  ragRetrievals     RagRetrieval[]
+
+  @@index([agentRunId, startedAt])
+  @@index([toolName, status, startedAt])
+  @@map("tool_calls")
+}
+
+model RagRetrieval {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  toolCallId      BigInt   @map("tool_call_id") @db.UnsignedBigInt
+  chunkId         BigInt   @map("chunk_id") @db.UnsignedBigInt
+  rankNo          Int      @map("rank_no") @db.SmallInt
+  similarityScore Decimal? @map("similarity_score") @db.Decimal(8, 6)
+  rerankScore     Decimal? @map("rerank_score") @db.Decimal(8, 6)
+  usedInAnswer    Boolean  @default(false) @map("used_in_answer")
+  toolCall        ToolCall @relation(fields: [toolCallId], references: [id])
+  chunk           RagChunk @relation(fields: [chunkId], references: [id])
+
+  @@unique([toolCallId, chunkId])
+  @@index([toolCallId, rankNo])
+  @@map("rag_retrievals")
+}
+
+model RecommendationRoute {
+  id                      BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  agentRunId              String                       @map("agent_run_id") @db.Char(36)
+  rankNo                  Int                          @map("rank_no") @db.SmallInt
+  title                   String                       @db.VarChar(250)
+  recommendationReason    String                       @map("recommendation_reason") @db.Text
+  environmentMode         EnvironmentMode              @map("environment_mode")
+  currentAirQualityId     BigInt?                      @map("current_air_quality_id") @db.UnsignedBigInt
+  destinationAirQualityId BigInt?                      @map("destination_air_quality_id") @db.UnsignedBigInt
+  weatherSnapshotId       BigInt?                      @map("weather_snapshot_id") @db.UnsignedBigInt
+  estimatedDurationMin    Int?                         @map("estimated_duration_min")
+  estimatedCostMin        Int?                         @map("estimated_cost_min")
+  estimatedCostMax        Int?                         @map("estimated_cost_max")
+  totalDistanceM          Int?                         @map("total_distance_m")
+  safetyNotice            String?                      @map("safety_notice") @db.Text
+  limitationNotice        String?                      @map("limitation_notice") @db.Text
+  createdAt               DateTime                     @default(now()) @map("created_at") @db.Timestamp(0)
+  agentRun                AgentRun                     @relation(fields: [agentRunId], references: [id])
+  currentAirQuality       AirQualitySnapshot?          @relation("CurrentAirQuality", fields: [currentAirQualityId], references: [id])
+  destinationAirQuality   AirQualitySnapshot?          @relation("DestinationAirQuality", fields: [destinationAirQualityId], references: [id])
+  weatherSnapshot         WeatherSnapshot?             @relation(fields: [weatherSnapshotId], references: [id])
+  routePlaces             RoutePlace[]
+  parkingRecommendations  RouteParkingRecommendation[]
+
+  @@unique([agentRunId, rankNo])
+  @@map("recommendation_routes")
+}
+
+model RoutePlace {
+  routeId              BigInt              @map("route_id") @db.UnsignedBigInt
+  sequenceNo           Int                 @map("sequence_no") @db.SmallInt
+  placeId              BigInt              @map("place_id") @db.UnsignedBigInt
+  eventId              BigInt?             @map("event_id") @db.UnsignedBigInt
+  stopType             String              @map("stop_type") @db.VarChar(50)
+  expectedArrivalAt    DateTime?           @map("expected_arrival_at") @db.Timestamp(0)
+  expectedStayMin      Int?                @map("expected_stay_min")
+  travelDistanceM      Int?                @map("travel_distance_m")
+  travelDurationMin    Int?                @map("travel_duration_min")
+  selectionReason      String?             @map("selection_reason") @db.VarChar(1000)
+  verificationRequired Boolean             @default(false) @map("verification_required")
+  route                RecommendationRoute @relation(fields: [routeId], references: [id])
+  place                Place               @relation(fields: [placeId], references: [id])
+  event                CulturalEvent?      @relation(fields: [eventId], references: [id])
+
+  @@id([routeId, sequenceNo])
+  @@index([routeId, placeId])
+  @@map("route_places")
+}
+
+model RouteParkingRecommendation {
+  routeId                 BigInt              @map("route_id") @db.UnsignedBigInt
+  anchorPlaceId           BigInt              @map("anchor_place_id") @db.UnsignedBigInt
+  parkingLotId            BigInt              @map("parking_lot_id") @db.UnsignedBigInt
+  rankNo                  Int                 @map("rank_no") @db.SmallInt
+  distanceM               Int                 @map("distance_m")
+  walkingMinutes          Int?                @map("walking_minutes")
+  selectionReason         String?             @map("selection_reason") @db.VarChar(500)
+  realtimeStatusAvailable Boolean             @default(false) @map("realtime_status_available")
+  selected                Boolean             @default(false)
+  createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamp(0)
+  route                   RecommendationRoute @relation(fields: [routeId], references: [id])
+  anchorPlace             Place               @relation("ParkingAnchorPlace", fields: [anchorPlaceId], references: [id])
+  parkingLot              ParkingLot          @relation(fields: [parkingLotId], references: [id])
+
+  @@id([routeId, anchorPlaceId, rankNo])
+  @@map("route_parking_recommendations")
+}
+
+model PopularRouteTemplate {
+  id              BigInt                      @id @default(autoincrement()) @db.UnsignedBigInt
+  regionId        BigInt                      @map("region_id") @db.UnsignedBigInt
+  title           String                      @db.VarChar(250)
+  description     String?                     @db.Text
+  environmentMode EnvironmentMode             @map("environment_mode")
+  popularityScore Decimal                     @default(0) @map("popularity_score") @db.Decimal(10, 4)
+  validFrom       DateTime?                   @map("valid_from") @db.Timestamp(0)
+  validTo         DateTime?                   @map("valid_to") @db.Timestamp(0)
+  isActive        Boolean                     @default(true) @map("is_active")
+  createdAt       DateTime                    @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime                    @default(now()) @map("updated_at") @db.Timestamp(0)
+  region          Region                      @relation(fields: [regionId], references: [id])
+  places          PopularRouteTemplatePlace[]
+
+  @@index([regionId, isActive, popularityScore])
+  @@map("popular_route_templates")
+}
+
+model PopularRouteTemplatePlace {
+  templateId     BigInt               @map("template_id") @db.UnsignedBigInt
+  sequenceNo     Int                  @map("sequence_no") @db.SmallInt
+  placeId        BigInt               @map("place_id") @db.UnsignedBigInt
+  stopType       String               @map("stop_type") @db.VarChar(50)
+  defaultStayMin Int?                 @map("default_stay_min")
+  template       PopularRouteTemplate @relation(fields: [templateId], references: [id])
+  place          Place                @relation(fields: [placeId], references: [id])
+
+  @@id([templateId, sequenceNo])
+  @@map("popular_route_template_places")
+}
