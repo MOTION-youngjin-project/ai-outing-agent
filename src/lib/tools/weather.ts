@@ -10,7 +10,7 @@ const SKY_LABEL: Record<string, string> = { "1": "맑음", "3": "구름많음", 
 const PTY_LABEL: Record<string, string> = { "0": "없음", "1": "비", "2": "비/눈", "3": "눈", "4": "소나기" };
 
 // 단기예보 발표시각: 02,05,08,11,14,17,20,23시 (발표 후 10분 뒤부터 조회 가능)
-function latestBaseDateTime(now: Date): { base_date: string; base_time: string } {
+export function latestBaseDateTime(now: Date): { base_date: string; base_time: string } {
   const times = [2, 5, 8, 11, 14, 17, 20, 23];
   const d = new Date(now.getTime() - 10 * 60 * 1000); // 10분 버퍼
   const hour = d.getHours();
@@ -78,7 +78,7 @@ async function fetchOnce(nx: number, ny: number, apiKey: string) {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ponytail: 에어코리아와 동일하게 SERVICETIMEOUT_ERROR가 잦아 최대 3회 재시도.
-async function fetchWeather(nx: number, ny: number) {
+export async function fetchWeather(nx: number, ny: number) {
   const apiKey = process.env.KMA_API_KEY;
   if (!apiKey) throw new Error("KMA_API_KEY가 설정되지 않았습니다.");
 
