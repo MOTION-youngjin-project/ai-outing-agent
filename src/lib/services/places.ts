@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDataSource } from "./shared";
+import { pickBestPlaceMatch, pickRegionForAddress } from "./matching";
 import type { Place } from "../../../generated/prisma/client";
 
 // 카카오 로컬 - 키워드로 장소 검색
@@ -86,12 +87,9 @@ function toCachedPlace(place: Place): CachedPlace {
   };
 }
 
-// 대구/서울 같은 시/도 이름이 주소 맨 앞에 있으면 해당 Region과 연결(가벼운 best-effort,
-// 못 찾으면 그냥 null로 둔다 — 정교한 주소 파싱은 이번 범위 밖).
-async function findRegionByAddressPrefix(address: string) {
-  const firstToken = address.split(" ")[0];
-  if (!firstToken) return null;
-  return prisma.region.findFirst({ where: { name: { contains: firstToken } } });
+async function findRegionByAddress(address: string) {
+  const regions = await prisma.region.findMany({ where: { level: { in: ["시도", "구군"] } } });
+  return pickRegionForAddress(address, regions);
 }
 
 // 카카오 문서 하나를 places/place_source_records에 cache-aside로 upsert하고 Place 행을 반환한다.
@@ -105,7 +103,7 @@ async function upsertPlaceFromDoc(doc: KakaoDocument, sourceId: bigint): Promise
   if (existingRecord && isFresh) return existingRecord.place;
 
   const address = doc.road_address_name || doc.address_name;
-  const region = address ? await findRegionByAddressPrefix(address) : null;
+  const region = address ? await findRegionByAddress(address) : null;
 
   const placeData = {
     name: doc.place_name,
@@ -159,18 +157,15 @@ export async function searchAndCachePlaces(query: string): Promise<CachedPlace[]
 // 잘못 연결될 위험을 아래 두 가지로 낮춘다:
 //   1. 검색어에 지역명을 같이 붙여서(예: "대구 대구미술관") 카카오 자체 관련도
 //      랭킹이 그 지역 결과를 우선하게 만든다 — 단순 "대구미술관" 검색보다 정확.
-//   2. 카카오가 여러 결과를 주면, 이름이 정확히 일치하는 결과를 최우선으로 고른다
-//      (부분 일치보다 정확 일치 우선). 정확히 일치하는 게 없으면 그제서야 첫 결과.
+//   2. pickBestPlaceMatch로 이름이 정확히 일치하는 결과를 최우선으로 고른다.
 // 그래도 못 찾으면(검색 결과 0건) null — 호출부가 그 장소는 DB 연결 없이 건너뛴다.
 export async function resolvePlaceByName(name: string, regionName?: string | null): Promise<Place | null> {
   const query = regionName ? `${regionName} ${name}` : name;
   const documents = await fetchPlaces(query);
   if (documents.length === 0) return null;
 
-  const best =
-    documents.find((d) => d.place_name === name) ??
-    documents.find((d) => d.place_name.includes(name) || name.includes(d.place_name)) ??
-    documents[0];
+  const best = pickBestPlaceMatch(name, documents);
+  if (!best) return null;
 
   const source = await getOrCreateDataSource("PLACE_SEARCH", "장소 검색 API (Kakao Local)", "search_api");
   return upsertPlaceFromDoc(best, source.id);
