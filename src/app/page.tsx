@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
-
-type Place = NonNullable<Recommendation["places"]>[number];
-type View = "input" | "loading" | "results" | "detail" | "parking";
+import { useAppStore, type Place } from "@/lib/store";
 
 const SUGGESTIONS = [
   "서울에서 애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
@@ -25,104 +24,108 @@ function summarize(rec: Recommendation): string {
   return `${rec.message}\n${list}`;
 }
 
+async function postAgent(history: ChatTurn[]): Promise<Recommendation> {
+  let res: Response;
+  try {
+    res = await fetch("/api/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ history }),
+    });
+  } catch {
+    throw new Error("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "알 수 없는 오류가 발생했습니다.");
+  return data.recommendation as Recommendation;
+}
+
+async function postSuggest(history: ChatTurn[]): Promise<string | null> {
+  const res = await fetch("/api/suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ history }),
+  });
+  const data = await res.json();
+  return data.suggestion ?? null;
+}
+
+async function fetchParking(district: string): Promise<ParkingSpot[]> {
+  try {
+    const res = await fetch(`/api/parking?district=${encodeURIComponent(district)}`);
+    const data = await res.json();
+    return res.ok ? data.spots : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function Home() {
-  const [view, setView] = useState<View>("input");
-  const [history, setHistory] = useState<ChatTurn[]>([]);
-  const [promptMessage, setPromptMessage] = useState<string | null>(null);
-  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
-  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
-  const [parkingSpots, setParkingSpots] = useState<ParkingSpot[] | null>(null);
-  const [parkingLoading, setParkingLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [input, setInput] = useState("");
+  const { view, input, history, selectedPlace, setView, setInput, setHistory, selectPlace } =
+    useAppStore();
+
   // 서버/클라이언트 초기 렌더가 일치해야 하므로 고정값으로 시작하고, 마운트 후에만 랜덤화한다.
-  const [suggestion, setSuggestion] = useState(SUGGESTIONS[0]);
+  // 순수 장식용 클라이언트 상태라 전역 스토어로 옮기지 않았다.
+  const [localSuggestion, setLocalSuggestion] = useState(SUGGESTIONS[0]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
-    setSuggestion(randomSuggestion());
+    setLocalSuggestion(randomSuggestion());
   }, []);
 
-  function acceptSuggestion() {
-    if (!input && suggestion) setInput(suggestion);
-  }
-
-  async function sendMessage() {
-    const text = input.trim();
-    if (!text || view === "loading") return;
-
-    const historyWithUser: ChatTurn[] = [...history, { role: "user", content: text }];
-    setHistory(historyWithUser);
-    setInput("");
-    setSuggestion("");
-    setPromptMessage(null);
-    setErrorMessage(null);
-    setView("loading");
-
-    try {
-      const res = await fetch("/api/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: historyWithUser }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setErrorMessage(data.error ?? "알 수 없는 오류가 발생했습니다.");
-        setView("input");
-        return;
-      }
-
-      const rec = data.recommendation as Recommendation;
+  const suggestMutation = useMutation({ mutationFn: postSuggest });
+  const agentMutation = useMutation({
+    mutationFn: postAgent,
+    onSuccess: (rec, historyWithUser) => {
       const historyWithReply: ChatTurn[] = [
         ...historyWithUser,
         { role: "assistant", content: summarize(rec) },
       ];
       setHistory(historyWithReply);
-      setRecommendation(rec);
+      setView(rec.needsMoreInfo ? "input" : "results");
+      suggestMutation.mutate(historyWithReply);
+    },
+    onError: () => setView("input"),
+  });
 
-      if (rec.needsMoreInfo) {
-        setPromptMessage(rec.message);
-        setView("input");
-      } else {
-        setView("results");
-      }
+  const parkingQuery = useQuery({
+    queryKey: ["parking", selectedPlace?.daeguDistrict],
+    queryFn: () => fetchParking(selectedPlace!.daeguDistrict!),
+    enabled: view === "parking" && !!selectedPlace?.daeguDistrict,
+  });
 
-      // 대화 맥락 기반 다음 입력 제안 — 실패해도 화면 흐름엔 영향 없게 별도 처리
-      fetch("/api/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: historyWithReply }),
-      })
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.suggestion) setSuggestion(d.suggestion);
-        })
-        .catch(() => {});
-    } catch {
-      setErrorMessage("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
-      setView("input");
-    }
+  const recommendation = agentMutation.data ?? null;
+  const promptMessage = recommendation?.needsMoreInfo ? recommendation.message : null;
+  const errorMessage = agentMutation.error instanceof Error ? agentMutation.error.message : null;
+  const displayedSuggestion =
+    agentMutation.isPending || suggestMutation.isPending
+      ? ""
+      : (suggestMutation.data ?? localSuggestion);
+
+  function acceptSuggestion() {
+    if (!input && displayedSuggestion) setInput(displayedSuggestion);
+  }
+
+  function sendMessage() {
+    const text = input.trim();
+    if (!text || agentMutation.isPending) return;
+
+    const historyWithUser: ChatTurn[] = [...history, { role: "user", content: text }];
+    setHistory(historyWithUser);
+    setInput("");
+    agentMutation.reset();
+    suggestMutation.reset();
+    setView("loading");
+    agentMutation.mutate(historyWithUser);
   }
 
   function openDetail(place: Place) {
-    setSelectedPlace(place);
-    setParkingSpots(null);
+    selectPlace(place);
     setView("detail");
   }
 
-  async function viewParking() {
+  function viewParking() {
     if (!selectedPlace?.daeguDistrict) return;
     setView("parking");
-    setParkingLoading(true);
-    try {
-      const res = await fetch(`/api/parking?district=${encodeURIComponent(selectedPlace.daeguDistrict)}`);
-      const data = await res.json();
-      setParkingSpots(res.ok ? data.spots : []);
-    } catch {
-      setParkingSpots([]);
-    } finally {
-      setParkingLoading(false);
-    }
   }
 
   return (
@@ -166,7 +169,7 @@ export default function Home() {
               <div className="relative flex-1">
                 {!input && (
                   <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
-                    {suggestion}
+                    {displayedSuggestion}
                   </div>
                 )}
                 <input
@@ -259,12 +262,12 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-black dark:text-zinc-50">
               {selectedPlace?.daeguDistrict} 주차장 정보
             </h2>
-            {parkingLoading && <p className="text-zinc-500">주차장 조회 중...</p>}
-            {!parkingLoading && parkingSpots?.length === 0 && (
+            {parkingQuery.isLoading && <p className="text-zinc-500">주차장 조회 중...</p>}
+            {!parkingQuery.isLoading && parkingQuery.data?.length === 0 && (
               <p className="text-zinc-500">주차장 정보를 찾을 수 없습니다.</p>
             )}
-            {!parkingLoading &&
-              parkingSpots?.map((s, i) => (
+            {!parkingQuery.isLoading &&
+              parkingQuery.data?.map((s, i) => (
                 <div key={i} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
                   <div className="font-medium">{s.name}</div>
                   <div className="text-zinc-500">{s.address}</div>
