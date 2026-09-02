@@ -60,7 +60,14 @@ export async function createRecommendationRun(history: ChatTurn[]): Promise<Reco
   // 보장 못 해서(동명이인 장소) 못 찾은 곳은 verificationRequired로 표시해두고 건너뛴다.
   const resolvedPlaces: { place: Place | null; reason: string }[] = [];
   for (const p of recommendation.places) {
-    const place = await resolvePlaceByName(p.name, regionName);
+    // 카카오 API가 실패해도(네트워크/쿼터) 이미 나온 LLM 추천 자체는 살려야 한다 —
+    // 이 장소 하나만 못 찾은 것으로 취급하고 전체 요청을 실패시키지 않는다.
+    let place: Place | null = null;
+    try {
+      place = await resolvePlaceByName(p.name, regionName);
+    } catch (err) {
+      console.error(`장소 매칭 실패(${p.name}):`, err);
+    }
     resolvedPlaces.push({ place, reason: p.reason });
   }
   const unresolvedCount = resolvedPlaces.filter((r) => !r.place).length;
