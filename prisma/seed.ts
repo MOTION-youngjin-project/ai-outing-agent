@@ -71,6 +71,38 @@ for (const source of dataSources) {
   });
 }
 
-await prisma.$disconnect();
-
 console.log("data_sources 초기 데이터 입력 완료");
+
+// 대구광역시 + 9개 구/군. regionCode는 src/lib/tools/parking.ts의 DISTRICT_CODES와
+// 동일한 값을 재사용한다 — 대구 주차정보 API(sggCd)에서 이미 검증된 코드라
+// 새로 번호를 매길 필요가 없고, 나중에 parking_lots.region_id를 구/군으로 연결할 때도
+// 그대로 매칭시킬 수 있다.
+const daegu = await prisma.region.upsert({
+  where: { regionCode: "27" },
+  update: { name: "대구광역시", level: "시도" },
+  create: { regionCode: "27", name: "대구광역시", level: "시도" },
+});
+
+const daeguDistricts = [
+  { code: "150", name: "중구" },
+  { code: "151", name: "동구" },
+  { code: "152", name: "서구" },
+  { code: "153", name: "남구" },
+  { code: "154", name: "북구" },
+  { code: "155", name: "수성구" },
+  { code: "156", name: "달서구" },
+  { code: "157", name: "달성군" },
+  { code: "361", name: "군위군" },
+];
+
+for (const d of daeguDistricts) {
+  await prisma.region.upsert({
+    where: { regionCode: d.code },
+    update: { name: d.name, level: "구군", parentId: daegu.id },
+    create: { regionCode: d.code, name: d.name, level: "구군", parentId: daegu.id },
+  });
+}
+
+console.log("regions 초기 데이터(대구광역시 + 9개 구/군) 입력 완료");
+
+await prisma.$disconnect();
