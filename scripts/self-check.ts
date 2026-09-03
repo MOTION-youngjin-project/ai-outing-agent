@@ -8,6 +8,7 @@ import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
 import { stripTags } from "../src/lib/tools/culturePortal.ts";
 import { formatFee } from "../src/lib/tools/parking.ts";
+import { latestBaseDateTime } from "../src/lib/tools/weather.ts";
 import { pickBestPlaceMatch, pickRegionForAddress, inferEnvironmentMode } from "../src/lib/services/matching.ts";
 
 let passed = 0;
@@ -41,6 +42,21 @@ check("stripTags 한글 꺾쇠괄호 보존", stripTags("<공간드림 1472> 개
 check("formatFee 무료", formatFee("무료", null), "무료");
 check("formatFee 시간당 요금", formatFee(null, 3000), "시간당 3000원");
 check("formatFee 정보 없음(둘 다 null)", formatFee(null, null), "요금정보 없음");
+// gnrlOneHrCrg === 0(무료지만 "무료" 플래그가 안 붙은 경우)이 falsy라 요금정보 없음으로 빠지던 버그
+check("formatFee 시간당 0원", formatFee(null, 0), "시간당 0원");
+
+// latestBaseDateTime — 로컬 Date 게터로 계산해 서버가 UTC로 돌면 날짜 경계 근처에서
+// 발표 주기를 잘못 고르던 버그. UTC 인스턴트를 직접 넣어 서버 타임존과 무관하게 검증한다.
+check(
+  "latestBaseDateTime KST 09:05 -> 08시 발표",
+  latestBaseDateTime(new Date("2026-09-03T00:05:00Z")),
+  { base_date: "20260903", base_time: "0800" }
+);
+check(
+  "latestBaseDateTime KST 00:30(자정 넘김) -> 전날 23시 발표",
+  latestBaseDateTime(new Date("2026-09-02T15:30:00Z")),
+  { base_date: "20260902", base_time: "2300" }
+);
 
 // pickBestPlaceMatch — 카카오 검색 결과 중 동명이인 오매칭 방지용 정확 일치 우선 로직.
 // 오늘 이 로직이 없던 시절엔 항상 첫 결과("대구미술관 주차장" 등)를 골라버리는 버그가 날 뻔했음.

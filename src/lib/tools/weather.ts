@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { normalizeSido, SIDO_LATLON, latLonToGrid } from "@/lib/region";
+import { normalizeSido, SIDO_LATLON, latLonToGrid } from "../region.ts";
 
 // 기상청 단기예보 조회서비스(getVilageFcst)
 // https://www.data.go.kr/data/15084084/openapi.do
@@ -10,19 +10,21 @@ const SKY_LABEL: Record<string, string> = { "1": "맑음", "3": "구름많음", 
 const PTY_LABEL: Record<string, string> = { "0": "없음", "1": "비", "2": "비/눈", "3": "눈", "4": "소나기" };
 
 // 단기예보 발표시각: 02,05,08,11,14,17,20,23시 (발표 후 10분 뒤부터 조회 가능)
+// 서버 타임존과 무관하게 KST 기준으로 계산해야 하므로 UTC+9로 보정한 뒤 UTC 게터로 읽는다
+// (로컬 게터를 쓰면 UTC로 도는 서버에서 날짜 경계 근처 몇 시간 동안 발표 주기가 틀어진다).
 export function latestBaseDateTime(now: Date): { base_date: string; base_time: string } {
   const times = [2, 5, 8, 11, 14, 17, 20, 23];
-  const d = new Date(now.getTime() - 10 * 60 * 1000); // 10분 버퍼
-  const hour = d.getHours();
+  const kst = new Date(now.getTime() - 10 * 60 * 1000 + 9 * 60 * 60 * 1000); // 10분 버퍼 + KST 보정
+  const hour = kst.getUTCHours();
   let base = [...times].reverse().find((t) => t <= hour);
 
   if (base === undefined) {
-    d.setDate(d.getDate() - 1);
+    kst.setUTCDate(kst.getUTCDate() - 1);
     base = 23;
   }
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  const base_date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const base_date = `${kst.getUTCFullYear()}${pad(kst.getUTCMonth() + 1)}${pad(kst.getUTCDate())}`;
   const base_time = `${pad(base)}00`;
   return { base_date, base_time };
 }

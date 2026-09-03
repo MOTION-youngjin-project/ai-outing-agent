@@ -44,7 +44,7 @@ async function fetchOnce(sggCd: string, apiKey: string) {
 
 export function formatFee(crgLevySeNm: string | null, gnrlOneHrCrg: number | null): string {
   if (crgLevySeNm === "무료") return "무료";
-  if (gnrlOneHrCrg) return `시간당 ${gnrlOneHrCrg}원`;
+  if (gnrlOneHrCrg !== null) return `시간당 ${gnrlOneHrCrg}원`;
   return crgLevySeNm ?? "요금정보 없음";
 }
 
