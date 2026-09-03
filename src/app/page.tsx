@@ -581,8 +581,20 @@ export default function Home() {
                   <div className="font-medium">{s.name}</div>
                   <div className="text-zinc-500">{s.address}</div>
                   <div className="text-zinc-500">
-                    주차 {s.capacity}면 · {s.fee} · {s.hasRealtime ? "실시간 잔여면수 제공" : "실시간 정보 없음"}
+                    총 {s.capacity}면 ·{" "}
+                    {s.remainingSpaces !== null ? `실시간 ${s.remainingSpaces}면 남음` : "실시간 정보 없음"} ·{" "}
+                    {s.fee}
                   </div>
+                  {s.latitude !== null && s.longitude !== null && (
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${s.latitude},${s.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block rounded-full border border-zinc-300 px-3 py-1 text-xs dark:border-zinc-700"
+                    >
+                      길찾기
+                    </a>
+                  )}
                 </div>
               ))}
           </div>
