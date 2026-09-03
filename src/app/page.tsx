@@ -43,7 +43,7 @@ export default function Home() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
     setSuggestion(randomSuggestion());
-    fetch("/api/regions?level=sigungu")
+    fetch("/api/regions?level=sido")
       .then((r) => r.json())
       .then((d) => setRegions(d.data ?? []))
       .catch(() => {});

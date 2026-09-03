@@ -70,15 +70,44 @@ for (const source of dataSources) {
 
 console.log("data_sources 초기 데이터 입력 완료");
 
-// 대구광역시 + 9개 구/군. regionCode는 src/lib/tools/parking.ts의 DISTRICT_CODES와
-// 동일한 값을 재사용한다 — 대구 주차정보 API(sggCd)에서 이미 검증된 코드라
-// 새로 번호를 매길 필요가 없고, 나중에 parking_lots.region_id를 구/군으로 연결할 때도
-// 그대로 매칭시킬 수 있다.
+// 전국 17개 시/도. regionCode는 통계청 행정표준코드(2자리). 구/군 단위는 대구만 정확한
+// sggCd를 확보해서(parking.ts DISTRICT_CODES) 세분화했고, 나머지 시/도는 구/군 데이터를
+// 손으로 만들면 오류 위험이 커서 시/도 단위까지만 시드한다 — 필요해지면 실제 행정구역
+// 데이터로 별도 추가.
 const daegu = await prisma.region.upsert({
   where: { regionCode: "27" },
   update: { name: "대구광역시", level: "시도" },
   create: { regionCode: "27", name: "대구광역시", level: "시도" },
 });
+
+const otherSido = [
+  { code: "11", name: "서울특별시" },
+  { code: "26", name: "부산광역시" },
+  { code: "28", name: "인천광역시" },
+  { code: "29", name: "광주광역시" },
+  { code: "30", name: "대전광역시" },
+  { code: "31", name: "울산광역시" },
+  { code: "36", name: "세종특별자치시" },
+  { code: "41", name: "경기도" },
+  { code: "42", name: "강원특별자치도" },
+  { code: "43", name: "충청북도" },
+  { code: "44", name: "충청남도" },
+  { code: "45", name: "전북특별자치도" },
+  { code: "46", name: "전라남도" },
+  { code: "47", name: "경상북도" },
+  { code: "48", name: "경상남도" },
+  { code: "50", name: "제주특별자치도" },
+];
+
+for (const s of otherSido) {
+  await prisma.region.upsert({
+    where: { regionCode: s.code },
+    update: { name: s.name, level: "시도" },
+    create: { regionCode: s.code, name: s.name, level: "시도" },
+  });
+}
+
+console.log("regions 초기 데이터(전국 17개 시/도) 입력 완료");
 
 const daeguDistricts = [
   { code: "150", name: "중구" },
