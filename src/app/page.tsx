@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
+import { useAppStore, type Place } from "@/lib/store";
 
-type Place = NonNullable<Recommendation["places"]>[number];
-type View = "input" | "loading" | "results" | "detail" | "parking";
 type Region = { id: string; parentId: string | null; name: string; level: string };
 type WeatherInfo = { temperatureC: number | null; precipitationProbability: number | null; summary: string };
 type AirQualityInfo = { pm10Value: number | null; overallGrade: string };
@@ -28,50 +28,122 @@ function summarize(rec: Recommendation): string {
   return `${rec.message}\n${list}`;
 }
 
+async function fetchRegions(): Promise<Region[]> {
+  const res = await fetch("/api/regions?level=sido");
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+async function fetchWeather(regionId: string): Promise<WeatherInfo | null> {
+  const res = await fetch(`/api/weather?regionId=${regionId}`);
+  const data = await res.json();
+  return data.data ?? null;
+}
+
+async function fetchAirQuality(regionId: string): Promise<AirQualityInfo | null> {
+  const res = await fetch(`/api/air-quality?regionId=${regionId}`);
+  const data = await res.json();
+  return data.data ?? null;
+}
+
+async function postRecommend(history: ChatTurn[]): Promise<Recommendation> {
+  let res: Response;
+  try {
+    res = await fetch("/api/recommend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ history }),
+    });
+  } catch {
+    throw new Error("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "알 수 없는 오류가 발생했습니다.");
+  return data.recommendation as Recommendation;
+}
+
+async function postSuggest(history: ChatTurn[]): Promise<string | null> {
+  const res = await fetch("/api/suggest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ history }),
+  });
+  const data = await res.json();
+  return data.suggestion ?? null;
+}
+
+async function fetchParking(district: string): Promise<ParkingSpot[]> {
+  try {
+    const res = await fetch(`/api/parking?district=${encodeURIComponent(district)}`);
+    const data = await res.json();
+    return res.ok ? data.spots : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function Home() {
-  const [view, setView] = useState<View>("input");
-  const [history, setHistory] = useState<ChatTurn[]>([]);
-  const [promptMessage, setPromptMessage] = useState<string | null>(null);
-  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
-  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
-  const [parkingSpots, setParkingSpots] = useState<ParkingSpot[] | null>(null);
-  const [parkingLoading, setParkingLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [input, setInput] = useState("");
+  const { view, input, history, selectedPlace, regionId, setView, setInput, setHistory, selectPlace, setRegionId } =
+    useAppStore();
+
   // 서버/클라이언트 초기 렌더가 일치해야 하므로 고정값으로 시작하고, 마운트 후에만 랜덤화한다.
-  const [suggestion, setSuggestion] = useState(SUGGESTIONS[0]);
-  const [regions, setRegions] = useState<Region[]>([]);
-  const [regionId, setRegionId] = useState("");
-  const [weather, setWeather] = useState<WeatherInfo | null>(null);
-  const [airQuality, setAirQuality] = useState<AirQualityInfo | null>(null);
+  // 순수 장식용 클라이언트 상태라 전역 스토어로 옮기지 않았다.
+  const [localSuggestion, setLocalSuggestion] = useState(SUGGESTIONS[0]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
-    setSuggestion(randomSuggestion());
-    fetch("/api/regions?level=sido")
-      .then((r) => r.json())
-      .then((d) => setRegions(d.data ?? []))
-      .catch(() => {});
+    setLocalSuggestion(randomSuggestion());
   }, []);
 
-  useEffect(() => {
-    if (!regionId) return;
-    fetch(`/api/weather?regionId=${regionId}`)
-      .then((r) => r.json())
-      .then((d) => setWeather(d.data ?? null))
-      .catch(() => setWeather(null));
-    fetch(`/api/air-quality?regionId=${regionId}`)
-      .then((r) => r.json())
-      .then((d) => setAirQuality(d.data ?? null))
-      .catch(() => setAirQuality(null));
-  }, [regionId]);
+  const regionsQuery = useQuery({ queryKey: ["regions", "sido"], queryFn: fetchRegions });
+  const regions = regionsQuery.data ?? [];
+
+  const weatherQuery = useQuery({
+    queryKey: ["weather", regionId],
+    queryFn: () => fetchWeather(regionId),
+    enabled: !!regionId,
+  });
+  const airQualityQuery = useQuery({
+    queryKey: ["air-quality", regionId],
+    queryFn: () => fetchAirQuality(regionId),
+    enabled: !!regionId,
+  });
+
+  const suggestMutation = useMutation({ mutationFn: postSuggest });
+  const recommendMutation = useMutation({
+    mutationFn: postRecommend,
+    onSuccess: (rec, historyWithUser) => {
+      const historyWithReply: ChatTurn[] = [
+        ...historyWithUser,
+        { role: "assistant", content: summarize(rec) },
+      ];
+      setHistory(historyWithReply);
+      setView(rec.needsMoreInfo ? "input" : "results");
+      suggestMutation.mutate(historyWithReply);
+    },
+    onError: () => setView("input"),
+  });
+
+  const parkingQuery = useQuery({
+    queryKey: ["parking", selectedPlace?.daeguDistrict],
+    queryFn: () => fetchParking(selectedPlace!.daeguDistrict!),
+    enabled: view === "parking" && !!selectedPlace?.daeguDistrict,
+  });
+
+  const recommendation = recommendMutation.data ?? null;
+  const promptMessage = recommendation?.needsMoreInfo ? recommendation.message : null;
+  const errorMessage = recommendMutation.error instanceof Error ? recommendMutation.error.message : null;
+  const displayedSuggestion =
+    recommendMutation.isPending || suggestMutation.isPending
+      ? ""
+      : (suggestMutation.data ?? localSuggestion);
 
   function acceptSuggestion() {
-    if (!input && suggestion) setInput(suggestion);
+    if (!input && displayedSuggestion) setInput(displayedSuggestion);
   }
 
-  async function sendMessage() {
+  function sendMessage() {
     const text = input.trim();
-    if (!text || !regionId || view === "loading") return;
+    if (!text || !regionId || recommendMutation.isPending) return;
 
     // 지역은 대화 첫 턴에만 문장 앞에 붙인다 — 이후 턴은 이미 history에 지역이 남아있다.
     const regionName = regions.find((r) => r.id === regionId)?.name ?? "";
@@ -80,76 +152,20 @@ export default function Home() {
     const historyWithUser: ChatTurn[] = [...history, { role: "user", content }];
     setHistory(historyWithUser);
     setInput("");
-    setSuggestion("");
-    setPromptMessage(null);
-    setErrorMessage(null);
+    recommendMutation.reset();
+    suggestMutation.reset();
     setView("loading");
-
-    try {
-      const res = await fetch("/api/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: historyWithUser }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setErrorMessage(data.error ?? "알 수 없는 오류가 발생했습니다.");
-        setView("input");
-        return;
-      }
-
-      const rec = data.recommendation as Recommendation;
-      const historyWithReply: ChatTurn[] = [
-        ...historyWithUser,
-        { role: "assistant", content: summarize(rec) },
-      ];
-      setHistory(historyWithReply);
-      setRecommendation(rec);
-
-      if (rec.needsMoreInfo) {
-        setPromptMessage(rec.message);
-        setView("input");
-      } else {
-        setView("results");
-      }
-
-      // 대화 맥락 기반 다음 입력 제안 — 실패해도 화면 흐름엔 영향 없게 별도 처리
-      fetch("/api/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: historyWithReply }),
-      })
-        .then((r) => r.json())
-        .then((d) => {
-          if (d.suggestion) setSuggestion(d.suggestion);
-        })
-        .catch(() => {});
-    } catch {
-      setErrorMessage("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
-      setView("input");
-    }
+    recommendMutation.mutate(historyWithUser);
   }
 
   function openDetail(place: Place) {
-    setSelectedPlace(place);
-    setParkingSpots(null);
+    selectPlace(place);
     setView("detail");
   }
 
-  async function viewParking() {
+  function viewParking() {
     if (!selectedPlace?.daeguDistrict) return;
     setView("parking");
-    setParkingLoading(true);
-    try {
-      const res = await fetch(`/api/parking?district=${encodeURIComponent(selectedPlace.daeguDistrict)}`);
-      const data = await res.json();
-      setParkingSpots(res.ok ? data.spots : []);
-    } catch {
-      setParkingSpots([]);
-    } finally {
-      setParkingLoading(false);
-    }
   }
 
   return (
@@ -163,13 +179,7 @@ export default function Home() {
           <div className="flex flex-1 flex-col">
             <select
               value={regionId}
-              onChange={(e) => {
-                setRegionId(e.target.value);
-                if (!e.target.value) {
-                  setWeather(null);
-                  setAirQuality(null);
-                }
-              }}
+              onChange={(e) => setRegionId(e.target.value)}
               disabled={view === "loading"}
               className="mb-4 self-start rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
             >
@@ -180,19 +190,21 @@ export default function Home() {
                 </option>
               ))}
             </select>
-            {(weather || airQuality) && (
+            {(weatherQuery.data || airQualityQuery.data) && (
               <div className="mb-4 flex flex-wrap gap-3 text-xs text-zinc-500">
-                {weather && (
+                {weatherQuery.data && (
                   <span>
-                    {weather.summary}
-                    {weather.temperatureC !== null ? `, ${weather.temperatureC}도` : ""}
-                    {weather.precipitationProbability !== null ? `, 강수확률 ${weather.precipitationProbability}%` : ""}
+                    {weatherQuery.data.summary}
+                    {weatherQuery.data.temperatureC !== null ? `, ${weatherQuery.data.temperatureC}도` : ""}
+                    {weatherQuery.data.precipitationProbability !== null
+                      ? `, 강수확률 ${weatherQuery.data.precipitationProbability}%`
+                      : ""}
                   </span>
                 )}
-                {airQuality && (
+                {airQualityQuery.data && (
                   <span>
-                    미세먼지 {airQuality.overallGrade}
-                    {airQuality.pm10Value !== null ? `(${airQuality.pm10Value}㎍/m³)` : ""}
+                    미세먼지 {airQualityQuery.data.overallGrade}
+                    {airQualityQuery.data.pm10Value !== null ? `(${airQualityQuery.data.pm10Value}㎍/m³)` : ""}
                   </span>
                 )}
               </div>
@@ -229,7 +241,7 @@ export default function Home() {
               <div className="relative flex-1">
                 {!input && (
                   <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
-                    {suggestion}
+                    {displayedSuggestion}
                   </div>
                 )}
                 <input
@@ -322,12 +334,12 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-black dark:text-zinc-50">
               {selectedPlace?.daeguDistrict} 주차장 정보
             </h2>
-            {parkingLoading && <p className="text-zinc-500">주차장 조회 중...</p>}
-            {!parkingLoading && parkingSpots?.length === 0 && (
+            {parkingQuery.isLoading && <p className="text-zinc-500">주차장 조회 중...</p>}
+            {!parkingQuery.isLoading && parkingQuery.data?.length === 0 && (
               <p className="text-zinc-500">주차장 정보를 찾을 수 없습니다.</p>
             )}
-            {!parkingLoading &&
-              parkingSpots?.map((s, i) => (
+            {!parkingQuery.isLoading &&
+              parkingQuery.data?.map((s, i) => (
                 <div key={i} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
                   <div className="font-medium">{s.name}</div>
                   <div className="text-zinc-500">{s.address}</div>
