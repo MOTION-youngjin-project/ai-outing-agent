@@ -22,6 +22,15 @@ type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; ur
 // 번들에 끌어오지 않으려고 여기 따로 둠(같은 파일이 @langchain/core/tools도 import함).
 const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
+// ponytail: 로그인/저장 기능이 아직 없어서(팀 플로우차트상 "선택" 항목, 이번 스코프 밖)
+// 마이페이지 디자인을 화면에 반영하기 위한 더미 데이터. 실제 로그인·저장 붙이면 교체.
+const MYPAGE_STATS = { savedPlaces: 12, recentRecommendations: 8, savedParking: 3 };
+const MYPAGE_SAVED_PLACES = [
+  { name: "수성못", category: "야경 명소 · 수성구" },
+  { name: "대구미술관", category: "미술관 · 수성구" },
+  { name: "앞산 카페거리", category: "카페 · 남구" },
+];
+
 const SUGGESTIONS = [
   "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
   "여자친구랑 데이트할만한 곳 있어?",
@@ -455,7 +464,7 @@ export default function Home() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-black px-3 py-1 text-xs text-white dark:bg-zinc-50 dark:text-black">
+              <span className="rounded-full bg-teal-600 px-3 py-1 text-xs text-white dark:bg-teal-500">
                 전체
               </span>
               {["실내", "야외", "데이트", "저비용"].map((label) => (
@@ -577,6 +586,104 @@ export default function Home() {
                 </div>
               ))}
           </div>
+        )}
+
+        {view === "mypage" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setView("input")}
+                  aria-label="뒤로가기"
+                  className="text-lg text-zinc-500 hover:text-black dark:hover:text-zinc-50"
+                >
+                  ←
+                </button>
+                <h2 className="text-lg font-semibold text-black dark:text-zinc-50">마이페이지</h2>
+              </div>
+              <span aria-hidden className="text-lg text-zinc-400">
+                ⚙
+              </span>
+            </div>
+
+            {/* ponytail: 로그인/저장은 이번 스코프 밖(팀 플로우차트상 "선택" 항목) — 디자인
+                목업을 화면에 반영하기 위한 더미 데이터. 실제 로그인·저장 붙이면 교체. */}
+            <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-lg text-teal-700 dark:bg-teal-900 dark:text-teal-300">
+                🙂
+              </div>
+              <div className="flex-1">
+                <div className="font-medium text-black dark:text-zinc-50">로그인 사용자</div>
+                <div className="text-sm text-zinc-500">저장한 나들이와 설정을 관리해요.</div>
+              </div>
+              <span aria-hidden className="text-zinc-400">
+                ›
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "저장한 장소", value: MYPAGE_STATS.savedPlaces },
+                { label: "최근 추천", value: MYPAGE_STATS.recentRecommendations },
+                { label: "주차 저장", value: MYPAGE_STATS.savedParking },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="flex flex-col items-center gap-1 rounded-lg bg-white px-2 py-3 text-center dark:bg-zinc-900"
+                >
+                  <div className="text-lg font-semibold text-black dark:text-zinc-50">{stat.value}</div>
+                  <div className="text-xs text-zinc-500">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-zinc-500">저장한 장소</h3>
+              <span className="text-xs text-zinc-400">전체 보기 ›</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {MYPAGE_SAVED_PLACES.map((p) => (
+                <div
+                  key={p.name}
+                  className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900"
+                >
+                  <div className="h-12 w-12 shrink-0 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+                  <div className="flex-1">
+                    <div className="font-medium text-black dark:text-zinc-50">{p.name}</div>
+                    <div className="text-sm text-zinc-500">{p.category}</div>
+                  </div>
+                  <span aria-hidden className="text-zinc-400">
+                    ›
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(view === "input" || view === "results" || view === "mypage") && (
+          <nav className="mt-8 flex items-center justify-around border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            {[
+              { id: "home", label: "홈", icon: "⌂", target: "input" as const, active: view === "input" },
+              { id: "recommend", label: "추천", icon: "◎", target: "results" as const, active: view === "results" },
+              { id: "saved", label: "저장", icon: "♡", target: "mypage" as const, active: false },
+              { id: "mypage", label: "마이", icon: "●", target: "mypage" as const, active: view === "mypage" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  if (tab.target === "results" && !recommendation) return;
+                  setView(tab.target);
+                }}
+                className={`flex flex-col items-center gap-1 px-3 py-1 text-xs ${
+                  tab.active ? "text-teal-600 dark:text-teal-400" : "text-zinc-400"
+                }`}
+              >
+                <span aria-hidden>{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </nav>
         )}
       </main>
     </div>
