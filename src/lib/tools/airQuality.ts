@@ -57,7 +57,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ponytail: 에어코리아 API가 SERVICETIMEOUT_ERROR를 자주 반환해(실측 4회 중 3회) 최대 3회 재시도.
 // 계속 실패하면 지수 백오프/재시도 큐 등 정교한 재시도 전략 도입.
-async function fetchAirQuality(sidoName: string) {
+export async function fetchAirQuality(sidoName: string) {
   const apiKey = process.env.AIRKOREA_API_KEY;
   if (!apiKey) throw new Error("AIRKOREA_API_KEY가 설정되지 않았습니다.");
 

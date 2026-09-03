@@ -1,13 +1,15 @@
 // 외부 API 호출 없는 순수 로직만 검증하는 가벼운 회귀 체크.
 // 오늘 실제로 버그가 났던 부분(시/도 정식명칭 매칭, 좌표 변환, 등급 판정,
-// HTML 태그 스트립, 요금 null 처리) 위주로만 다룬다. 새 테스트 프레임워크는
-// 추가하지 않음 — node:assert면 충분.
+// HTML 태그 스트립, 요금 null 처리, 장소/지역 매칭, 실내외 추론) 위주로만 다룬다.
+// 새 테스트 프레임워크는 추가하지 않음 — node:assert면 충분.
 // 실행: node --experimental-strip-types scripts/self-check.ts
 import assert from "node:assert/strict";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
 import { stripTags } from "../src/lib/tools/culturePortal.ts";
 import { formatFee } from "../src/lib/tools/parking.ts";
+import { latestBaseDateTime } from "../src/lib/tools/weather.ts";
+import { pickBestPlaceMatch, pickRegionForAddress, inferEnvironmentMode } from "../src/lib/services/matching.ts";
 
 let passed = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -40,5 +42,72 @@ check("stripTags 한글 꺾쇠괄호 보존", stripTags("<공간드림 1472> 개
 check("formatFee 무료", formatFee("무료", null), "무료");
 check("formatFee 시간당 요금", formatFee(null, 3000), "시간당 3000원");
 check("formatFee 정보 없음(둘 다 null)", formatFee(null, null), "요금정보 없음");
+// gnrlOneHrCrg === 0(무료지만 "무료" 플래그가 안 붙은 경우)이 falsy라 요금정보 없음으로 빠지던 버그
+check("formatFee 시간당 0원", formatFee(null, 0), "시간당 0원");
+
+// latestBaseDateTime — 로컬 Date 게터로 계산해 서버가 UTC로 돌면 날짜 경계 근처에서
+// 발표 주기를 잘못 고르던 버그. UTC 인스턴트를 직접 넣어 서버 타임존과 무관하게 검증한다.
+check(
+  "latestBaseDateTime KST 09:05 -> 08시 발표",
+  latestBaseDateTime(new Date("2026-09-03T00:05:00Z")),
+  { base_date: "20260903", base_time: "0800" }
+);
+check(
+  "latestBaseDateTime KST 00:30(자정 넘김) -> 전날 23시 발표",
+  latestBaseDateTime(new Date("2026-09-02T15:30:00Z")),
+  { base_date: "20260902", base_time: "2300" }
+);
+
+// pickBestPlaceMatch — 카카오 검색 결과 중 동명이인 오매칭 방지용 정확 일치 우선 로직.
+// 오늘 이 로직이 없던 시절엔 항상 첫 결과("대구미술관 주차장" 등)를 골라버리는 버그가 날 뻔했음.
+check(
+  "pickBestPlaceMatch 정확 일치 우선",
+  pickBestPlaceMatch("대구미술관", [{ place_name: "대구미술관 주차장" }, { place_name: "대구미술관" }]),
+  { place_name: "대구미술관" }
+);
+check(
+  "pickBestPlaceMatch 정확 일치 없으면 첫 결과",
+  pickBestPlaceMatch("전혀다른이름", [{ place_name: "이디야커피" }, { place_name: "스타벅스" }]),
+  { place_name: "이디야커피" }
+);
+check("pickBestPlaceMatch 결과 없음", pickBestPlaceMatch("아무거나", []), undefined);
+
+// pickRegionForAddress — 오늘 실제로 났던 버그(정확히 일치 검색이라 "대구"가 "대구광역시" 시드
+// 행을 못 찾고 매번 중복 생성하던 것)의 재발 방지 + 구/군 우선 매칭까지 함께 검증.
+const REGION_FIXTURES = [
+  { name: "대구광역시", level: "시도" },
+  { name: "수성구", level: "구군" },
+  { name: "중구", level: "구군" },
+];
+check(
+  "pickRegionForAddress 구/군 우선",
+  pickRegionForAddress("대구 수성구 미술관로 40", REGION_FIXTURES),
+  { name: "수성구", level: "구군" }
+);
+check(
+  "pickRegionForAddress 구/군 없으면 시/도로 완화(축약형 vs 정식명칭)",
+  pickRegionForAddress("대구 남구 앞산순환로 574", REGION_FIXTURES),
+  { name: "대구광역시", level: "시도" }
+);
+check("pickRegionForAddress 매칭 실패", pickRegionForAddress("서울 강남구 테헤란로", REGION_FIXTURES), null);
+
+// inferEnvironmentMode — agent.ts가 구조화된 필드로 안 주는 실내/야외를 텍스트에서 추론.
+const baseRec = { needsMoreInfo: false as const, message: "" };
+check(
+  "inferEnvironmentMode 실내만",
+  inferEnvironmentMode({ ...baseRec, message: "시원한 실내 미술관에서 감상하기 좋아요" }),
+  "indoor"
+);
+check(
+  "inferEnvironmentMode 야외만",
+  inferEnvironmentMode({ ...baseRec, message: "호수 산책과 전망대 야경을 즐겨보세요" }),
+  "outdoor"
+);
+check(
+  "inferEnvironmentMode 둘 다 섞이면 mixed",
+  inferEnvironmentMode({ ...baseRec, message: "낮엔 실내 미술관, 저녁엔 호수 산책과 야경" }),
+  "mixed"
+);
+check("inferEnvironmentMode 신호 없으면 mixed", inferEnvironmentMode({ ...baseRec, message: "좋은 곳이에요" }), "mixed");
 
 console.log(`✓ self-check 통과 (${passed}건)`);

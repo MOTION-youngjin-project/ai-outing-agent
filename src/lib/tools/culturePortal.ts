@@ -34,6 +34,7 @@ type PerformanceItem = {
   eventPeriod: string;
   eventSite: string;
   url: string;
+  imageUrl: string;
 };
 
 async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
@@ -61,6 +62,7 @@ async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
     eventPeriod: extractTag(item, "eventPeriod"),
     eventSite: stripTags(extractTag(item, "eventSite")),
     url: extractTag(item, "url"),
+    imageUrl: extractTag(item, "imageObject"),
   }));
 
   return parsed;
@@ -96,7 +98,10 @@ export const culturePortalTool = tool(
 
       // 이 API는 지역(시/도) 파라미터가 없어 전국 결과를 그대로 반환한다.
       const list = items
-        .map((i) => `- ${i.title} (${i.eventPeriod}, ${i.eventSite})${i.url ? ` ${i.url}` : ""}`)
+        .map(
+          (i) =>
+            `- ${i.title} (${i.eventPeriod}, ${i.eventSite})${i.url ? ` 링크:${i.url}` : ""}${i.imageUrl ? ` 이미지:${i.imageUrl}` : ""}`
+        )
         .join("\n");
       return `"${dtype}" 분야 전국 공연/전시 검색 결과입니다 (지역별 필터링은 지원하지 않아 전국 결과 중 일부):\n${list}`;
     } catch (err) {

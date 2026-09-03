@@ -1,5 +1,6 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { createAgent } from "langchain";
+import { z } from "zod";
 import { airQualityTool } from "./tools/airQuality";
 import { weatherTool } from "./tools/weather";
 import { culturePortalTool } from "./tools/culturePortal";
@@ -24,8 +25,11 @@ const SYSTEM_PROMPT =
   "속도가 중요하다: 서로 의존하지 않는 도구(예: get_air_quality와 get_weather, " +
   "또는 search_culture_events와 search_family_facility_info)는 한 턴에 동시에 같이 호출해라. " +
   "한 번에 하나씩 순차로 호출하지 마라.\n\n" +
-  "장소를 추천한 뒤 사용자가 주차를 물어보면 search_daegu_parking으로 확인해라. " +
-  "단, 이 도구는 대구광역시만 지원하므로 다른 지역이면 지원하지 않는다고 솔직히 말해라.";
+  "주차 정보는 이 단계에서 미리 찾지 마라 — 사용자가 특정 장소의 주차를 따로 물어볼 때만 " +
+  "search_daegu_parking을 써라(대구 외 지역이면 지원하지 않는다고 말해라).\n\n" +
+  "최종 응답은 반드시 정해진 구조(JSON)로 출력해야 한다. 지역을 되물어야 하는 경우가 아니면 " +
+  "장소를 3~5개 추천하고, 각 장소마다 알고 있는 정보만 채워라 — 모르는 필드(운영시간, 요금, 이미지 등)는 " +
+  "지어내지 말고 비워둬라. daeguDistrict는 그 장소가 대구광역시 소속일 때만, 정확한 구/군을 알 때만 채워라.";
 
 // ponytail: 무료 티어 쿼터는 모델별로 따로 있어서(실측 확인), 쿼터 소진 시
 // 다음 모델로 순서대로 재시도. 유료 결제 전환 시 이 체인은 필요 없어짐.
@@ -59,10 +63,34 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+const DAEGU_DISTRICTS = [
+  "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
+] as const;
+
+const PlaceSchema = z.object({
+  name: z.string().describe("장소 이름"),
+  oneLineDescription: z.string().describe("결과 리스트 카드에 보여줄 한 줄 설명"),
+  reason: z.string().describe("이 장소를 추천한 이유 (상세 화면용, 여러 문장 가능)"),
+  address: z.string().optional().describe("주소 또는 위치 (모르면 비움)"),
+  operatingHours: z.string().optional().describe("운영시간 (모르면 비움)"),
+  fee: z.string().optional().describe("이용요금 (모르면 비움)"),
+  features: z.array(z.string()).optional().describe("주요 정보/특징 목록 (예: 유모차 대여, 수유실)"),
+  imageUrl: z.string().optional().describe("대표 이미지 URL (문화포털 도구가 준 경우만)"),
+  daeguDistrict: z.enum(DAEGU_DISTRICTS).optional().describe("대구광역시 소속일 때만 구/군 (주차 정보 조회 가능 여부 판단용)"),
+});
+
+export const RecommendationSchema = z.object({
+  needsMoreInfo: z.boolean().describe("지역 등 정보가 부족해 되물어야 하면 true, 추천 가능하면 false"),
+  message: z.string().describe("needsMoreInfo가 true면 되묻는 질문, false면 추천 요약(판단 이유 포함)"),
+  places: z.array(PlaceSchema).optional().describe("needsMoreInfo가 false일 때 추천 장소 3~5개"),
+});
+
+export type Recommendation = z.infer<typeof RecommendationSchema>;
+
 // history는 지금까지의 대화(사용자가 방금 보낸 메시지 포함) 전체를 받는다.
 // 단일 메시지만 넘기면 "거기", "다른 곳도" 같은 후속 질문의 맥락을 에이전트가 전혀
 // 모르게 된다 (5순위 대화 맥락 기억 요구사항과 직결).
-export async function runAgent(history: ChatTurn[]) {
+export async function runAgent(history: ChatTurn[]): Promise<Recommendation> {
   let lastError: unknown;
 
   for (const model of MODEL_FALLBACK_CHAIN) {
@@ -76,15 +104,12 @@ export async function runAgent(history: ChatTurn[]) {
       model: llm,
       tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool, parkingTool],
       systemPrompt: SYSTEM_PROMPT,
+      responseFormat: RecommendationSchema,
     });
 
     try {
-      const result = await withTimeout(
-        agent.invoke({ messages: history }),
-        25000
-      );
-      const last = result.messages[result.messages.length - 1];
-      return last.content as string;
+      const result = await withTimeout(agent.invoke({ messages: history }), 25000);
+      return result.structuredResponse as Recommendation;
     } catch (err) {
       lastError = err;
       if (!isRetryableModelError(err)) throw err;

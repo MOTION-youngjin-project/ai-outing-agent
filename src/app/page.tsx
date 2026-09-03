@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import type { ChatTurn, Recommendation } from "@/lib/agent";
+import type { ParkingSpot } from "@/lib/tools/parking";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Place = NonNullable<Recommendation["places"]>[number];
+type View = "input" | "loading" | "results" | "detail" | "parking";
+type Region = { id: string; parentId: string | null; name: string; level: string };
+type WeatherInfo = { temperatureC: number | null; precipitationProbability: number | null; summary: string };
+type AirQualityInfo = { pm10Value: number | null; overallGrade: string };
 
 const SUGGESTIONS = [
-  "서울에서 애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
-  "대구에서 여자친구랑 데이트할만한 곳 있어?",
+  "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
+  "여자친구랑 데이트할만한 곳 있어?",
   "요즘 날씨가 별로네, 실내에서 놀만한 곳 있어?",
   "돈 안 쓰고 반나절만 나갔다 올 데 있어?",
 ];
@@ -16,16 +21,49 @@ function randomSuggestion() {
   return SUGGESTIONS[Math.floor(Math.random() * SUGGESTIONS.length)];
 }
 
+// 대화 히스토리(다음 요청의 맥락)와 다음 질문 제안 생성에 쓰는 텍스트 요약.
+function summarize(rec: Recommendation): string {
+  if (rec.needsMoreInfo || !rec.places) return rec.message;
+  const list = rec.places.map((p) => `- ${p.name}: ${p.oneLineDescription}`).join("\n");
+  return `${rec.message}\n${list}`;
+}
+
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [view, setView] = useState<View>("input");
+  const [history, setHistory] = useState<ChatTurn[]>([]);
+  const [promptMessage, setPromptMessage] = useState<string | null>(null);
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [parkingSpots, setParkingSpots] = useState<ParkingSpot[] | null>(null);
+  const [parkingLoading, setParkingLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
   // 서버/클라이언트 초기 렌더가 일치해야 하므로 고정값으로 시작하고, 마운트 후에만 랜덤화한다.
   const [suggestion, setSuggestion] = useState(SUGGESTIONS[0]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionId, setRegionId] = useState("");
+  const [weather, setWeather] = useState<WeatherInfo | null>(null);
+  const [airQuality, setAirQuality] = useState<AirQualityInfo | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
     setSuggestion(randomSuggestion());
+    fetch("/api/regions?level=sido")
+      .then((r) => r.json())
+      .then((d) => setRegions(d.data ?? []))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!regionId) return;
+    fetch(`/api/weather?regionId=${regionId}`)
+      .then((r) => r.json())
+      .then((d) => setWeather(d.data ?? null))
+      .catch(() => setWeather(null));
+    fetch(`/api/air-quality?regionId=${regionId}`)
+      .then((r) => r.json())
+      .then((d) => setAirQuality(d.data ?? null))
+      .catch(() => setAirQuality(null));
+  }, [regionId]);
 
   function acceptSuggestion() {
     if (!input && suggestion) setInput(suggestion);
@@ -33,26 +71,50 @@ export default function Home() {
 
   async function sendMessage() {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || !regionId || view === "loading") return;
 
-    const historyWithUser: Message[] = [...messages, { role: "user", content: text }];
-    setMessages(historyWithUser);
+    // 지역은 대화 첫 턴에만 문장 앞에 붙인다 — 이후 턴은 이미 history에 지역이 남아있다.
+    const regionName = regions.find((r) => r.id === regionId)?.name ?? "";
+    const content = history.length === 0 && regionName ? `${regionName}에서 ${text}` : text;
+
+    const historyWithUser: ChatTurn[] = [...history, { role: "user", content }];
+    setHistory(historyWithUser);
     setInput("");
-    setSuggestion(""); // 새 맥락 기반 제안이 올 때까지 이전 정적 예시를 보여주지 않음
-    setLoading(true);
+    setSuggestion("");
+    setPromptMessage(null);
+    setErrorMessage(null);
+    setView("loading");
 
     try {
-      const res = await fetch("/api/agent", {
+      const res = await fetch("/api/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ history: historyWithUser }),
       });
       const data = await res.json();
-      const reply = res.ok ? data.reply : `오류: ${data.error ?? "알 수 없는 오류"}`;
-      const historyWithReply: Message[] = [...historyWithUser, { role: "assistant", content: reply }];
-      setMessages(historyWithReply);
 
-      // 대화 맥락 기반 다음 입력 제안 — 실패해도 채팅 자체엔 영향 없게 별도로 처리
+      if (!res.ok) {
+        setErrorMessage(data.error ?? "알 수 없는 오류가 발생했습니다.");
+        setView("input");
+        return;
+      }
+
+      const rec = data.recommendation as Recommendation;
+      const historyWithReply: ChatTurn[] = [
+        ...historyWithUser,
+        { role: "assistant", content: summarize(rec) },
+      ];
+      setHistory(historyWithReply);
+      setRecommendation(rec);
+
+      if (rec.needsMoreInfo) {
+        setPromptMessage(rec.message);
+        setView("input");
+      } else {
+        setView("results");
+      }
+
+      // 대화 맥락 기반 다음 입력 제안 — 실패해도 화면 흐름엔 영향 없게 별도 처리
       fetch("/api/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -64,12 +126,29 @@ export default function Home() {
         })
         .catch(() => {});
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "요청에 실패했습니다. 잠시 후 다시 시도해주세요." },
-      ]);
+      setErrorMessage("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      setView("input");
+    }
+  }
+
+  function openDetail(place: Place) {
+    setSelectedPlace(place);
+    setParkingSpots(null);
+    setView("detail");
+  }
+
+  async function viewParking() {
+    if (!selectedPlace?.daeguDistrict) return;
+    setView("parking");
+    setParkingLoading(true);
+    try {
+      const res = await fetch(`/api/parking?district=${encodeURIComponent(selectedPlace.daeguDistrict)}`);
+      const data = await res.json();
+      setParkingSpots(res.ok ? data.spots : []);
+    } catch {
+      setParkingSpots([]);
     } finally {
-      setLoading(false);
+      setParkingLoading(false);
     }
   }
 
@@ -80,60 +159,185 @@ export default function Home() {
           나들이 추천 에이전트
         </h1>
 
-        <div className="flex-1 space-y-4 overflow-y-auto">
-          {messages.length === 0 && (
-            <p className="text-zinc-500">
-              예: &quot;서울에서 애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야&quot;
-            </p>
-          )}
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={`rounded-lg px-4 py-3 text-sm ${
-                m.role === "user"
-                  ? "ml-auto max-w-[80%] whitespace-pre-wrap bg-black text-white dark:bg-zinc-50 dark:text-black"
-                  : "max-w-[85%] bg-white text-black [&_h3]:mt-3 [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_p]:my-2 dark:bg-zinc-900 dark:text-zinc-50"
-              }`}
-            >
-              {m.role === "assistant" ? <ReactMarkdown>{m.content}</ReactMarkdown> : m.content}
-            </div>
-          ))}
-          {loading && <p className="text-zinc-500">생각하는 중... (도구 여러 개를 확인하느라 시간이 걸릴 수 있어요)</p>}
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            sendMessage();
-          }}
-          className="mt-4 flex gap-2"
-        >
-          <div className="relative flex-1">
-            {!input && (
-              <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
-                {suggestion}
-              </div>
-            )}
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (!input && (e.key === "ArrowRight" || e.key === "Tab")) {
-                  e.preventDefault();
-                  acceptSuggestion();
+        {(view === "input" || view === "loading") && (
+          <div className="flex flex-1 flex-col">
+            <select
+              value={regionId}
+              onChange={(e) => {
+                setRegionId(e.target.value);
+                if (!e.target.value) {
+                  setWeather(null);
+                  setAirQuality(null);
                 }
               }}
-              className="relative w-full rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
-            />
+              disabled={view === "loading"}
+              className="mb-4 self-start rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
+            >
+              <option value="">지역을 선택하세요</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            {(weather || airQuality) && (
+              <div className="mb-4 flex flex-wrap gap-3 text-xs text-zinc-500">
+                {weather && (
+                  <span>
+                    {weather.summary}
+                    {weather.temperatureC !== null ? `, ${weather.temperatureC}도` : ""}
+                    {weather.precipitationProbability !== null ? `, 강수확률 ${weather.precipitationProbability}%` : ""}
+                  </span>
+                )}
+                {airQuality && (
+                  <span>
+                    미세먼지 {airQuality.overallGrade}
+                    {airQuality.pm10Value !== null ? `(${airQuality.pm10Value}㎍/m³)` : ""}
+                  </span>
+                )}
+              </div>
+            )}
+            {promptMessage && (
+              <div className="mb-4 rounded-lg bg-white px-4 py-3 text-sm text-black dark:bg-zinc-900 dark:text-zinc-50">
+                {promptMessage}
+              </div>
+            )}
+            {errorMessage && (
+              <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+                오류: {errorMessage}
+              </div>
+            )}
+            {view === "loading" ? (
+              <p className="text-zinc-500">
+                생각하는 중... (날씨·대기질 등 도구 여러 개를 확인하느라 시간이 걸릴 수 있어요)
+              </p>
+            ) : (
+              !promptMessage && (
+                <p className="text-zinc-500">
+                  예: &quot;애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야&quot;
+                </p>
+              )
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendMessage();
+              }}
+              className="mt-auto flex gap-2 pt-4"
+            >
+              <div className="relative flex-1">
+                {!input && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
+                    {suggestion}
+                  </div>
+                )}
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (!input && (e.key === "ArrowRight" || e.key === "Tab")) {
+                      e.preventDefault();
+                      acceptSuggestion();
+                    }
+                  }}
+                  disabled={view === "loading"}
+                  className="relative w-full rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={view === "loading" || !regionId}
+                className="rounded-full bg-black px-5 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-black"
+              >
+                보내기
+              </button>
+            </form>
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-full bg-black px-5 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-black"
-          >
-            보내기
-          </button>
-        </form>
+        )}
+
+        {view === "results" && recommendation?.places && (
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-black dark:text-zinc-50">{recommendation.message}</p>
+            <div className="flex flex-col gap-3">
+              {recommendation.places.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => openDetail(p)}
+                  className="rounded-lg bg-white px-4 py-3 text-left text-sm hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+                >
+                  <div className="font-medium">{p.name}</div>
+                  <div className="text-zinc-500">{p.oneLineDescription}</div>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setView("input")}
+              className="mt-2 self-start rounded-full border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700 dark:text-zinc-50"
+            >
+              다른 조건으로 찾기
+            </button>
+          </div>
+        )}
+
+        {view === "detail" && selectedPlace && (
+          <div className="flex flex-col gap-4">
+            <button onClick={() => setView("results")} className="self-start text-sm text-zinc-500">
+              ← 목록으로
+            </button>
+            {selectedPlace.imageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+              <img src={selectedPlace.imageUrl} alt={selectedPlace.name} className="rounded-lg" />
+            )}
+            <h2 className="text-lg font-semibold text-black dark:text-zinc-50">{selectedPlace.name}</h2>
+            <p className="text-sm text-black dark:text-zinc-50">{selectedPlace.reason}</p>
+            <dl className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+              {selectedPlace.address && <div><dt className="inline font-medium">위치: </dt><dd className="inline">{selectedPlace.address}</dd></div>}
+              {selectedPlace.operatingHours && <div><dt className="inline font-medium">운영시간: </dt><dd className="inline">{selectedPlace.operatingHours}</dd></div>}
+              {selectedPlace.fee && <div><dt className="inline font-medium">이용요금: </dt><dd className="inline">{selectedPlace.fee}</dd></div>}
+            </dl>
+            {selectedPlace.features && selectedPlace.features.length > 0 && (
+              <ul className="list-disc pl-5 text-sm text-zinc-600 dark:text-zinc-400">
+                {selectedPlace.features.map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            )}
+            {selectedPlace.daeguDistrict && (
+              <button
+                onClick={viewParking}
+                className="self-start rounded-full bg-black px-4 py-2 text-sm text-white dark:bg-zinc-50 dark:text-black"
+              >
+                주차 정보 보기
+              </button>
+            )}
+          </div>
+        )}
+
+        {view === "parking" && (
+          <div className="flex flex-col gap-4">
+            <button onClick={() => setView("detail")} className="self-start text-sm text-zinc-500">
+              ← 장소 정보로
+            </button>
+            <h2 className="text-lg font-semibold text-black dark:text-zinc-50">
+              {selectedPlace?.daeguDistrict} 주차장 정보
+            </h2>
+            {parkingLoading && <p className="text-zinc-500">주차장 조회 중...</p>}
+            {!parkingLoading && parkingSpots?.length === 0 && (
+              <p className="text-zinc-500">주차장 정보를 찾을 수 없습니다.</p>
+            )}
+            {!parkingLoading &&
+              parkingSpots?.map((s, i) => (
+                <div key={i} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
+                  <div className="font-medium">{s.name}</div>
+                  <div className="text-zinc-500">{s.address}</div>
+                  <div className="text-zinc-500">
+                    주차 {s.capacity}면 · {s.fee} · {s.hasRealtime ? "실시간 잔여면수 제공" : "실시간 정보 없음"}
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
       </main>
     </div>
   );
