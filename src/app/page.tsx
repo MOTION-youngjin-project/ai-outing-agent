@@ -9,8 +9,8 @@ type View = "input" | "loading" | "results" | "detail" | "parking";
 type Region = { id: string; parentId: string | null; name: string; level: string };
 
 const SUGGESTIONS = [
-  "서울에서 애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
-  "대구에서 여자친구랑 데이트할만한 곳 있어?",
+  "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
+  "여자친구랑 데이트할만한 곳 있어?",
   "요즘 날씨가 별로네, 실내에서 놀만한 곳 있어?",
   "돈 안 쓰고 반나절만 나갔다 올 데 있어?",
 ];
@@ -175,7 +175,7 @@ export default function Home() {
             ) : (
               !promptMessage && (
                 <p className="text-zinc-500">
-                  예: &quot;서울에서 애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야&quot;
+                  예: &quot;애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야&quot;
                 </p>
               )
             )}
