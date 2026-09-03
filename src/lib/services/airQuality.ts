@@ -8,6 +8,7 @@ export interface CachedAirQuality {
   pm10Value: number | null;
   overallGrade: string;
   freshnessStatus: "fresh" | "stale";
+  cacheHit: boolean;
 }
 
 // ponytail: 에어코리아 응답엔 갱신주기가 명시돼 있지 않아 60분 고정 TTL로 잡음.
@@ -33,6 +34,7 @@ export async function getCachedAirQuality(regionName: string): Promise<CachedAir
       pm10Value: latest.pm10Value ? latest.pm10Value.toNumber() : null,
       overallGrade: latest.overallGrade,
       freshnessStatus: "fresh",
+      cacheHit: true,
     };
   }
 
@@ -51,7 +53,7 @@ export async function getCachedAirQuality(regionName: string): Promise<CachedAir
       },
     });
 
-    return { id: saved.id.toString(), pm10Value: pm10, overallGrade: grade, freshnessStatus: "fresh" };
+    return { id: saved.id.toString(), pm10Value: pm10, overallGrade: grade, freshnessStatus: "fresh", cacheHit: false };
   } catch {
     if (!latest) return null;
     return {
@@ -59,6 +61,7 @@ export async function getCachedAirQuality(regionName: string): Promise<CachedAir
       pm10Value: latest.pm10Value ? latest.pm10Value.toNumber() : null,
       overallGrade: latest.overallGrade,
       freshnessStatus: "stale",
+      cacheHit: false,
     };
   }
 }

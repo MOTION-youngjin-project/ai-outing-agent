@@ -9,6 +9,7 @@ export interface CachedWeather {
   precipitationProbability: number | null;
   summary: string;
   freshnessStatus: "fresh" | "stale";
+  cacheHit: boolean;
 }
 
 function kstDateTime(dateStr: string, timeStr: string): Date {
@@ -50,6 +51,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
         : null,
       summary: latest.summary ?? "",
       freshnessStatus: "fresh",
+      cacheHit: true,
     };
   }
 
@@ -75,7 +77,14 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
       },
     });
 
-    return { id: saved.id.toString(), temperatureC, precipitationProbability, summary, freshnessStatus: "fresh" };
+    return {
+      id: saved.id.toString(),
+      temperatureC,
+      precipitationProbability,
+      summary,
+      freshnessStatus: "fresh",
+      cacheHit: false,
+    };
   } catch {
     if (!latest) return null;
     return {
@@ -86,6 +95,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
         : null,
       summary: latest.summary ?? "",
       freshnessStatus: "stale",
+      cacheHit: false,
     };
   }
 }
