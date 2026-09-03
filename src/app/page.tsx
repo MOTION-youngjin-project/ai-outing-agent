@@ -7,6 +7,8 @@ import type { ParkingSpot } from "@/lib/tools/parking";
 type Place = NonNullable<Recommendation["places"]>[number];
 type View = "input" | "loading" | "results" | "detail" | "parking";
 type Region = { id: string; parentId: string | null; name: string; level: string };
+type WeatherInfo = { temperatureC: number | null; precipitationProbability: number | null; summary: string };
+type AirQualityInfo = { pm10Value: number | null; overallGrade: string };
 
 const SUGGESTIONS = [
   "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
@@ -40,6 +42,8 @@ export default function Home() {
   const [suggestion, setSuggestion] = useState(SUGGESTIONS[0]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionId, setRegionId] = useState("");
+  const [weather, setWeather] = useState<WeatherInfo | null>(null);
+  const [airQuality, setAirQuality] = useState<AirQualityInfo | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
     setSuggestion(randomSuggestion());
@@ -48,6 +52,18 @@ export default function Home() {
       .then((d) => setRegions(d.data ?? []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!regionId) return;
+    fetch(`/api/weather?regionId=${regionId}`)
+      .then((r) => r.json())
+      .then((d) => setWeather(d.data ?? null))
+      .catch(() => setWeather(null));
+    fetch(`/api/air-quality?regionId=${regionId}`)
+      .then((r) => r.json())
+      .then((d) => setAirQuality(d.data ?? null))
+      .catch(() => setAirQuality(null));
+  }, [regionId]);
 
   function acceptSuggestion() {
     if (!input && suggestion) setInput(suggestion);
@@ -147,7 +163,13 @@ export default function Home() {
           <div className="flex flex-1 flex-col">
             <select
               value={regionId}
-              onChange={(e) => setRegionId(e.target.value)}
+              onChange={(e) => {
+                setRegionId(e.target.value);
+                if (!e.target.value) {
+                  setWeather(null);
+                  setAirQuality(null);
+                }
+              }}
               disabled={view === "loading"}
               className="mb-4 self-start rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
             >
@@ -158,6 +180,23 @@ export default function Home() {
                 </option>
               ))}
             </select>
+            {(weather || airQuality) && (
+              <div className="mb-4 flex flex-wrap gap-3 text-xs text-zinc-500">
+                {weather && (
+                  <span>
+                    {weather.summary}
+                    {weather.temperatureC !== null ? `, ${weather.temperatureC}도` : ""}
+                    {weather.precipitationProbability !== null ? `, 강수확률 ${weather.precipitationProbability}%` : ""}
+                  </span>
+                )}
+                {airQuality && (
+                  <span>
+                    미세먼지 {airQuality.overallGrade}
+                    {airQuality.pm10Value !== null ? `(${airQuality.pm10Value}㎍/m³)` : ""}
+                  </span>
+                )}
+              </div>
+            )}
             {promptMessage && (
               <div className="mb-4 rounded-lg bg-white px-4 py-3 text-sm text-black dark:bg-zinc-900 dark:text-zinc-50">
                 {promptMessage}
