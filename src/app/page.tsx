@@ -120,6 +120,10 @@ export default function Home() {
     setLocalSuggestion(randomSuggestion());
   }, []);
 
+  // 찜 아이콘은 디자인팀 목업의 시각 요소만 반영 — 로그인/저장 흐름은 이번 스코프 밖이라
+  // 서버 저장 없이 화면에서만 토글되는 장식용 상태.
+  const [favoriteIndexes, setFavoriteIndexes] = useState<Set<number>>(new Set());
+
   // 검색창 입력값은 제출 전까지 이 화면 밖에서 쓸 일이 없는 순수 로컬 상태라 스토어로 안 옮김.
   const [placeQuery, setPlaceQuery] = useState("");
   const placesMutation = useMutation({ mutationFn: fetchPlacesSearch });
@@ -200,6 +204,21 @@ export default function Home() {
   function viewParking() {
     if (!selectedPlace?.daeguDistrict) return;
     setView("parking");
+  }
+
+  function viewParkingFor(place: Place) {
+    if (!place.daeguDistrict) return;
+    selectPlace(place);
+    setView("parking");
+  }
+
+  function toggleFavorite(index: number) {
+    setFavoriteIndexes((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
   }
 
   return (
@@ -409,24 +428,94 @@ export default function Home() {
 
         {view === "results" && recommendation?.places && (
           <div className="flex flex-col gap-4">
-            <p className="text-sm text-black dark:text-zinc-50">{recommendation.message}</p>
-            <div className="flex flex-col gap-3">
-              {recommendation.places.map((p, i) => (
-                <button
-                  key={i}
-                  onClick={() => openDetail(p)}
-                  className="rounded-lg bg-white px-4 py-3 text-left text-sm hover:bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setView("input")}
+                aria-label="뒤로가기"
+                className="text-lg text-zinc-500 hover:text-black dark:hover:text-zinc-50"
+              >
+                ←
+              </button>
+              <h2 className="text-lg font-semibold text-black dark:text-zinc-50">추천 결과</h2>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
+              <span>{regions.find((r) => r.id === regionId)?.name ?? "-"}</span>
+              {airQualityQuery.data && <span>미세먼지 {airQualityQuery.data.overallGrade}</span>}
+              {weatherQuery.data && (
+                <span>
+                  {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
+                  {weatherQuery.data.summary}
+                </span>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm dark:border-blue-900 dark:bg-blue-950">
+              {recommendation.message}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full bg-black px-3 py-1 text-xs text-white dark:bg-zinc-50 dark:text-black">
+                전체
+              </span>
+              {["실내", "야외", "데이트", "저비용"].map((label) => (
+                <span
+                  key={label}
+                  title="준비 중인 필터입니다"
+                  className="cursor-not-allowed rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-400 dark:border-zinc-700 dark:text-zinc-600"
                 >
-                  <div className="font-medium">{p.name}</div>
-                  <div className="text-zinc-500">{p.oneLineDescription}</div>
-                </button>
+                  {label}
+                </span>
               ))}
             </div>
+
+            <div className="flex flex-col gap-3">
+              {recommendation.places.map((p, i) => (
+                <div key={i} className="overflow-hidden rounded-lg bg-white dark:bg-zinc-900">
+                  {p.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                    <img src={p.imageUrl} alt={p.name} className="h-32 w-full object-cover" />
+                  )}
+                  <div className="flex flex-col gap-2 p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <button onClick={() => openDetail(p)} className="text-left">
+                        <div className="font-medium text-black dark:text-zinc-50">{p.name}</div>
+                        <div className="text-sm text-zinc-500">{p.oneLineDescription}</div>
+                      </button>
+                      <button
+                        onClick={() => toggleFavorite(i)}
+                        aria-label="찜하기"
+                        className={favoriteIndexes.has(i) ? "text-red-500" : "text-zinc-300 dark:text-zinc-600"}
+                      >
+                        {favoriteIndexes.has(i) ? "♥" : "♡"}
+                      </button>
+                    </div>
+                    {p.fee && <div className="text-xs text-zinc-400">{p.fee}</div>}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => openDetail(p)}
+                        className="flex-1 rounded-full border border-zinc-300 px-3 py-1.5 text-xs dark:border-zinc-700 dark:text-zinc-50"
+                      >
+                        상세 보기
+                      </button>
+                      <button
+                        onClick={() => viewParkingFor(p)}
+                        disabled={!p.daeguDistrict}
+                        className="flex-1 rounded-full border border-zinc-300 px-3 py-1.5 text-xs disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-50"
+                      >
+                        주차 정보
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <button
               onClick={() => setView("input")}
-              className="mt-2 self-start rounded-full border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700 dark:text-zinc-50"
+              className="mt-2 self-center rounded-full bg-black px-5 py-2 text-sm text-white dark:bg-zinc-50 dark:text-black"
             >
-              다른 조건으로 찾기
+              다른 곳 추천
             </button>
           </div>
         )}
