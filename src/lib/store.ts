@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 
 export type Place = NonNullable<Recommendation["places"]>[number];
-export type View = "input" | "loading" | "results" | "detail" | "parking";
+export type View = "input" | "loading" | "results" | "detail" | "parking" | "mypage";
 
 interface AppState {
   view: View;
