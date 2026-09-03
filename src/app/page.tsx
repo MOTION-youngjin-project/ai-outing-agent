@@ -9,6 +9,13 @@ import { useAppStore, type Place } from "@/lib/store";
 type Region = { id: string; parentId: string | null; name: string; level: string };
 type WeatherInfo = { temperatureC: number | null; precipitationProbability: number | null; summary: string };
 type AirQualityInfo = { pm10Value: number | null; overallGrade: string };
+type PlaceResult = {
+  id: string;
+  name: string;
+  roadAddress: string | null;
+  categorySummary: string | null;
+  phone: string | null;
+};
 
 const SUGGESTIONS = [
   "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
@@ -82,6 +89,12 @@ async function fetchParking(district: string): Promise<ParkingSpot[]> {
   }
 }
 
+async function fetchPlacesSearch(query: string): Promise<PlaceResult[]> {
+  const res = await fetch(`/api/places?query=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  return res.ok ? data.data : [];
+}
+
 export default function Home() {
   const { view, input, history, selectedPlace, regionId, setView, setInput, setHistory, selectPlace, setRegionId } =
     useAppStore();
@@ -93,6 +106,10 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
     setLocalSuggestion(randomSuggestion());
   }, []);
+
+  // 검색창 입력값은 제출 전까지 이 화면 밖에서 쓸 일이 없는 순수 로컬 상태라 스토어로 안 옮김.
+  const [placeQuery, setPlaceQuery] = useState("");
+  const placesMutation = useMutation({ mutationFn: fetchPlacesSearch });
 
   const regionsQuery = useQuery({ queryKey: ["regions", "sido"], queryFn: fetchRegions });
   const regions = regionsQuery.data ?? [];
@@ -265,6 +282,47 @@ export default function Home() {
                 보내기
               </button>
             </form>
+
+            <div className="mt-10 flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+              <h2 className="text-sm font-medium text-zinc-500">장소 검색</h2>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const q = placeQuery.trim();
+                  if (q) placesMutation.mutate(q);
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  value={placeQuery}
+                  onChange={(e) => setPlaceQuery(e.target.value)}
+                  placeholder="장소 이름으로 검색 (예: 대구미술관)"
+                  className="flex-1 rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
+                />
+                <button
+                  type="submit"
+                  disabled={placesMutation.isPending || !placeQuery.trim()}
+                  className="rounded-full border border-zinc-300 px-4 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
+                >
+                  검색
+                </button>
+              </form>
+              {placesMutation.isPending && <p className="text-xs text-zinc-500">검색 중...</p>}
+              {placesMutation.data && (
+                <div className="flex flex-col gap-2">
+                  {placesMutation.data.length === 0 && (
+                    <p className="text-xs text-zinc-500">검색 결과가 없습니다.</p>
+                  )}
+                  {placesMutation.data.map((p) => (
+                    <div key={p.id} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
+                      <div className="font-medium">{p.name}</div>
+                      {p.roadAddress && <div className="text-zinc-500">{p.roadAddress}</div>}
+                      {p.categorySummary && <div className="text-xs text-zinc-400">{p.categorySummary}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
