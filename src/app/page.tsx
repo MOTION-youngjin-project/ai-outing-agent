@@ -16,6 +16,11 @@ type PlaceResult = {
   categorySummary: string | null;
   phone: string | null;
 };
+type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; url: string; imageUrl: string };
+
+// src/lib/tools/culturePortal.ts의 DTYPES와 같은 값 — 서버 전용 도구 모듈을 클라이언트
+// 번들에 끌어오지 않으려고 여기 따로 둠(같은 파일이 @langchain/core/tools도 import함).
+const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
 const SUGGESTIONS = [
   "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
@@ -95,6 +100,14 @@ async function fetchPlacesSearch(query: string): Promise<PlaceResult[]> {
   return res.ok ? data.data : [];
 }
 
+async function fetchCulturalEvents(params: { dtype: string; keyword: string }): Promise<CulturalEvent[]> {
+  const search = new URLSearchParams({ dtype: params.dtype });
+  if (params.keyword) search.set("keyword", params.keyword);
+  const res = await fetch(`/api/cultural-events?${search}`);
+  const data = await res.json();
+  return res.ok ? data.data : [];
+}
+
 export default function Home() {
   const { view, input, history, selectedPlace, regionId, setView, setInput, setHistory, selectPlace, setRegionId } =
     useAppStore();
@@ -110,6 +123,10 @@ export default function Home() {
   // 검색창 입력값은 제출 전까지 이 화면 밖에서 쓸 일이 없는 순수 로컬 상태라 스토어로 안 옮김.
   const [placeQuery, setPlaceQuery] = useState("");
   const placesMutation = useMutation({ mutationFn: fetchPlacesSearch });
+
+  const [cultureDtype, setCultureDtype] = useState<(typeof CULTURE_DTYPES)[number]>(CULTURE_DTYPES[0]);
+  const [cultureKeyword, setCultureKeyword] = useState("");
+  const cultureMutation = useMutation({ mutationFn: fetchCulturalEvents });
 
   const regionsQuery = useQuery({ queryKey: ["regions", "sido"], queryFn: fetchRegions });
   const regions = regionsQuery.data ?? [];
@@ -318,6 +335,58 @@ export default function Home() {
                       <div className="font-medium">{p.name}</div>
                       {p.roadAddress && <div className="text-zinc-500">{p.roadAddress}</div>}
                       {p.categorySummary && <div className="text-xs text-zinc-400">{p.categorySummary}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+              <h2 className="text-sm font-medium text-zinc-500">문화행사 검색 (전국 결과, 지역 필터 없음)</h2>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  cultureMutation.mutate({ dtype: cultureDtype, keyword: cultureKeyword.trim() });
+                }}
+                className="flex gap-2"
+              >
+                <select
+                  value={cultureDtype}
+                  onChange={(e) => setCultureDtype(e.target.value as (typeof CULTURE_DTYPES)[number])}
+                  className="rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
+                >
+                  {CULTURE_DTYPES.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={cultureKeyword}
+                  onChange={(e) => setCultureKeyword(e.target.value)}
+                  placeholder="제목 검색어 (선택, 예: 대구)"
+                  className="flex-1 rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
+                />
+                <button
+                  type="submit"
+                  disabled={cultureMutation.isPending}
+                  className="rounded-full border border-zinc-300 px-4 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
+                >
+                  검색
+                </button>
+              </form>
+              {cultureMutation.isPending && <p className="text-xs text-zinc-500">검색 중...</p>}
+              {cultureMutation.data && (
+                <div className="flex flex-col gap-2">
+                  {cultureMutation.data.length === 0 && (
+                    <p className="text-xs text-zinc-500">검색 결과가 없습니다.</p>
+                  )}
+                  {cultureMutation.data.map((event, i) => (
+                    <div key={i} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
+                      <div className="font-medium">{event.title}</div>
+                      <div className="text-zinc-500">
+                        {event.eventSite} · {event.eventPeriod}
+                      </div>
                     </div>
                   ))}
                 </div>
