@@ -10,17 +10,26 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* 디자인팀 목업(Desktop/claude-code-screenshot/*.png)에서 픽셀 단위로 추출한 실제 값.
+     Tailwind 기본 팔레트로 근사하지 말고 이 토큰을 쓸 것. */
+  --color-page: #f8fafa; /* 페이지 배경 */
+  --color-accent: #14b8a6; /* 액센트(민트) — 활성 탭, 주요 버튼, 강조 아이콘 */
+  --color-accent-deep: #0f9d8f; /* 액센트 눌림/호버 */
+  --color-mint-bg: #eaf9f7; /* AI 코멘트 카드 배경 */
+  --color-mint-soft: #ddf3f1; /* 아바타 등 연한 민트 면 */
+  --color-mint-mid: #71c7c1; /* 연민트 면 위의 아이콘 */
+  --color-ink: #111827; /* 제목 텍스트 */
+  --color-ink-soft: #4a515c; /* 본문 텍스트 */
+  --color-muted: #64748b; /* 보조 텍스트 */
+  --color-hairline: #e8ecef; /* 카드 구분선 */
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family:
+    var(--font-geist-sans), "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }

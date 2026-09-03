@@ -22,6 +22,96 @@ type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; ur
 // 번들에 끌어오지 않으려고 여기 따로 둠(같은 파일이 @langchain/core/tools도 import함).
 const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
+// 목업의 아웃라인 아이콘을 인라인 SVG로 옮긴 것. 아이콘 라이브러리를 새로 넣지 않으려고
+// 필요한 것만 직접 그림(유니코드 문자로 때우면 아이콘처럼 안 보여서 교체).
+function Icon({ name, className = "h-5 w-5" }: { name: string; className?: string }) {
+  const paths: Record<string, React.ReactNode> = {
+    back: <path d="M15 5l-7 7 7 7" />,
+    next: <path d="M9 5l7 7-7 7" />,
+    gear: (
+      <>
+        <circle cx="12" cy="12" r="3.2" />
+        <path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5v.2a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1h.2a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z" />
+      </>
+    ),
+    heart: <path d="M20.8 8.6c0 5-8.8 10-8.8 10s-8.8-5-8.8-10a5 5 0 018.8-3.2A5 5 0 0120.8 8.6z" />,
+    sparkle: <path d="M12 3l2.1 5.4L19.5 10l-5.4 1.6L12 17l-2.1-5.4L4.5 10l5.4-1.6L12 3z" />,
+    pin: (
+      <>
+        <path d="M20 10c0 5.5-8 12-8 12s-8-6.5-8-12a8 8 0 1116 0z" />
+        <circle cx="12" cy="10" r="2.6" />
+      </>
+    ),
+    dust: (
+      <>
+        <circle cx="12" cy="12" r="8.4" />
+        <path d="M4.6 14.4c2.6.9 4.6-1.2 7.4-1.2s5 1.6 7.4.6" />
+      </>
+    ),
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="4.2" />
+        <path d="M12 2.6v2M12 19.4v2M4.5 4.5l1.4 1.4M18.1 18.1l1.4 1.4M2.6 12h2M19.4 12h2M4.5 19.5l1.4-1.4M18.1 5.9l1.4-1.4" />
+      </>
+    ),
+    home: <path d="M4 10.5L12 4l8 6.5V20a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-9.5z" />,
+    compass: (
+      <>
+        <circle cx="12" cy="12" r="8.6" />
+        <circle cx="12" cy="12" r="2.6" />
+      </>
+    ),
+    user: (
+      <>
+        <circle cx="12" cy="8.4" r="3.6" />
+        <path d="M4.8 20a7.4 7.4 0 0114.4 0" />
+      </>
+    ),
+    parking: (
+      <>
+        <circle cx="12" cy="12" r="8.6" />
+        <path d="M10 17V7.8h2.9a2.9 2.9 0 010 5.8H10" />
+      </>
+    ),
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="8.6" />
+        <path d="M12 7.2V12l3 1.8" />
+      </>
+    ),
+    bookmark: <path d="M6.5 4h11a1 1 0 011 1v15l-6.5-4-6.5 4V5a1 1 0 011-1z" />,
+    send: <path d="M4.5 12l15-7.5-4 15-3.6-5.6L4.5 12z" />,
+  };
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
+function ScreenHeader({ title, onBack, right }: { title: string; onBack?: () => void; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 px-5 pb-3 pt-5">
+      {onBack && (
+        <button onClick={onBack} aria-label="뒤로가기" className="-ml-1 p-1 text-ink">
+          <Icon name="back" className="h-6 w-6" />
+        </button>
+      )}
+      <h1 className="flex-1 text-[22px] font-bold tracking-tight text-ink">{title}</h1>
+      {right}
+    </div>
+  );
+}
+
 // ponytail: 로그인/저장 기능이 아직 없어서(팀 플로우차트상 "선택" 항목, 이번 스코프 밖)
 // 마이페이지 디자인을 화면에 반영하기 위한 더미 데이터. 실제 로그인·저장 붙이면 교체.
 const MYPAGE_STATS = { savedPlaces: 12, recentRecommendations: 8, savedParking: 3 };
@@ -230,474 +320,599 @@ export default function Home() {
     });
   }
 
+
+  // 목업의 AI 코멘트 카드는 굵은 한 줄 + 설명 본문 구조라, message의 첫 문장을 헤드라인으로 쓴다.
+  const aiMessage = recommendation?.message ?? "";
+  const aiSplitAt = aiMessage.search(/[.!?]\s/);
+  const aiHeadline = aiSplitAt > 0 ? aiMessage.slice(0, aiSplitAt + 1) : aiMessage;
+  const aiBody = aiSplitAt > 0 ? aiMessage.slice(aiSplitAt + 1).trim() : "";
+
+  const regionName = regions.find((r) => r.id === regionId)?.name ?? "";
+  const showBottomNav = view === "input" || view === "results" || view === "mypage";
+
   return (
-    <div className="flex flex-col flex-1 items-center bg-zinc-50 dark:bg-black">
-      <main className="flex w-full max-w-2xl flex-1 flex-col px-4 py-8">
-        <h1 className="mb-6 text-xl font-semibold text-black dark:text-zinc-50">
-          나들이 추천 에이전트
-        </h1>
-
+    <div className="mx-auto flex w-full max-w-[460px] flex-1 flex-col bg-page">
+      <div className="flex flex-1 flex-col pb-6">
         {(view === "input" || view === "loading") && (
-          <div className="flex flex-1 flex-col">
-            <select
-              value={regionId}
-              onChange={(e) => setRegionId(e.target.value)}
-              disabled={view === "loading"}
-              className="mb-4 self-start rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
-            >
-              <option value="">지역을 선택하세요</option>
-              {regions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-            {(weatherQuery.data || airQualityQuery.data) && (
-              <div className="mb-4 flex flex-wrap gap-3 text-xs text-zinc-500">
-                {weatherQuery.data && (
-                  <span>
-                    {weatherQuery.data.summary}
-                    {weatherQuery.data.temperatureC !== null ? `, ${weatherQuery.data.temperatureC}도` : ""}
-                    {weatherQuery.data.precipitationProbability !== null
-                      ? `, 강수확률 ${weatherQuery.data.precipitationProbability}%`
-                      : ""}
-                  </span>
-                )}
-                {airQualityQuery.data && (
-                  <span>
-                    미세먼지 {airQualityQuery.data.overallGrade}
-                    {airQualityQuery.data.pm10Value !== null ? `(${airQualityQuery.data.pm10Value}㎍/m³)` : ""}
-                  </span>
-                )}
-              </div>
-            )}
-            {promptMessage && (
-              <div className="mb-4 rounded-lg bg-white px-4 py-3 text-sm text-black dark:bg-zinc-900 dark:text-zinc-50">
-                {promptMessage}
-              </div>
-            )}
-            {errorMessage && (
-              <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
-                오류: {errorMessage}
-              </div>
-            )}
-            {view === "loading" ? (
-              <p className="text-zinc-500">
-                생각하는 중... (날씨·대기질 등 도구 여러 개를 확인하느라 시간이 걸릴 수 있어요)
-              </p>
-            ) : (
-              !promptMessage && (
-                <p className="text-zinc-500">
-                  예: &quot;애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야&quot;
-                </p>
-              )
-            )}
-
-            <div className="mt-auto flex flex-col gap-2 pt-4">
-              {!recommendMutation.isPending && !suggestMutation.isPending && suggestMutation.data && !input && (
-                <button
-                  type="button"
-                  onClick={acceptSuggestion}
-                  className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                >
-                  {suggestMutation.data}
-                </button>
-              )}
-
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  sendMessage();
-                }}
-                className="flex gap-2"
-              >
-                <div className="relative flex-1">
-                  {!input && (
-                    <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
-                      {displayedSuggestion}
-                    </div>
-                  )}
-                  <input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (!input && (e.key === "ArrowRight" || e.key === "Tab")) {
-                        e.preventDefault();
-                        acceptSuggestion();
-                      }
-                    }}
-                    disabled={view === "loading"}
-                    className="relative w-full rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={view === "loading" || !regionId}
-                  className="rounded-full bg-black px-5 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-black"
-                >
-                  보내기
-                </button>
-              </form>
-            </div>
-
-            <div className="mt-10 flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-              <h2 className="text-sm font-medium text-zinc-500">장소 검색</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const q = placeQuery.trim();
-                  if (q) placesMutation.mutate(q);
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  value={placeQuery}
-                  onChange={(e) => setPlaceQuery(e.target.value)}
-                  placeholder="장소 이름으로 검색 (예: 대구미술관)"
-                  className="flex-1 rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
-                />
-                <button
-                  type="submit"
-                  disabled={placesMutation.isPending || !placeQuery.trim()}
-                  className="rounded-full border border-zinc-300 px-4 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
-                >
-                  검색
-                </button>
-              </form>
-              {placesMutation.isPending && <p className="text-xs text-zinc-500">검색 중...</p>}
-              {placesMutation.data && (
-                <div className="flex flex-col gap-2">
-                  {placesMutation.data.length === 0 && (
-                    <p className="text-xs text-zinc-500">검색 결과가 없습니다.</p>
-                  )}
-                  {placesMutation.data.map((p) => (
-                    <div key={p.id} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
-                      <div className="font-medium">{p.name}</div>
-                      {p.roadAddress && <div className="text-zinc-500">{p.roadAddress}</div>}
-                      {p.categorySummary && <div className="text-xs text-zinc-400">{p.categorySummary}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-8 flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-              <h2 className="text-sm font-medium text-zinc-500">문화행사 검색 (전국 결과, 지역 필터 없음)</h2>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  cultureMutation.mutate({ dtype: cultureDtype, keyword: cultureKeyword.trim() });
-                }}
-                className="flex gap-2"
-              >
+          <>
+            <ScreenHeader title="어디로 나가볼까요?" />
+            <div className="flex flex-1 flex-col gap-3 px-5">
+              <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
                 <select
-                  value={cultureDtype}
-                  onChange={(e) => setCultureDtype(e.target.value as (typeof CULTURE_DTYPES)[number])}
-                  className="rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
+                  value={regionId}
+                  onChange={(e) => setRegionId(e.target.value)}
+                  disabled={view === "loading"}
+                  className="flex-1 bg-transparent text-[15px] font-medium text-ink outline-none disabled:opacity-50"
                 >
-                  {CULTURE_DTYPES.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
+                  <option value="">지역을 선택하세요</option>
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
                     </option>
                   ))}
                 </select>
-                <input
-                  value={cultureKeyword}
-                  onChange={(e) => setCultureKeyword(e.target.value)}
-                  placeholder="제목 검색어 (선택, 예: 대구)"
-                  className="flex-1 rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none dark:border-zinc-700 dark:text-zinc-50"
-                />
-                <button
-                  type="submit"
-                  disabled={cultureMutation.isPending}
-                  className="rounded-full border border-zinc-300 px-4 py-2 text-sm disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
-                >
-                  검색
-                </button>
-              </form>
-              {cultureMutation.isPending && <p className="text-xs text-zinc-500">검색 중...</p>}
-              {cultureMutation.data && (
-                <div className="flex flex-col gap-2">
-                  {cultureMutation.data.length === 0 && (
-                    <p className="text-xs text-zinc-500">검색 결과가 없습니다.</p>
+              </div>
+
+              {(weatherQuery.data || airQualityQuery.data) && (
+                <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                  {airQualityQuery.data && (
+                    <span className="flex items-center gap-1.5">
+                      <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
+                      <span className="text-muted">미세먼지</span>
+                      <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
+                    </span>
                   )}
-                  {cultureMutation.data.map((event, i) => (
-                    <div key={i} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
-                      <div className="font-medium">{event.title}</div>
-                      <div className="text-zinc-500">
-                        {event.eventSite} · {event.eventPeriod}
-                      </div>
-                    </div>
-                  ))}
+                  {weatherQuery.data && (
+                    <span className="flex items-center gap-1.5">
+                      <Icon name="sun" className="h-[18px] w-[18px] text-amber-400" />
+                      <span className="font-medium text-ink-soft">
+                        {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
+                        {weatherQuery.data.summary}
+                      </span>
+                    </span>
+                  )}
                 </div>
               )}
+
+              {promptMessage && (
+                <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
+                  <div className="flex gap-2">
+                    <Icon name="sparkle" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-accent" />
+                    <p className="text-[15px] font-semibold leading-relaxed text-ink">{promptMessage}</p>
+                  </div>
+                </div>
+              )}
+
+              {errorMessage && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {errorMessage}
+                </div>
+              )}
+
+              {view === "loading" && (
+                <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+                  <p className="text-[14px] text-muted">
+                    날씨·대기질을 확인하며 코스를 고르는 중이에요...
+                  </p>
+                </div>
+              )}
+
+              {view === "input" && !promptMessage && !errorMessage && (
+                <p className="px-1 pt-1 text-[13px] leading-relaxed text-muted">
+                  지역을 고르고 하고 싶은 걸 편하게 적어주세요.
+                  <br />
+                  날씨와 대기질을 함께 확인해서 코스를 추천해드려요.
+                </p>
+              )}
+
+              <div className="flex flex-col gap-2 pt-2">
+                {!recommendMutation.isPending && !suggestMutation.isPending && suggestMutation.data && !input && (
+                  <button
+                    type="button"
+                    onClick={acceptSuggestion}
+                    className="flex items-center gap-1.5 self-start rounded-full border border-accent/40 bg-mint-bg px-3.5 py-1.5 text-[13px] font-medium text-accent"
+                  >
+                    <Icon name="sparkle" className="h-3.5 w-3.5" />
+                    {suggestMutation.data}
+                  </button>
+                )}
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    sendMessage();
+                  }}
+                  className="flex items-center gap-2 rounded-full bg-white p-1.5 pl-4 shadow-[0_1px_4px_rgba(17,24,39,0.07)]"
+                >
+                  <div className="relative flex-1">
+                    {!input && (
+                      <div className="pointer-events-none absolute inset-0 flex items-center truncate text-[15px] text-muted/70">
+                        {displayedSuggestion}
+                      </div>
+                    )}
+                    <input
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (!input && (e.key === "ArrowRight" || e.key === "Tab")) {
+                          e.preventDefault();
+                          acceptSuggestion();
+                        }
+                      }}
+                      disabled={view === "loading"}
+                      className="relative w-full bg-transparent py-2 text-[15px] text-ink outline-none disabled:opacity-50"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={view === "loading" || !regionId}
+                    aria-label="보내기"
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white transition-colors disabled:bg-slate-200 disabled:text-slate-400"
+                  >
+                    <Icon name="send" className="h-[18px] w-[18px]" />
+                  </button>
+                </form>
+              </div>
+
+              <div className="mt-8 flex flex-col gap-2.5">
+                <h2 className="px-1 text-[13px] font-semibold text-muted">장소 검색</h2>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const q = placeQuery.trim();
+                    if (q) placesMutation.mutate(q);
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    value={placeQuery}
+                    onChange={(e) => setPlaceQuery(e.target.value)}
+                    placeholder="장소 이름으로 검색 (예: 대구미술관)"
+                    className="flex-1 rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={placesMutation.isPending || !placeQuery.trim()}
+                    className="rounded-full bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)] disabled:text-muted/50"
+                  >
+                    검색
+                  </button>
+                </form>
+                {placesMutation.isPending && <p className="px-1 text-xs text-muted">검색 중...</p>}
+                {placesMutation.data && (
+                  <div className="flex flex-col gap-2">
+                    {placesMutation.data.length === 0 && (
+                      <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
+                    )}
+                    {placesMutation.data.map((p) => (
+                      <div
+                        key={p.id}
+                        className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+                      >
+                        <div className="text-[15px] font-semibold text-ink">{p.name}</div>
+                        {p.roadAddress && <div className="text-[13px] text-muted">{p.roadAddress}</div>}
+                        {p.categorySummary && (
+                          <div className="mt-0.5 text-[12px] text-muted/80">{p.categorySummary}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2.5">
+                <h2 className="px-1 text-[13px] font-semibold text-muted">
+                  문화행사 검색 <span className="font-normal">(전국 결과, 지역 필터 없음)</span>
+                </h2>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    cultureMutation.mutate({ dtype: cultureDtype, keyword: cultureKeyword.trim() });
+                  }}
+                  className="flex gap-2"
+                >
+                  <select
+                    value={cultureDtype}
+                    onChange={(e) => setCultureDtype(e.target.value as (typeof CULTURE_DTYPES)[number])}
+                    className="rounded-full bg-white px-3.5 py-2.5 text-[14px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none"
+                  >
+                    {CULTURE_DTYPES.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={cultureKeyword}
+                    onChange={(e) => setCultureKeyword(e.target.value)}
+                    placeholder="제목 검색어 (선택)"
+                    className="flex-1 rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={cultureMutation.isPending}
+                    className="rounded-full bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)] disabled:text-muted/50"
+                  >
+                    검색
+                  </button>
+                </form>
+                {cultureMutation.isPending && <p className="px-1 text-xs text-muted">검색 중...</p>}
+                {cultureMutation.data && (
+                  <div className="flex flex-col gap-2">
+                    {cultureMutation.data.length === 0 && (
+                      <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
+                    )}
+                    {cultureMutation.data.map((event, i) => (
+                      <div key={i} className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                        <div className="text-[15px] font-semibold text-ink">{event.title}</div>
+                        <div className="text-[13px] text-muted">
+                          {event.eventSite} · {event.eventPeriod}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {view === "results" && recommendation?.places && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setView("input")}
-                aria-label="뒤로가기"
-                className="text-lg text-zinc-500 hover:text-black dark:hover:text-zinc-50"
-              >
-                ←
-              </button>
-              <h2 className="text-lg font-semibold text-black dark:text-zinc-50">추천 결과</h2>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
-              <span>{regions.find((r) => r.id === regionId)?.name ?? "-"}</span>
-              {airQualityQuery.data && <span>미세먼지 {airQualityQuery.data.overallGrade}</span>}
-              {weatherQuery.data && (
-                <span>
-                  {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
-                  {weatherQuery.data.summary}
+          <>
+            <ScreenHeader title="추천 결과" onBack={() => setView("input")} />
+            <div className="flex flex-col gap-3 px-5">
+              <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3.5 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                <span className="flex items-center gap-1.5">
+                  <Icon name="pin" className="h-[18px] w-[18px] text-muted" />
+                  <span className="font-medium text-ink-soft">{regionName || "-"}</span>
                 </span>
-              )}
-            </div>
+                {airQualityQuery.data && (
+                  <span className="flex items-center gap-1.5">
+                    <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
+                    <span className="text-muted">미세먼지</span>
+                    <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
+                  </span>
+                )}
+                {weatherQuery.data && (
+                  <span className="flex items-center gap-1.5">
+                    <Icon name="sun" className="h-[18px] w-[18px] text-amber-400" />
+                    <span className="font-medium text-ink-soft">
+                      {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
+                      {weatherQuery.data.summary}
+                    </span>
+                  </span>
+                )}
+              </div>
 
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm dark:border-blue-900 dark:bg-blue-950">
-              {recommendation.message}
-            </div>
+              <div className="rounded-2xl border border-accent/40 bg-mint-bg px-4 py-4">
+                <div className="flex gap-2">
+                  <Icon name="sparkle" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-accent" />
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[16px] font-bold leading-snug text-ink">{aiHeadline}</p>
+                    {aiBody && <p className="text-[13px] leading-relaxed text-muted">{aiBody}</p>}
+                  </div>
+                </div>
+              </div>
 
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-teal-600 px-3 py-1 text-xs text-white dark:bg-teal-500">
-                전체
-              </span>
-              {["실내", "야외", "데이트", "저비용"].map((label) => (
-                <span
-                  key={label}
-                  title="준비 중인 필터입니다"
-                  className="cursor-not-allowed rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-400 dark:border-zinc-700 dark:text-zinc-600"
-                >
-                  {label}
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-accent bg-white px-3.5 py-1.5 text-[13px] font-semibold text-accent">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                  전체
                 </span>
-              ))}
-            </div>
+                {["실내", "야외", "데이트", "저비용"].map((label) => (
+                  <span
+                    key={label}
+                    title="준비 중인 필터입니다"
+                    className="shrink-0 cursor-not-allowed rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-muted/70"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
 
-            <div className="flex flex-col gap-3">
-              {recommendation.places.map((p, i) => (
-                <div key={i} className="overflow-hidden rounded-lg bg-white dark:bg-zinc-900">
-                  {p.imageUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                    <img src={p.imageUrl} alt={p.name} className="h-32 w-full object-cover" />
-                  )}
-                  <div className="flex flex-col gap-2 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <button onClick={() => openDetail(p)} className="text-left">
-                        <div className="font-medium text-black dark:text-zinc-50">{p.name}</div>
-                        <div className="text-sm text-zinc-500">{p.oneLineDescription}</div>
-                      </button>
-                      <button
-                        onClick={() => toggleFavorite(i)}
-                        aria-label="찜하기"
-                        className={favoriteIndexes.has(i) ? "text-red-500" : "text-zinc-300 dark:text-zinc-600"}
-                      >
-                        {favoriteIndexes.has(i) ? "♥" : "♡"}
-                      </button>
+              <div className="flex flex-col gap-3">
+                {recommendation.places.map((p, i) => (
+                  <div
+                    key={i}
+                    className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.06)]"
+                  >
+                    <div className="flex gap-3 p-3">
+                      {p.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          className="h-[104px] w-[104px] shrink-0 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-[104px] w-[104px] shrink-0 items-center justify-center rounded-xl bg-mint-soft">
+                          <Icon name="pin" className="h-7 w-7 text-mint-mid" />
+                        </div>
+                      )}
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <div className="flex items-start justify-between gap-2">
+                          <button onClick={() => openDetail(p)} className="min-w-0 flex-1 text-left">
+                            <div className="truncate text-[17px] font-bold text-ink">{p.name}</div>
+                            <div className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-muted">
+                              {p.oneLineDescription}
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => toggleFavorite(i)}
+                            aria-label="찜하기"
+                            className={favoriteIndexes.has(i) ? "text-rose-500" : "text-slate-300"}
+                          >
+                            <Icon
+                              name="heart"
+                              className={`h-[22px] w-[22px] ${favoriteIndexes.has(i) ? "fill-rose-500" : ""}`}
+                            />
+                          </button>
+                        </div>
+                        <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-2 text-[12px] text-muted">
+                          {p.daeguDistrict && (
+                            <span className="flex items-center gap-1">
+                              <Icon name="pin" className="h-3.5 w-3.5" />
+                              {p.daeguDistrict}
+                            </span>
+                          )}
+                          {p.fee && <span className="truncate">{p.fee}</span>}
+                        </div>
+                      </div>
                     </div>
-                    {p.fee && <div className="text-xs text-zinc-400">{p.fee}</div>}
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex gap-2 border-t border-hairline px-3 py-2.5">
                       <button
                         onClick={() => openDetail(p)}
-                        className="flex-1 rounded-full border border-zinc-300 px-3 py-1.5 text-xs dark:border-zinc-700 dark:text-zinc-50"
+                        className="flex-1 rounded-full border border-hairline py-2 text-[13px] font-medium text-ink-soft"
                       >
                         상세 보기
                       </button>
                       <button
                         onClick={() => viewParkingFor(p)}
                         disabled={!p.daeguDistrict}
-                        className="flex-1 rounded-full border border-zinc-300 px-3 py-1.5 text-xs disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-50"
+                        className="flex-1 rounded-full bg-mint-bg py-2 text-[13px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
                       >
                         주차 정보
                       </button>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            <button
-              onClick={() => setView("input")}
-              className="mt-2 self-center rounded-full bg-black px-5 py-2 text-sm text-white dark:bg-zinc-50 dark:text-black"
-            >
-              다른 곳 추천
-            </button>
-          </div>
+              <div className="mt-2 flex items-center gap-2 rounded-full bg-white p-1.5 pl-4 shadow-[0_1px_4px_rgba(17,24,39,0.07)]">
+                <Icon name="sparkle" className="h-[18px] w-[18px] shrink-0 text-accent" />
+                <span className="flex-1 truncate text-[14px] text-muted">다른 분위기로 다시 추천해보세요</span>
+                <button
+                  onClick={() => setView("input")}
+                  className="shrink-0 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white"
+                >
+                  다른 곳 추천
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
         {view === "detail" && selectedPlace && (
-          <div className="flex flex-col gap-4">
-            <button onClick={() => setView("results")} className="self-start text-sm text-zinc-500">
-              ← 목록으로
-            </button>
-            {selectedPlace.imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-              <img src={selectedPlace.imageUrl} alt={selectedPlace.name} className="rounded-lg" />
-            )}
-            <h2 className="text-lg font-semibold text-black dark:text-zinc-50">{selectedPlace.name}</h2>
-            <p className="text-sm text-black dark:text-zinc-50">{selectedPlace.reason}</p>
-            <dl className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-              {selectedPlace.address && <div><dt className="inline font-medium">위치: </dt><dd className="inline">{selectedPlace.address}</dd></div>}
-              {selectedPlace.operatingHours && <div><dt className="inline font-medium">운영시간: </dt><dd className="inline">{selectedPlace.operatingHours}</dd></div>}
-              {selectedPlace.fee && <div><dt className="inline font-medium">이용요금: </dt><dd className="inline">{selectedPlace.fee}</dd></div>}
-            </dl>
-            {selectedPlace.features && selectedPlace.features.length > 0 && (
-              <ul className="list-disc pl-5 text-sm text-zinc-600 dark:text-zinc-400">
-                {selectedPlace.features.map((f, i) => (
-                  <li key={i}>{f}</li>
-                ))}
-              </ul>
-            )}
-            {selectedPlace.daeguDistrict && (
-              <button
-                onClick={viewParking}
-                className="self-start rounded-full bg-black px-4 py-2 text-sm text-white dark:bg-zinc-50 dark:text-black"
-              >
-                주차 정보 보기
-              </button>
-            )}
-          </div>
+          <>
+            <ScreenHeader title="장소 정보" onBack={() => setView("results")} />
+            <div className="flex flex-col gap-3 px-5">
+              {selectedPlace.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                <img src={selectedPlace.imageUrl} alt={selectedPlace.name} className="h-48 w-full rounded-2xl object-cover" />
+              )}
+              <div className="rounded-2xl bg-white px-4 py-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                <h2 className="text-[20px] font-bold text-ink">{selectedPlace.name}</h2>
+                <p className="mt-2 text-[14px] leading-relaxed text-ink-soft">{selectedPlace.reason}</p>
+              </div>
+
+              <div className="flex flex-col gap-2.5 rounded-2xl bg-white px-4 py-4 text-[14px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                {selectedPlace.address && (
+                  <div className="flex gap-2">
+                    <Icon name="pin" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-mint-mid" />
+                    <span className="text-ink-soft">{selectedPlace.address}</span>
+                  </div>
+                )}
+                {selectedPlace.operatingHours && (
+                  <div className="flex gap-2">
+                    <Icon name="clock" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-mint-mid" />
+                    <span className="text-ink-soft">{selectedPlace.operatingHours}</span>
+                  </div>
+                )}
+                {selectedPlace.fee && (
+                  <div className="flex gap-2">
+                    <Icon name="bookmark" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-mint-mid" />
+                    <span className="text-ink-soft">{selectedPlace.fee}</span>
+                  </div>
+                )}
+              </div>
+
+              {selectedPlace.features && selectedPlace.features.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedPlace.features.map((f, i) => (
+                    <span key={i} className="rounded-full bg-mint-bg px-3 py-1.5 text-[13px] font-medium text-accent">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {selectedPlace.daeguDistrict && (
+                <button
+                  onClick={viewParking}
+                  className="mt-1 flex items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[15px] font-semibold text-white"
+                >
+                  <Icon name="parking" className="h-[18px] w-[18px]" />
+                  주차 정보 보기
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         {view === "parking" && (
-          <div className="flex flex-col gap-4">
-            <button onClick={() => setView("detail")} className="self-start text-sm text-zinc-500">
-              ← 장소 정보로
-            </button>
-            <h2 className="text-lg font-semibold text-black dark:text-zinc-50">
-              {selectedPlace?.daeguDistrict} 주차장 정보
-            </h2>
-            {parkingQuery.isLoading && <p className="text-zinc-500">주차장 조회 중...</p>}
-            {!parkingQuery.isLoading && parkingQuery.data?.length === 0 && (
-              <p className="text-zinc-500">주차장 정보를 찾을 수 없습니다.</p>
-            )}
-            {!parkingQuery.isLoading &&
-              parkingQuery.data?.map((s, i) => (
-                <div key={i} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
-                  <div className="font-medium">{s.name}</div>
-                  <div className="text-zinc-500">{s.address}</div>
-                  <div className="text-zinc-500">
-                    총 {s.capacity}면 ·{" "}
-                    {s.remainingSpaces !== null ? `실시간 ${s.remainingSpaces}면 남음` : "실시간 정보 없음"} ·{" "}
-                    {s.fee}
-                  </div>
-                  {s.latitude !== null && s.longitude !== null && (
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${s.latitude},${s.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-block rounded-full border border-zinc-300 px-3 py-1 text-xs dark:border-zinc-700"
-                    >
-                      길찾기
-                    </a>
-                  )}
+          <>
+            <ScreenHeader title={`${selectedPlace?.daeguDistrict ?? ""} 주차장`} onBack={() => setView("detail")} />
+            <div className="flex flex-col gap-3 px-5">
+              {parkingQuery.isLoading && (
+                <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+                  <p className="text-[14px] text-muted">주차장 조회 중...</p>
                 </div>
-              ))}
-          </div>
+              )}
+              {!parkingQuery.isLoading && parkingQuery.data?.length === 0 && (
+                <p className="px-1 text-[14px] text-muted">주차장 정보를 찾을 수 없습니다.</p>
+              )}
+              {!parkingQuery.isLoading &&
+                parkingQuery.data?.map((s, i) => (
+                  <div key={i} className="rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-[16px] font-bold text-ink">{s.name}</div>
+                        <div className="mt-0.5 text-[13px] text-muted">{s.address}</div>
+                      </div>
+                      {s.remainingSpaces !== null ? (
+                        <span className="shrink-0 rounded-full bg-mint-bg px-2.5 py-1 text-[12px] font-semibold text-accent">
+                          실시간
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[12px] text-slate-400">
+                          정보 없음
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2.5 flex items-end gap-4">
+                      <div>
+                        <div className="text-[11px] text-muted">총 주차면</div>
+                        <div className="text-[18px] font-bold text-ink-soft">{s.capacity}면</div>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-muted">실시간 잔여</div>
+                        <div className={`text-[18px] font-bold ${s.remainingSpaces !== null ? "text-accent" : "text-slate-300"}`}>
+                          {s.remainingSpaces !== null ? `${s.remainingSpaces}면` : "—"}
+                        </div>
+                      </div>
+                      <div className="ml-auto text-right">
+                        <div className="text-[11px] text-muted">요금</div>
+                        <div className="text-[14px] font-medium text-ink-soft">{s.fee}</div>
+                      </div>
+                    </div>
+                    {s.latitude !== null && s.longitude !== null && (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${s.latitude},${s.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 flex items-center justify-center gap-1.5 rounded-full border border-hairline py-2 text-[13px] font-medium text-ink-soft"
+                      >
+                        <Icon name="pin" className="h-4 w-4" />
+                        길찾기
+                      </a>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </>
         )}
 
         {view === "mypage" && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setView("input")}
-                  aria-label="뒤로가기"
-                  className="text-lg text-zinc-500 hover:text-black dark:hover:text-zinc-50"
-                >
-                  ←
-                </button>
-                <h2 className="text-lg font-semibold text-black dark:text-zinc-50">마이페이지</h2>
-              </div>
-              <span aria-hidden className="text-lg text-zinc-400">
-                ⚙
-              </span>
-            </div>
-
-            {/* ponytail: 로그인/저장은 이번 스코프 밖(팀 플로우차트상 "선택" 항목) — 디자인
-                목업을 화면에 반영하기 위한 더미 데이터. 실제 로그인·저장 붙이면 교체. */}
-            <div className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-lg text-teal-700 dark:bg-teal-900 dark:text-teal-300">
-                🙂
-              </div>
-              <div className="flex-1">
-                <div className="font-medium text-black dark:text-zinc-50">로그인 사용자</div>
-                <div className="text-sm text-zinc-500">저장한 나들이와 설정을 관리해요.</div>
-              </div>
-              <span aria-hidden className="text-zinc-400">
-                ›
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "저장한 장소", value: MYPAGE_STATS.savedPlaces },
-                { label: "최근 추천", value: MYPAGE_STATS.recentRecommendations },
-                { label: "주차 저장", value: MYPAGE_STATS.savedParking },
-              ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="flex flex-col items-center gap-1 rounded-lg bg-white px-2 py-3 text-center dark:bg-zinc-900"
-                >
-                  <div className="text-lg font-semibold text-black dark:text-zinc-50">{stat.value}</div>
-                  <div className="text-xs text-zinc-500">{stat.label}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-zinc-500">저장한 장소</h3>
-              <span className="text-xs text-zinc-400">전체 보기 ›</span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {MYPAGE_SAVED_PLACES.map((p) => (
-                <div
-                  key={p.name}
-                  className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 dark:bg-zinc-900"
-                >
-                  <div className="h-12 w-12 shrink-0 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
-                  <div className="flex-1">
-                    <div className="font-medium text-black dark:text-zinc-50">{p.name}</div>
-                    <div className="text-sm text-zinc-500">{p.category}</div>
+          <>
+            <ScreenHeader
+              title="마이페이지"
+              onBack={() => setView("input")}
+              right={
+                <span className="p-1 text-muted">
+                  <Icon name="gear" className="h-[22px] w-[22px]" />
+                </span>
+              }
+            />
+            <div className="flex flex-col gap-3 px-5">
+              {/* ponytail: 로그인/저장은 이번 스코프 밖(팀 플로우차트상 "선택" 항목) —
+                  디자인 목업을 화면에 반영하기 위한 더미 데이터. 실제 로그인·저장 붙이면 교체. */}
+              <div className="rounded-2xl bg-white px-4 py-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-mint-soft">
+                    <Icon name="user" className="h-7 w-7 text-mint-mid" />
                   </div>
-                  <span aria-hidden className="text-zinc-400">
-                    ›
-                  </span>
+                  <div className="flex-1">
+                    <div className="text-[17px] font-bold text-ink">로그인 사용자</div>
+                    <div className="mt-0.5 text-[13px] text-muted">저장한 나들이와 설정을 관리해요.</div>
+                  </div>
+                  <Icon name="next" className="h-5 w-5 text-slate-300" />
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+                <div className="mt-4 flex border-t border-hairline pt-3">
+                  {[
+                    { icon: "bookmark", label: "저장한 장소", value: MYPAGE_STATS.savedPlaces },
+                    { icon: "clock", label: "최근 추천", value: MYPAGE_STATS.recentRecommendations },
+                    { icon: "parking", label: "주차 저장", value: MYPAGE_STATS.savedParking },
+                  ].map((stat, i) => (
+                    <div
+                      key={stat.label}
+                      className={`flex flex-1 flex-col items-center gap-1 ${i > 0 ? "border-l border-hairline" : ""}`}
+                    >
+                      <span className="flex items-center gap-1 text-[12px] text-muted">
+                        <Icon name={stat.icon} className="h-3.5 w-3.5 text-mint-mid" />
+                        {stat.label}
+                      </span>
+                      <span className="text-[18px] font-bold text-ink">{stat.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-        {(view === "input" || view === "results" || view === "mypage") && (
-          <nav className="mt-8 flex items-center justify-around border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            {[
-              { id: "home", label: "홈", icon: "⌂", target: "input" as const, active: view === "input" },
-              { id: "recommend", label: "추천", icon: "◎", target: "results" as const, active: view === "results" },
-              { id: "saved", label: "저장", icon: "♡", target: "mypage" as const, active: false },
-              { id: "mypage", label: "마이", icon: "●", target: "mypage" as const, active: view === "mypage" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  if (tab.target === "results" && !recommendation) return;
-                  setView(tab.target);
-                }}
-                className={`flex flex-col items-center gap-1 px-3 py-1 text-xs ${
-                  tab.active ? "text-teal-600 dark:text-teal-400" : "text-zinc-400"
-                }`}
-              >
-                <span aria-hidden>{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+              <div className="flex items-center justify-between px-1 pt-1">
+                <h2 className="text-[15px] font-bold text-ink">저장한 장소</h2>
+                <span className="flex items-center gap-0.5 text-[13px] text-muted">
+                  전체 보기
+                  <Icon name="next" className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                {MYPAGE_SAVED_PLACES.map((p, i) => (
+                  <div
+                    key={p.name}
+                    className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
+                  >
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
+                      <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-[16px] font-bold text-ink">{p.name}</div>
+                      <div className="mt-0.5 text-[13px] text-muted">{p.category}</div>
+                    </div>
+                    <Icon name="next" className="h-5 w-5 text-slate-300" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
         )}
-      </main>
+      </div>
+
+      {showBottomNav && (
+        <nav className="sticky bottom-0 mt-auto flex items-center justify-around border-t border-hairline bg-white/95 px-2 pb-2 pt-2 backdrop-blur">
+          {[
+            { id: "home", label: "홈", icon: "home", target: "input" as const, active: view === "input" },
+            { id: "recommend", label: "추천", icon: "compass", target: "results" as const, active: view === "results" },
+            { id: "saved", label: "저장", icon: "heart", target: "mypage" as const, active: false },
+            { id: "mypage", label: "마이", icon: "user", target: "mypage" as const, active: view === "mypage" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => {
+                if (tab.target === "results" && !recommendation) return;
+                setView(tab.target);
+              }}
+              className={`flex flex-1 flex-col items-center gap-1 py-1 text-[11px] font-medium ${
+                tab.active ? "text-accent" : "text-slate-400"
+              }`}
+            >
+              <Icon name={tab.icon} className="h-[22px] w-[22px]" />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      )}
     </div>
   );
 }
