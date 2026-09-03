@@ -11,10 +11,10 @@ if (!connectionUrl) {
 }
 
 const url = new URL(connectionUrl);
-const ca = fs.readFileSync(
-  path.join(process.cwd(), "prisma", "ca.pem"),
-  "utf8",
-);
+const caPath = path.join(process.cwd(), "prisma", "ca.pem");
+// ponytail: ca.pem은 Aiven 운영 DB 전용 인증서라 로컬 개발 DB에는 없는 게 정상 —
+// 없으면 SSL 없이 접속한다 (src/lib/prisma.ts와 동일한 폴백).
+const ssl = fs.existsSync(caPath) ? { ca: fs.readFileSync(caPath, "utf8"), rejectUnauthorized: true } : undefined;
 
 const adapter = new PrismaMariaDb({
   host: url.hostname,
@@ -22,10 +22,7 @@ const adapter = new PrismaMariaDb({
   user: decodeURIComponent(url.username),
   password: decodeURIComponent(url.password),
   database: url.pathname.slice(1),
-  ssl: {
-    ca,
-    rejectUnauthorized: true,
-  },
+  ssl,
 });
 
 const prisma = new PrismaClient({ adapter });

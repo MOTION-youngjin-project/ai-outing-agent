@@ -6,6 +6,7 @@ import type { ParkingSpot } from "@/lib/tools/parking";
 
 type Place = NonNullable<Recommendation["places"]>[number];
 type View = "input" | "loading" | "results" | "detail" | "parking";
+type Region = { id: string; parentId: string | null; name: string; level: string };
 
 const SUGGESTIONS = [
   "서울에서 애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
@@ -37,9 +38,15 @@ export default function Home() {
   const [input, setInput] = useState("");
   // 서버/클라이언트 초기 렌더가 일치해야 하므로 고정값으로 시작하고, 마운트 후에만 랜덤화한다.
   const [suggestion, setSuggestion] = useState(SUGGESTIONS[0]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionId, setRegionId] = useState("");
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 의도적으로 클라이언트에서만 랜덤화 (서버와 값이 달라도 되는 장식용 텍스트)
     setSuggestion(randomSuggestion());
+    fetch("/api/regions?level=sigungu")
+      .then((r) => r.json())
+      .then((d) => setRegions(d.data ?? []))
+      .catch(() => {});
   }, []);
 
   function acceptSuggestion() {
@@ -48,9 +55,13 @@ export default function Home() {
 
   async function sendMessage() {
     const text = input.trim();
-    if (!text || view === "loading") return;
+    if (!text || !regionId || view === "loading") return;
 
-    const historyWithUser: ChatTurn[] = [...history, { role: "user", content: text }];
+    // 지역은 대화 첫 턴에만 문장 앞에 붙인다 — 이후 턴은 이미 history에 지역이 남아있다.
+    const regionName = regions.find((r) => r.id === regionId)?.name ?? "";
+    const content = history.length === 0 && regionName ? `${regionName}에서 ${text}` : text;
+
+    const historyWithUser: ChatTurn[] = [...history, { role: "user", content }];
     setHistory(historyWithUser);
     setInput("");
     setSuggestion("");
@@ -59,7 +70,7 @@ export default function Home() {
     setView("loading");
 
     try {
-      const res = await fetch("/api/agent", {
+      const res = await fetch("/api/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ history: historyWithUser }),
@@ -134,6 +145,19 @@ export default function Home() {
 
         {(view === "input" || view === "loading") && (
           <div className="flex flex-1 flex-col">
+            <select
+              value={regionId}
+              onChange={(e) => setRegionId(e.target.value)}
+              disabled={view === "loading"}
+              className="mb-4 self-start rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
+            >
+              <option value="">지역을 선택하세요</option>
+              {regions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
             {promptMessage && (
               <div className="mb-4 rounded-lg bg-white px-4 py-3 text-sm text-black dark:bg-zinc-900 dark:text-zinc-50">
                 {promptMessage}
@@ -184,7 +208,7 @@ export default function Home() {
               </div>
               <button
                 type="submit"
-                disabled={view === "loading"}
+                disabled={view === "loading" || !regionId}
                 className="rounded-full bg-black px-5 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-black"
               >
                 보내기
