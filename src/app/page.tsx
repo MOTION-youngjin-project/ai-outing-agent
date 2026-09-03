@@ -265,40 +265,52 @@ export default function Home() {
               )
             )}
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                sendMessage();
-              }}
-              className="mt-auto flex gap-2 pt-4"
-            >
-              <div className="relative flex-1">
-                {!input && (
-                  <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
-                    {displayedSuggestion}
-                  </div>
-                )}
-                <input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (!input && (e.key === "ArrowRight" || e.key === "Tab")) {
-                      e.preventDefault();
-                      acceptSuggestion();
-                    }
-                  }}
-                  disabled={view === "loading"}
-                  className="relative w-full rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={view === "loading" || !regionId}
-                className="rounded-full bg-black px-5 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-black"
+            <div className="mt-auto flex flex-col gap-2 pt-4">
+              {!recommendMutation.isPending && !suggestMutation.isPending && suggestMutation.data && !input && (
+                <button
+                  type="button"
+                  onClick={acceptSuggestion}
+                  className="self-start rounded-full border border-zinc-300 px-3 py-1 text-xs text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                >
+                  {suggestMutation.data}
+                </button>
+              )}
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  sendMessage();
+                }}
+                className="flex gap-2"
               >
-                보내기
-              </button>
-            </form>
+                <div className="relative flex-1">
+                  {!input && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
+                      {displayedSuggestion}
+                    </div>
+                  )}
+                  <input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (!input && (e.key === "ArrowRight" || e.key === "Tab")) {
+                        e.preventDefault();
+                        acceptSuggestion();
+                      }
+                    }}
+                    disabled={view === "loading"}
+                    className="relative w-full rounded-full border border-zinc-300 bg-transparent px-4 py-2 text-sm outline-none disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-50"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={view === "loading" || !regionId}
+                  className="rounded-full bg-black px-5 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-50 dark:text-black"
+                >
+                  보내기
+                </button>
+              </form>
+            </div>
 
             <div className="mt-10 flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
               <h2 className="text-sm font-medium text-zinc-500">장소 검색</h2>
