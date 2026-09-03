@@ -6,6 +6,12 @@ import { z } from "zod";
 // 대구광역시 관할 구/군 단위로만 조회 가능. 인증은 쿼리스트링이 아니라 Authentication 헤더.
 const PARKING_URL = "https://pis.daegu.go.kr/api/mingan/prkInfo";
 
+// 실시간주차혼잡도 조회 서비스 — 위 prkInfo(정적 정보)와 별도 엔드포인트.
+// pkltId 단위로만 조회되고 구/군 필터가 없다. 같은 DAEGU_PARKING_API_KEY로 동작 확인함
+// (notes/daegu-parking-and-map-links-research.md 참고 — /api/mingan/rltmPrkInfo는
+// 민간사업자가 데이터를 "제출"하는 별개 API라 우리가 쓸 게 아니었음).
+const REALTIME_URL = "https://pis.daegu.go.kr/api/serviceApply/rltmPrkInfo";
+
 export const DAEGU_DISTRICTS = [
   "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
 ] as const;
@@ -23,8 +29,8 @@ const DISTRICT_CODES: Record<string, string> = {
 };
 
 type ParkingItem = {
-  prkInfo: { pkltNm: string; sysgrpyYn: string };
-  prkFcltInfo: { lotnoAddr: string; prkNocmprt: number };
+  prkInfo: { pkltId: string; pkltNm: string; sysgrpyYn: string };
+  prkFcltInfo: { lotnoAddr: string; prkNocmprt: number; lat: number | null; lot: number | null };
   prkOperInfo: { crgLevySeNm: string | null; gnrlOneHrCrg: number | null };
 };
 
@@ -40,6 +46,28 @@ async function fetchOnce(sggCd: string, apiKey: string) {
     throw new Error(`대구 주차정보 API 오류: ${data?.message ?? "알 수 없는 오류"}`);
   }
   return (data?.data ?? []) as ParkingItem[];
+}
+
+async function fetchRealtimeOnce(pkltId: string, apiKey: string): Promise<number | null> {
+  const params = new URLSearchParams({ numOfRows: "1", pageNo: "1", pkltId });
+  const res = await fetch(`${REALTIME_URL}?${params}`, {
+    headers: { accept: "application/json;charset=UTF-8", Authentication: apiKey },
+    signal: AbortSignal.timeout(8000),
+  });
+  const data = await res.json();
+  if (data?.resultCode !== "200") return null;
+  const rmnd = data?.data?.[0]?.rltmPrkInfo?.totRmndPrkNocmprt;
+  return typeof rmnd === "number" ? rmnd : null;
+}
+
+// 전체 344곳 중 실시간 연동된 곳은 일부(109곳)뿐이라, 없으면 null(실시간 정보 없음)로
+// 처리한다 — 에러가 나도 정적 정보(총 면수)는 이미 있으니 페이지 전체를 실패시키지 않는다.
+async function fetchRealtimeParking(pkltId: string, apiKey: string): Promise<number | null> {
+  try {
+    return await fetchRealtimeOnce(pkltId, apiKey);
+  } catch {
+    return null;
+  }
 }
 
 export function formatFee(crgLevySeNm: string | null, gnrlOneHrCrg: number | null): string {
@@ -71,8 +99,10 @@ export type ParkingSpot = {
   name: string;
   address: string;
   capacity: number;
+  remainingSpaces: number | null;
   fee: string;
-  hasRealtime: boolean;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 // LangChain 도구와 /api/parking 라우트가 공유하는 구조화된 조회 함수.
@@ -81,13 +111,25 @@ export async function getDaeguParking(district: string): Promise<ParkingSpot[]> 
   const sggCd = DISTRICT_CODES[district];
   if (!sggCd) return [];
 
-  const items = await fetchParking(sggCd);
-  return items.slice(0, 5).map((i) => ({
+  // sysgrpyYn(실시간 연동 플래그)이 Y인 주차장이 실제로 실시간 잔여대수를 가질
+  // 확률이 훨씬 높아서(실측 확인함), 앞쪽에 오도록 정렬한 뒤 5개를 뽑는다.
+  const all = await fetchParking(sggCd);
+  const items = [...all]
+    .sort((a, b) => Number(b.prkInfo.sysgrpyYn === "Y") - Number(a.prkInfo.sysgrpyYn === "Y"))
+    .slice(0, 5);
+  const apiKey = process.env.DAEGU_PARKING_API_KEY;
+  const remainingSpacesList = apiKey
+    ? await Promise.all(items.map((i) => fetchRealtimeParking(i.prkInfo.pkltId, apiKey)))
+    : items.map(() => null);
+
+  return items.map((i, idx) => ({
     name: i.prkInfo.pkltNm,
     address: i.prkFcltInfo.lotnoAddr,
     capacity: i.prkFcltInfo.prkNocmprt,
+    remainingSpaces: remainingSpacesList[idx],
     fee: formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg),
-    hasRealtime: i.prkInfo.sysgrpyYn === "Y",
+    latitude: i.prkFcltInfo.lat,
+    longitude: i.prkFcltInfo.lot,
   }));
 }
 
@@ -103,8 +145,8 @@ export const parkingTool = tool(
 
       const list = spots
         .map((s) => {
-          const realtime = s.hasRealtime ? "실시간 잔여면수 제공" : "실시간 정보 없음";
-          return `- ${s.name} (${s.address}, 주차구획 ${s.capacity}면, ${s.fee}, ${realtime})`;
+          const realtime = s.remainingSpaces !== null ? `실시간 잔여 ${s.remainingSpaces}면` : "실시간 정보 없음";
+          return `- ${s.name} (${s.address}, 총 ${s.capacity}면, ${s.fee}, ${realtime})`;
         })
         .join("\n");
 
