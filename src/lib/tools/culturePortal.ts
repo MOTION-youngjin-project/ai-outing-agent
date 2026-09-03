@@ -6,7 +6,7 @@ import { z } from "zod";
 // 응답이 XML 고정이라 자체 파서로 처리한다 (필드가 중첩 없이 flat이라 정규식으로 충분).
 const CULTURE_URL = "https://api.kcisa.kr/openapi/CNV_060/request";
 
-const DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
+export const DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
 function decodeEntities(text: string): string {
   return text
@@ -29,7 +29,7 @@ function extractTag(xml: string, tag: string): string {
   return match ? match[1] : "";
 }
 
-type PerformanceItem = {
+export type PerformanceItem = {
   title: string;
   eventPeriod: string;
   eventSite: string;
@@ -71,7 +71,7 @@ async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ponytail: 에어코리아/기상청과 동일하게 최대 3회 재시도 (공공데이터 API 공통 불안정성 대응).
-async function fetchCulturePortal(dtype: string, keyword: string) {
+export async function fetchCulturePortal(dtype: string, keyword: string): Promise<PerformanceItem[]> {
   const apiKey = process.env.CULTURE_PORTAL_API_KEY;
   if (!apiKey) throw new Error("CULTURE_PORTAL_API_KEY가 설정되지 않았습니다.");
 
