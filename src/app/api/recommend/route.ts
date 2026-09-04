@@ -21,7 +21,18 @@ export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const emit = (event: Parameters<typeof toLine>[0]) => controller.enqueue(encoder.encode(toLine(event)));
+      let closed = false;
+      // runAgentStream의 도구 호출 리스너는 fire-and-forget이라, 최종 결과를 보내고
+      // 컨트롤러를 닫은 뒤에도 뒤늦게 tool_end 이벤트가 들어올 수 있다 — 닫힌 컨트롤러에
+      // enqueue하면 예외가 나므로 조용히 무시한다(클라이언트는 이미 응답을 다 받은 뒤라 영향 없음).
+      const emit = (event: Parameters<typeof toLine>[0]) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(toLine(event)));
+        } catch {
+          // 컨트롤러가 그 사이 닫혔어도 무시
+        }
+      };
       try {
         const result = await createRecommendationRun(history as ChatTurn[], emit);
         emit({ type: "result", result });
@@ -29,6 +40,7 @@ export async function POST(req: NextRequest) {
         console.error(err);
         emit({ type: "error", message: err instanceof Error ? err.message : "추천 생성 중 오류가 발생했습니다." });
       } finally {
+        closed = true;
         controller.close();
       }
     },
