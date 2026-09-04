@@ -4,11 +4,11 @@
 // 새 테스트 프레임워크는 추가하지 않음 — node:assert면 충분.
 // 실행: node --experimental-strip-types scripts/self-check.ts
 import assert from "node:assert/strict";
-import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
-import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
-import { stripTags } from "../src/lib/tools/culturePortal.ts";
-import { formatFee } from "../src/lib/tools/parking.ts";
-import { pickBestPlaceMatch, pickRegionForAddress, inferEnvironmentMode } from "../src/lib/services/matching.ts";
+import { normalizeSido, latLonToGrid } from "../src/lib/region";
+import { gradeFromPm10 } from "../src/lib/tools/airQuality";
+import { stripTags } from "../src/lib/tools/culturePortal";
+import { formatFee, parkingScore, rankParkingSpots } from "../src/lib/tools/parking";
+import { pickBestPlaceMatch, pickRegionForAddress, inferEnvironmentMode } from "../src/lib/services/matching";
 
 let passed = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -42,7 +42,15 @@ check("formatFee 무료", formatFee("무료", null), "무료");
 check("formatFee 시간당 요금", formatFee(null, 3000), "시간당 3000원");
 check("formatFee 정보 없음(둘 다 null)", formatFee(null, null), "요금정보 없음");
 
-// pickBestPlaceMatch — 카카오 검색 결과 중 동명이인 오매칭 방지용 정확 일치 우선 로직.
+const rankedParking = rankParkingSpots([
+  { name: "대형 유료", address: "A", capacity: 500, fee: "유료", hasRealtime: true },
+  { name: "소형 무료", address: "B", capacity: 10, fee: "무료", hasRealtime: false },
+  { name: "중형 무료 실시간", address: "C", capacity: 30, fee: "무료", hasRealtime: true },
+], 2);
+check("parkingScore 무료 우선", parkingScore(rankedParking[0]), parkingScore({ name: "중형 무료 실시간", address: "C", capacity: 30, fee: "무료", hasRealtime: true }));
+check("rankParkingSpots 최대 개수", rankedParking.map((spot) => spot.name), ["중형 무료 실시간", "소형 무료"]);
+
+// pickBestPlaceMatch — 장소 검색 결과 중 동명이인 오매칭 방지용 정확 일치 우선 로직.
 // 오늘 이 로직이 없던 시절엔 항상 첫 결과("대구미술관 주차장" 등)를 골라버리는 버그가 날 뻔했음.
 check(
   "pickBestPlaceMatch 정확 일치 우선",
@@ -59,19 +67,19 @@ check("pickBestPlaceMatch 결과 없음", pickBestPlaceMatch("아무거나", [])
 // pickRegionForAddress — 오늘 실제로 났던 버그(정확히 일치 검색이라 "대구"가 "대구광역시" 시드
 // 행을 못 찾고 매번 중복 생성하던 것)의 재발 방지 + 구/군 우선 매칭까지 함께 검증.
 const REGION_FIXTURES = [
-  { name: "대구광역시", level: "시도" },
-  { name: "수성구", level: "구군" },
-  { name: "중구", level: "구군" },
+  { name: "대구광역시", level: "sido" },
+  { name: "수성구", level: "sigungu" },
+  { name: "중구", level: "sigungu" },
 ];
 check(
   "pickRegionForAddress 구/군 우선",
   pickRegionForAddress("대구 수성구 미술관로 40", REGION_FIXTURES),
-  { name: "수성구", level: "구군" }
+  { name: "수성구", level: "sigungu" }
 );
 check(
   "pickRegionForAddress 구/군 없으면 시/도로 완화(축약형 vs 정식명칭)",
   pickRegionForAddress("대구 남구 앞산순환로 574", REGION_FIXTURES),
-  { name: "대구광역시", level: "시도" }
+  { name: "대구광역시", level: "sido" }
 );
 check("pickRegionForAddress 매칭 실패", pickRegionForAddress("서울 강남구 테헤란로", REGION_FIXTURES), null);
 

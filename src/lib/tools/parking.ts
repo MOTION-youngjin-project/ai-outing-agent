@@ -10,7 +10,7 @@ export const DAEGU_DISTRICTS = [
   "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
 ] as const;
 
-const DISTRICT_CODES: Record<string, string> = {
+export const DAEGU_DISTRICT_CODES: Record<string, string> = {
   중구: "150",
   동구: "151",
   서구: "152",
@@ -22,7 +22,7 @@ const DISTRICT_CODES: Record<string, string> = {
   군위군: "361",
 };
 
-type ParkingItem = {
+export type ParkingItem = {
   prkInfo: { pkltNm: string; sysgrpyYn: string };
   prkFcltInfo: { lotnoAddr: string; prkNocmprt: number };
   prkOperInfo: { crgLevySeNm: string | null; gnrlOneHrCrg: number | null };
@@ -75,25 +75,63 @@ export type ParkingSpot = {
   hasRealtime: boolean;
 };
 
+export type ParkingOption = ParkingSpot & {
+  distanceM: null;
+  walkingMinutes: null;
+  selectionBasis: "same_district_score";
+};
+
+// 지도 좌표가 없는 동안 사용할 임시 우선순위다. 가까운 순서는 아니며,
+// 무료 여부 > 실시간 정보 제공 > 주차 규모 순으로 안정적으로 정렬한다.
+export function parkingScore(spot: ParkingSpot): number {
+  const freeScore = spot.fee === "무료" ? 10_000 : 0;
+  const realtimeScore = spot.hasRealtime ? 1_000 : 0;
+  return freeScore + realtimeScore + Math.min(Math.max(spot.capacity, 0), 999);
+}
+
+export function rankParkingSpots(spots: ParkingSpot[], limit = 3): ParkingSpot[] {
+  return [...spots]
+    .sort((a, b) => parkingScore(b) - parkingScore(a) || a.name.localeCompare(b.name, "ko"))
+    .slice(0, limit);
+}
+
 // LangChain 도구와 /api/parking 라우트가 공유하는 구조화된 조회 함수.
 // 좌표는 API가 주지만 기준점(사용자가 실제로 서있는 위치)이 없어 거리순 정렬은 지원하지 않는다.
-export async function getDaeguParking(district: string): Promise<ParkingSpot[]> {
-  const sggCd = DISTRICT_CODES[district];
+export async function getDaeguParking(district: string, limit = 5): Promise<ParkingSpot[]> {
+  const sggCd = DAEGU_DISTRICT_CODES[district];
   if (!sggCd) return [];
 
   const items = await fetchParking(sggCd);
-  return items.slice(0, 5).map((i) => ({
+  const spots = items.map((i) => ({
     name: i.prkInfo.pkltNm,
     address: i.prkFcltInfo.lotnoAddr,
     capacity: i.prkFcltInfo.prkNocmprt,
     fee: formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg),
     hasRealtime: i.prkInfo.sysgrpyYn === "Y",
   }));
+  return rankParkingSpots(spots, limit);
+}
+
+export async function getParkingOptions(district: string): Promise<ParkingOption[]> {
+  const spots = await getDaeguParking(district, 3);
+  return spots.map((spot) => ({
+    ...spot,
+    distanceM: null,
+    walkingMinutes: null,
+    selectionBasis: "same_district_score",
+  }));
+}
+
+export async function fetchParkingByDistrict(district: string) {
+  const code = DAEGU_DISTRICT_CODES[district];
+  if (!code) throw new Error("지원하지 않는 대구광역시 구·군입니다.");
+  return fetchParking(code);
 }
 
 export const parkingTool = tool(
   async ({ district }) => {
-    if (!DISTRICT_CODES[district]) {
+    const sggCd = DAEGU_DISTRICT_CODES[district];
+    if (!sggCd) {
       return `"${district}"은(는) 대구광역시 구/군이 아닙니다. 이 도구는 대구광역시(중구·동구·서구·남구·북구·수성구·달서구·달성군·군위군) 내 주차장만 조회 가능합니다.`;
     }
 

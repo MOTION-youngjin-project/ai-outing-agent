@@ -7,12 +7,12 @@ import { prisma } from "@/lib/prisma";
 // 쓰므로, 정확히 일치가 아니라 포함 관계로 찾아야 기존 시드 행을 재사용한다.
 export async function findOrCreateSidoRegion(sidoName: string) {
   const existing = await prisma.region.findFirst({
-    where: { level: "시도", name: { contains: sidoName } },
+    where: { level: "sido", name: { contains: sidoName } },
   });
   if (existing) return existing;
 
   return prisma.region.create({
-    data: { regionCode: sidoName, name: sidoName, level: "시도" },
+    data: { regionCode: sidoName, name: sidoName, level: "sido" },
   });
 }
 

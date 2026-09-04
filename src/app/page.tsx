@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ChatTurn, Recommendation } from "@/lib/agent";
+import type { ChatTurn, RecommendationWithParking } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
 
-type Place = NonNullable<Recommendation["places"]>[number];
+type Place = NonNullable<RecommendationWithParking["places"]>[number];
 type View = "input" | "loading" | "results" | "detail" | "parking";
 
 const SUGGESTIONS = [
@@ -19,7 +19,7 @@ function randomSuggestion() {
 }
 
 // 대화 히스토리(다음 요청의 맥락)와 다음 질문 제안 생성에 쓰는 텍스트 요약.
-function summarize(rec: Recommendation): string {
+function summarize(rec: RecommendationWithParking): string {
   if (rec.needsMoreInfo || !rec.places) return rec.message;
   const list = rec.places.map((p) => `- ${p.name}: ${p.oneLineDescription}`).join("\n");
   return `${rec.message}\n${list}`;
@@ -29,7 +29,8 @@ export default function Home() {
   const [view, setView] = useState<View>("input");
   const [history, setHistory] = useState<ChatTurn[]>([]);
   const [promptMessage, setPromptMessage] = useState<string | null>(null);
-  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [recommendation, setRecommendation] = useState<RecommendationWithParking | null>(null);
+  const [transportMode, setTransportMode] = useState<"car" | "public_transit" | "walk">("public_transit");
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [parkingSpots, setParkingSpots] = useState<ParkingSpot[] | null>(null);
   const [parkingLoading, setParkingLoading] = useState(false);
@@ -59,10 +60,10 @@ export default function Home() {
     setView("loading");
 
     try {
-      const res = await fetch("/api/agent", {
+      const res = await fetch("/api/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: historyWithUser }),
+        body: JSON.stringify({ history: historyWithUser, transportMode }),
       });
       const data = await res.json();
 
@@ -72,7 +73,7 @@ export default function Home() {
         return;
       }
 
-      const rec = data.recommendation as Recommendation;
+      const rec = data.recommendation as RecommendationWithParking;
       const historyWithReply: ChatTurn[] = [
         ...historyWithUser,
         { role: "assistant", content: summarize(rec) },
@@ -163,6 +164,17 @@ export default function Home() {
               }}
               className="mt-auto flex gap-2 pt-4"
             >
+              <select
+                value={transportMode}
+                onChange={(e) => setTransportMode(e.target.value as typeof transportMode)}
+                disabled={view === "loading"}
+                aria-label="이동수단"
+                className="rounded-full border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700 dark:text-zinc-50"
+              >
+                <option value="public_transit">대중교통</option>
+                <option value="car">자동차</option>
+                <option value="walk">도보</option>
+              </select>
               <div className="relative flex-1">
                 {!input && (
                   <div className="pointer-events-none absolute inset-0 flex items-center truncate rounded-full px-4 text-sm text-zinc-400 dark:text-zinc-600">
@@ -239,6 +251,19 @@ export default function Home() {
                   <li key={i}>{f}</li>
                 ))}
               </ul>
+            )}
+            {selectedPlace.parkingOptions && selectedPlace.parkingOptions.length > 0 && (
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-black dark:text-zinc-50">같은 구·군 주차장 후보</h3>
+                <p className="text-xs text-zinc-500">{selectedPlace.parkingNotice}</p>
+                {selectedPlace.parkingOptions.map((spot) => (
+                  <div key={`${spot.name}-${spot.address}`} className="rounded-lg bg-white px-4 py-3 text-sm dark:bg-zinc-900 dark:text-zinc-50">
+                    <div className="font-medium">{spot.name}</div>
+                    <div className="text-zinc-500">{spot.address}</div>
+                    <div className="text-zinc-500">주차 {spot.capacity}면 · {spot.fee} · {spot.hasRealtime ? "실시간 정보 지원" : "실시간 정보 없음"}</div>
+                  </div>
+                ))}
+              </section>
             )}
             {selectedPlace.daeguDistrict && (
               <button

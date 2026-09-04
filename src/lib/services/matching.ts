@@ -4,7 +4,7 @@ import type { Recommendation } from "@/lib/agent";
 // 의존성 없이 바로 import해서 검증할 수 있어야 한다(node --experimental-strip-types는
 // "@/*" 경로 별칭을 런타임에 못 풀어서, 타입 전용 import 말고는 여기서 값 import를 하면 안 됨).
 
-// 카카오가 준 검색 결과 중 LLM이 말한 이름과 가장 잘 맞는 것을 고른다.
+// 장소 검색 API가 준 결과 중 LLM이 말한 이름과 가장 잘 맞는 것을 고른다.
 // 이름이 정확히 일치하는 결과를 최우선으로 하고(동명이인 오매칭 완화), 없으면 부분 일치,
 // 그것도 없으면 첫 결과.
 export function pickBestPlaceMatch<T extends { place_name: string }>(
@@ -27,12 +27,12 @@ export function pickRegionForAddress<T extends { name: string; level: string }>(
 ): T | null {
   const tokens = address.split(" ").filter(Boolean);
 
-  const district = regions.find((r) => r.level === "구군" && tokens.includes(r.name));
+  const district = regions.find((r) => r.level === "sigungu" && tokens.includes(r.name));
   if (district) return district;
 
   const firstToken = tokens[0];
   if (!firstToken) return null;
-  return regions.find((r) => r.level === "시도" && r.name.includes(firstToken)) ?? null;
+  return regions.find((r) => r.level === "sido" && r.name.includes(firstToken)) ?? null;
 }
 
 const INDOOR_KEYWORDS = ["실내", "미술관", "박물관", "전시", "공연장", "쇼핑몰"];

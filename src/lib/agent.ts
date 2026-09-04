@@ -1,11 +1,12 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { createAgent } from "langchain";
+import { createAgent, providerStrategy } from "langchain";
 import { z } from "zod";
 import { airQualityTool } from "./tools/airQuality";
 import { weatherTool } from "./tools/weather";
 import { culturePortalTool } from "./tools/culturePortal";
 import { facilityInfoTool } from "./tools/facilityInfo";
 import { parkingTool } from "./tools/parking";
+import type { ParkingOption } from "./tools/parking";
 
 const SYSTEM_PROMPT =
   "너는 나들이 장소를 추천하는 에이전트다. 지역(시/도)이 대화에서 한 번도 언급되지 않았으면 " +
@@ -35,11 +36,9 @@ const SYSTEM_PROMPT =
 // 다음 모델로 순서대로 재시도. 유료 결제 전환 시 이 체인은 필요 없어짐.
 // gemini-3.7-flash는 실측 결과 응답 없이 멈추는 경우가 있어 제외 (25초 타임아웃만 낭비).
 const MODEL_FALLBACK_CHAIN = [
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
   "gemini-3.5-flash-lite",
-  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
 ];
 
 function isRetryableModelError(err: unknown): boolean {
@@ -85,7 +84,29 @@ export const RecommendationSchema = z.object({
   places: z.array(PlaceSchema).optional().describe("needsMoreInfo가 false일 때 추천 장소 3~5개"),
 });
 
+function sanitizeGeminiJsonSchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeGeminiJsonSchema);
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "$schema" && key !== "additionalProperties")
+      .map(([key, child]) => [key, sanitizeGeminiJsonSchema(child)]),
+  );
+}
+
+// Zod 4 JSON Schema 중 Gemini native responseSchema가 지원하지 않는 메타 필드만 제거한다.
+const GEMINI_RECOMMENDATION_SCHEMA = sanitizeGeminiJsonSchema(
+  z.toJSONSchema(RecommendationSchema),
+) as { type: "object"; properties: Record<string, unknown>; required?: string[] };
+
 export type Recommendation = z.infer<typeof RecommendationSchema>;
+export type RecommendationWithParking = Omit<Recommendation, "places"> & {
+  places?: Array<NonNullable<Recommendation["places"]>[number] & {
+    parkingOptions?: ParkingOption[];
+    parkingNotice?: string;
+  }>;
+};
 
 // history는 지금까지의 대화(사용자가 방금 보낸 메시지 포함) 전체를 받는다.
 // 단일 메시지만 넘기면 "거기", "다른 곳도" 같은 후속 질문의 맥락을 에이전트가 전혀
@@ -104,12 +125,12 @@ export async function runAgent(history: ChatTurn[]): Promise<Recommendation> {
       model: llm,
       tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool, parkingTool],
       systemPrompt: SYSTEM_PROMPT,
-      responseFormat: RecommendationSchema,
+      responseFormat: providerStrategy(GEMINI_RECOMMENDATION_SCHEMA),
     });
 
     try {
-      const result = await withTimeout(agent.invoke({ messages: history }), 25000);
-      return result.structuredResponse as Recommendation;
+      const result = await withTimeout(agent.invoke({ messages: history }), 10_000);
+      return RecommendationSchema.parse(result.structuredResponse);
     } catch (err) {
       lastError = err;
       if (!isRetryableModelError(err)) throw err;

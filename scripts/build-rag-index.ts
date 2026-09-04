@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
-import { facilityDocs } from "../src/lib/rag/documents.ts";
+import { facilityDocs } from "../src/lib/rag/documents";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -11,11 +11,25 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "self-check": "node --experimental-strip-types scripts/self-check.ts",
+    "self-check": "tsx scripts/self-check.ts",
+    "integration-check": "tsx scripts/integration-check.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@types/swagger-ui-dist": "^3.30.6",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.3",
+    "prisma": "^7.10.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "@langchain/core": "^1.2.9",
@@ -29,18 +43,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
+    "swagger-ui-dist": "^5.32.14",
     "zod": "^4.5.4"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.3",
-    "prisma": "^7.10.0",
-    "tailwindcss": "^4",
-    "tsx": "^4.23.13",
-    "typescript": "^5"
   }
 }

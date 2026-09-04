@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { normalizeSido } from "../region.ts";
+import { normalizeSido } from "../region";
 
 // 한국환경공단 에어코리아 - 시도별 실시간 측정정보 조회
 // https://www.data.go.kr/data/15073861/openapi.do
