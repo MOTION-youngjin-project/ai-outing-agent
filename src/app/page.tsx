@@ -121,6 +121,14 @@ const MYPAGE_SAVED_PLACES = [
   { name: "앞산 카페거리", category: "카페 · 남구" },
 ];
 
+const TOOL_LABELS: Record<string, string> = {
+  get_air_quality: "대기질 확인 중",
+  get_weather: "날씨 확인 중",
+  search_culture_events: "문화행사 찾는 중",
+  search_family_facility_info: "편의시설 정보 확인 중",
+  search_daegu_parking: "주차장 확인 중",
+};
+
 const SUGGESTIONS = [
   "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
   "여자친구랑 데이트할만한 곳 있어?",
@@ -157,7 +165,14 @@ async function fetchAirQuality(regionId: string): Promise<AirQualityInfo | null>
   return data.data ?? null;
 }
 
-async function postRecommend(history: ChatTurn[]): Promise<Recommendation> {
+export type RecommendProgressEvent = { type: string; tool?: string };
+
+// /api/recommend는 NDJSON(줄바꿈 구분 JSON)을 스트리밍한다 — 도구 호출 시작/종료,
+// 장소 정리 단계를 onProgress로 실시간 전달하고, "result"/"error" 줄로 끝난다.
+async function postRecommend(
+  history: ChatTurn[],
+  onProgress?: (event: RecommendProgressEvent) => void
+): Promise<Recommendation> {
   let res: Response;
   try {
     res = await fetch("/api/recommend", {
@@ -168,9 +183,32 @@ async function postRecommend(history: ChatTurn[]): Promise<Recommendation> {
   } catch {
     throw new Error("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
   }
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? "알 수 없는 오류가 발생했습니다.");
-  return data.recommendation as Recommendation;
+  if (!res.ok || !res.body) throw new Error("알 수 없는 오류가 발생했습니다.");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: Recommendation | null = null;
+  let errorMessage: string | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = JSON.parse(line);
+      if (event.type === "result") result = event.result.recommendation as Recommendation;
+      else if (event.type === "error") errorMessage = event.message;
+      else onProgress?.(event);
+    }
+  }
+
+  if (errorMessage) throw new Error(errorMessage);
+  if (!result) throw new Error("알 수 없는 오류가 발생했습니다.");
+  return result;
 }
 
 async function postSuggest(history: ChatTurn[]): Promise<string | null> {
@@ -245,9 +283,28 @@ export default function Home() {
     enabled: !!regionId,
   });
 
+  // 에이전트가 지금 뭘 하고 있는지 보여주는 진행 상황 — 실제 도구 호출 이벤트를 그대로
+  // 반영한다(가짜로 돌리는 로딩 메시지가 아님). 여러 도구가 동시에(병렬) 돌 수 있어 Set.
+  const [activeTools, setActiveTools] = useState<Set<string>>(new Set());
+  const [resolvingPlaces, setResolvingPlaces] = useState(false);
+
+  function handleProgress(event: RecommendProgressEvent) {
+    if (event.type === "tool_start" && event.tool) {
+      setActiveTools((prev) => new Set(prev).add(event.tool!));
+    } else if (event.type === "tool_end" && event.tool) {
+      setActiveTools((prev) => {
+        const next = new Set(prev);
+        next.delete(event.tool!);
+        return next;
+      });
+    } else if (event.type === "resolving_places") {
+      setResolvingPlaces(true);
+    }
+  }
+
   const suggestMutation = useMutation({ mutationFn: postSuggest });
   const recommendMutation = useMutation({
-    mutationFn: postRecommend,
+    mutationFn: (historyWithUser: ChatTurn[]) => postRecommend(historyWithUser, handleProgress),
     onSuccess: (rec, historyWithUser) => {
       const historyWithReply: ChatTurn[] = [
         ...historyWithUser,
@@ -273,6 +330,13 @@ export default function Home() {
     recommendMutation.isPending || suggestMutation.isPending
       ? ""
       : (suggestMutation.data ?? localSuggestion);
+  const progressLabel = resolvingPlaces
+    ? "장소 정보 정리하는 중..."
+    : activeTools.size > 0
+      ? Array.from(activeTools)
+          .map((t) => TOOL_LABELS[t] ?? t)
+          .join(" · ")
+      : "코스를 고르는 중이에요...";
 
   function acceptSuggestion() {
     if (!input && displayedSuggestion) setInput(displayedSuggestion);
@@ -291,6 +355,8 @@ export default function Home() {
     setInput("");
     recommendMutation.reset();
     suggestMutation.reset();
+    setActiveTools(new Set());
+    setResolvingPlaces(false);
     setView("loading");
     recommendMutation.mutate(historyWithUser);
   }
@@ -393,9 +459,7 @@ export default function Home() {
               {view === "loading" && (
                 <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-                  <p className="text-[14px] text-muted">
-                    날씨·대기질을 확인하며 코스를 고르는 중이에요...
-                  </p>
+                  <p className="text-[14px] text-muted">{progressLabel}</p>
                 </div>
               )}
 
