@@ -23,9 +23,24 @@ export const DAEGU_DISTRICT_CODES: Record<string, string> = {
 };
 
 export type ParkingItem = {
-  prkInfo: { pkltNm: string; sysgrpyYn: string };
-  prkFcltInfo: { lotnoAddr: string; prkNocmprt: number };
-  prkOperInfo: { crgLevySeNm: string | null; gnrlOneHrCrg: number | null };
+  prkInfo: { pkltId: string; pkltNm: string; sysgrpyYn: string; useYn: string };
+  prkFcltInfo: {
+    lat: number | string;
+    lot: number | string;
+    lotnoAddr: string;
+    roadNmAddr: string | null;
+    prkNocmprt: number;
+  };
+  prkOperInfo: {
+    crgLevySeNm: string | null;
+    gnrlOneHrCrg: number | null;
+    wkdayOperBgngHr: string | null;
+    wkdayOperEndHr: string | null;
+    satOperBgngHr: string | null;
+    satOperEndHr: string | null;
+    lhldyOperBgngHr: string | null;
+    lhldyOperEndHr: string | null;
+  };
 };
 
 async function fetchOnce(sggCd: string, apiKey: string) {

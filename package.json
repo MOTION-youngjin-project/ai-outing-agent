@@ -13,6 +13,7 @@
     "lint": "eslint",
     "self-check": "tsx scripts/self-check.ts",
     "integration-check": "tsx scripts/integration-check.ts",
+    "db:cleanup": "tsx scripts/cleanup-expired-data.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",

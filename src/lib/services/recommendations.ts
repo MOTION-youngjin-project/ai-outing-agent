@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeSido } from "@/lib/region";
 import { runAgent, type ChatTurn, type Recommendation, type RecommendationWithParking } from "@/lib/agent";
-import { getParkingOptions } from "@/lib/tools/parking";
+import { getAndStoreParkingOptions } from "./parking";
 import { getCachedWeather } from "./weather";
 import { getCachedAirQuality } from "./airQuality";
 import { resolvePlaceByName } from "./places";
@@ -39,12 +39,12 @@ async function attachParkingOptions(
   if (!useCar || !recommendation.places) return recommendation;
 
   const districts = [...new Set(recommendation.places.map((place) => place.daeguDistrict).filter(Boolean))] as string[];
-  const parkingByDistrict = new Map<string, Awaited<ReturnType<typeof getParkingOptions>>>();
+  const parkingByDistrict = new Map<string, Awaited<ReturnType<typeof getAndStoreParkingOptions>>>();
 
   await Promise.all(
     districts.map(async (district) => {
       try {
-        parkingByDistrict.set(district, await getParkingOptions(district));
+        parkingByDistrict.set(district, await getAndStoreParkingOptions(district));
       } catch (error) {
         console.error(`주차장 조회 실패(${district}):`, error);
         parkingByDistrict.set(district, []);

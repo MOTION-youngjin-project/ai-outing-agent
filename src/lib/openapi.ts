@@ -137,11 +137,41 @@ export const openApiDocument = {
       post: {
         tags: ["AI"],
         summary: "추천 생성 및 DB 저장",
-        description: "AI 추천을 생성하고 agent_runs, recommendation_routes, route_places에 기록합니다. transportMode이 car이면 지도 API 없이 추천 장소와 같은 구·군의 주차장을 무료 여부, 실시간 정보 지원, 규모 기준으로 최대 3개 제공합니다. 거리와 도보시간은 계산하지 않습니다. 주차장 조회가 실패해도 장소 추천은 반환합니다.",
+        description: "AI 추천을 생성하고 agent_runs, recommendation_routes, route_places에 기록합니다. transportMode이 car이면 지도 API 없이 추천 장소와 같은 구·군의 주차장을 무료 여부, 실시간 정보 지원, 규모 기준으로 최대 3개 제공하고 parking_lots에 최신 정보와 좌표를 저장합니다. 거리와 도보시간은 계산하지 않습니다. 주차장 조회나 저장이 실패해도 장소 추천은 반환합니다.",
         requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/RecommendationRequest" }, examples: { car: { summary: "자동차 이용 추천", value: { transportMode: "car", history: [{ role: "user", content: "대구 동구 율하역 1번출구에서 자동차로 데이트할 장소를 추천해줘" }] } }, transit: { summary: "대중교통 이용 추천", value: { transportMode: "public_transit", history: [{ role: "user", content: "대구에서 데이트할 장소를 추천해줘" }] } } } } } },
         responses: {
           "200": { description: "추천 생성 및 저장 성공. 자동차 모드에서는 각 대구 장소에 parkingOptions가 포함될 수 있습니다.", content: { "application/json": { schema: { $ref: "#/components/schemas/RecommendationRunResponse" } } } },
           "400": errorResponse,
+          "500": errorResponse,
+        },
+      },
+    },
+    "/api/recommendations": {
+      get: {
+        tags: ["AI"],
+        summary: "추천 실행 이력 조회",
+        description: "최근 추천 실행 기록과 생성된 경로 요약을 최신순으로 반환합니다.",
+        parameters: [
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50, default: 20 } },
+          { name: "status", in: "query", schema: { type: "string", enum: ["pending", "running", "completed", "partial", "failed"] } },
+        ],
+        responses: {
+          "200": { description: "조회 성공", content: { "application/json": { schema: { $ref: "#/components/schemas/RecommendationHistoryResponse" } } } },
+          "400": errorResponse,
+          "500": errorResponse,
+        },
+      },
+    },
+    "/api/recommendations/{id}": {
+      get: {
+        tags: ["AI"],
+        summary: "추천 실행 상세 조회",
+        description: "실행 기록, 추천 경로, 연결된 장소와 저장된 주차장 추천을 반환합니다.",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": { description: "조회 성공" },
+          "400": errorResponse,
+          "404": errorResponse,
           "500": errorResponse,
         },
       },
@@ -263,6 +293,31 @@ export const openApiDocument = {
           recommendation: { $ref: "#/components/schemas/Recommendation" },
           agentRunId: { type: "string", format: "uuid" },
           recommendationRouteId: { type: ["string", "null"] },
+        },
+      },
+      RecommendationHistoryItem: {
+        type: "object",
+        required: ["id", "requestMode", "status", "routeCount", "startedAt", "expiresAt", "recommendationRoutes"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          requestMode: { type: "string", enum: ["question", "popular", "retry"] },
+          status: { type: "string", enum: ["pending", "running", "completed", "partial", "failed"] },
+          routeCount: { type: "integer" },
+          startedAt: { type: "string", format: "date-time" },
+          completedAt: { type: ["string", "null"], format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" },
+          errorCode: { type: ["string", "null"] },
+          errorSummary: { type: ["string", "null"] },
+          currentRegion: { type: ["object", "null"] },
+          recommendationRoutes: { type: "array", items: { type: "object" } },
+        },
+      },
+      RecommendationHistoryResponse: {
+        type: "object",
+        required: ["count", "data"],
+        properties: {
+          count: { type: "integer" },
+          data: { type: "array", items: { $ref: "#/components/schemas/RecommendationHistoryItem" } },
         },
       },
       AirQualitySnapshot: {
