@@ -30,8 +30,30 @@ const DISTRICT_CODES: Record<string, string> = {
 
 type ParkingItem = {
   prkInfo: { pkltId: string; pkltNm: string; sysgrpyYn: string };
-  prkFcltInfo: { lotnoAddr: string; prkNocmprt: number; lat: number | null; lot: number | null };
-  prkOperInfo: { crgLevySeNm: string | null; gnrlOneHrCrg: number | null };
+  prkFcltInfo: {
+    lotnoAddr: string;
+    prkNocmprt: number;
+    lat: number | null;
+    lot: number | null;
+    pkltSeCd: string | null; // 공영/민영
+    pkltTypeCd: string | null; // 노상/노외/부설
+    mngInstNm: string | null;
+    telno: string | null;
+  };
+  prkOperInfo: {
+    operHrWkdaySeCd: string | null; // 전일운영/시간제운영 등
+    wkdayOperBgngHr: string | null; // "0900" 형식
+    wkdayOperEndHr: string | null;
+    crgLevySeNm: string | null;
+    gnrlFrstCrgLevyHr: string | null;
+    gnrlFrstCrg: number | null;
+    gnrlAddCrgLevyHr: string | null;
+    gnrlMntbyAddCrg: number | null;
+    gnrlOneHrCrg: number | null;
+    gnrlOneDayCrg: number | null;
+    stlmMthd: string | null;
+    rmrk: string | null;
+  };
 };
 
 async function fetchOnce(sggCd: string, apiKey: string) {
@@ -76,6 +98,63 @@ export function formatFee(crgLevySeNm: string | null, gnrlOneHrCrg: number | nul
   return crgLevySeNm ?? "요금정보 없음";
 }
 
+// "0900" -> "09:00"
+function formatHm(hm: string | null): string | null {
+  if (!hm || hm.length !== 4) return null;
+  return `${hm.slice(0, 2)}:${hm.slice(2)}`;
+}
+
+export function formatOperatingHours(op: ParkingItem["prkOperInfo"]): string | null {
+  if (op.operHrWkdaySeCd === "전일운영") return "24시간";
+  const start = formatHm(op.wkdayOperBgngHr);
+  const end = formatHm(op.wkdayOperEndHr);
+  if (start && end) return `${start} - ${end}`;
+  return null;
+}
+
+// 요금 상세를 목업처럼 "최초 30분 무료 / 이후 10분당 300원 / 1일 최대 6,000원" 형태의
+// 여러 줄로 구성한다. 세부 필드가 없으면 formatFee의 한 줄 요약으로 대체한다.
+export function formatFeeLines(op: ParkingItem["prkOperInfo"]): string[] | null {
+  if (op.crgLevySeNm === "무료") return ["무료"];
+
+  const lines: string[] = [];
+  if (op.gnrlFrstCrgLevyHr) lines.push(`최초 ${op.gnrlFrstCrgLevyHr}분 ${op.gnrlFrstCrg ? `${op.gnrlFrstCrg.toLocaleString()}원` : "무료"}`);
+  if (op.gnrlAddCrgLevyHr && op.gnrlMntbyAddCrg !== null) {
+    lines.push(`이후 ${op.gnrlAddCrgLevyHr}분당 ${op.gnrlMntbyAddCrg.toLocaleString()}원`);
+  }
+  if (op.gnrlOneDayCrg !== null) lines.push(`1일 최대 ${op.gnrlOneDayCrg.toLocaleString()}원`);
+  if (lines.length > 0) return lines;
+
+  const fallback = formatFee(op.crgLevySeNm, op.gnrlOneHrCrg);
+  return fallback === "요금정보 없음" ? null : [fallback];
+}
+
+export function formatPaymentMethod(stlmMthd: string | null): string | null {
+  if (!stlmMthd) return null;
+  return stlmMthd.split("+").join(", ");
+}
+
+// 지구 반지름(m) 기준 하버사인 거리. 순수 함수라 self-check로 검증한다.
+export function haversineMeters(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number }
+): number {
+  const R = 6371000;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// 평균 도보 속도 67m/분(약 4km/h) 기준. 최소 1분.
+export function estimateWalkMinutes(meters: number): number {
+  return Math.max(1, Math.round(meters / 67));
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchParking(sggCd: string) {
@@ -96,13 +175,22 @@ async function fetchParking(sggCd: string) {
 }
 
 export type ParkingSpot = {
+  id: string;
   name: string;
   address: string;
   capacity: number;
   remainingSpaces: number | null;
   fee: string;
+  feeLines: string[] | null;
   latitude: number | null;
   longitude: number | null;
+  ownerType: string | null;
+  lotType: string | null;
+  operatingHours: string | null;
+  paymentMethod: string | null;
+  managingOrg: string | null;
+  phone: string | null;
+  remark: string | null;
 };
 
 // LangChain 도구와 /api/parking 라우트가 공유하는 구조화된 조회 함수.
@@ -123,13 +211,22 @@ export async function getDaeguParking(district: string): Promise<ParkingSpot[]> 
     : items.map(() => null);
 
   return items.map((i, idx) => ({
+    id: i.prkInfo.pkltId,
     name: i.prkInfo.pkltNm,
     address: i.prkFcltInfo.lotnoAddr,
     capacity: i.prkFcltInfo.prkNocmprt,
     remainingSpaces: remainingSpacesList[idx],
     fee: formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg),
+    feeLines: formatFeeLines(i.prkOperInfo),
     latitude: i.prkFcltInfo.lat,
     longitude: i.prkFcltInfo.lot,
+    ownerType: i.prkFcltInfo.pkltSeCd,
+    lotType: i.prkFcltInfo.pkltTypeCd,
+    operatingHours: formatOperatingHours(i.prkOperInfo),
+    paymentMethod: formatPaymentMethod(i.prkOperInfo.stlmMthd),
+    managingOrg: i.prkFcltInfo.mngInstNm,
+    phone: i.prkFcltInfo.telno,
+    remark: i.prkOperInfo.rmrk,
   }));
 }
 
