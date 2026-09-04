@@ -5,8 +5,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
 import { useAppStore, type Place } from "@/lib/store";
+import { KakaoMap } from "@/components/KakaoMap";
 
 type Region = { id: string; parentId: string | null; name: string; level: string };
+type ParkingSpotWithDistance = ParkingSpot & { distanceMeters: number | null; walkMinutes: number | null };
+type ParkingResult = { spots: ParkingSpotWithDistance[]; destination: { latitude: number; longitude: number } | null };
 type WeatherInfo = { temperatureC: number | null; precipitationProbability: number | null; summary: string };
 type AirQualityInfo = { pm10Value: number | null; overallGrade: string };
 type PlaceResult = {
@@ -80,6 +83,18 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
       </>
     ),
     bookmark: <path d="M6.5 4h11a1 1 0 011 1v15l-6.5-4-6.5 4V5a1 1 0 011-1z" />,
+    card: (
+      <>
+        <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+        <path d="M2.5 9.5h19" />
+      </>
+    ),
+    info: (
+      <>
+        <circle cx="12" cy="12" r="8.6" />
+        <path d="M12 11v5.5M12 8v.1" />
+      </>
+    ),
     send: <path d="M4.5 12l15-7.5-4 15-3.6-5.6L4.5 12z" />,
   };
   return (
@@ -183,14 +198,28 @@ async function postSuggest(history: ChatTurn[]): Promise<string | null> {
   return data.suggestion ?? null;
 }
 
-async function fetchParking(district: string): Promise<ParkingSpot[]> {
+async function fetchParking(district: string, placeName?: string): Promise<ParkingResult> {
   try {
-    const res = await fetch(`/api/parking?district=${encodeURIComponent(district)}`);
+    const params = new URLSearchParams({ district });
+    if (placeName) params.set("placeName", placeName);
+    const res = await fetch(`/api/parking?${params}`);
     const data = await res.json();
-    return res.ok ? data.spots : [];
+    return res.ok ? { spots: data.spots, destination: data.destination } : { spots: [], destination: null };
   } catch {
-    return [];
+    return { spots: [], destination: null };
   }
+}
+
+// 잔여율 기준 혼잡도 라벨. 실시간 정보가 없으면 null(표시 안 함).
+function occupancyLabel(spot: {
+  remainingSpaces: number | null;
+  capacity: number;
+}): { label: string; className: string } | null {
+  if (spot.remainingSpaces === null || spot.capacity === 0) return null;
+  const ratio = spot.remainingSpaces / spot.capacity;
+  if (ratio >= 0.3) return { label: "여유", className: "text-emerald-600" };
+  if (ratio >= 0.1) return { label: "보통", className: "text-amber-500" };
+  return { label: "혼잡", className: "text-rose-500" };
 }
 
 async function fetchPlacesSearch(query: string): Promise<PlaceResult[]> {
@@ -208,8 +237,20 @@ async function fetchCulturalEvents(params: { dtype: string; keyword: string }): 
 }
 
 export default function Home() {
-  const { view, input, history, selectedPlace, regionId, setView, setInput, setHistory, selectPlace, setRegionId } =
-    useAppStore();
+  const {
+    view,
+    input,
+    history,
+    selectedPlace,
+    selectedParkingSpot,
+    regionId,
+    setView,
+    setInput,
+    setHistory,
+    selectPlace,
+    selectParkingSpot,
+    setRegionId,
+  } = useAppStore();
 
   // 서버/클라이언트 초기 렌더가 일치해야 하므로 고정값으로 시작하고, 마운트 후에만 랜덤화한다.
   // 순수 장식용 클라이언트 상태라 전역 스토어로 옮기지 않았다.
@@ -261,8 +302,8 @@ export default function Home() {
   });
 
   const parkingQuery = useQuery({
-    queryKey: ["parking", selectedPlace?.daeguDistrict],
-    queryFn: () => fetchParking(selectedPlace!.daeguDistrict!),
+    queryKey: ["parking", selectedPlace?.daeguDistrict, selectedPlace?.name],
+    queryFn: () => fetchParking(selectedPlace!.daeguDistrict!, selectedPlace!.name),
     enabled: view === "parking" && !!selectedPlace?.daeguDistrict,
   });
 
@@ -309,6 +350,11 @@ export default function Home() {
     if (!place.daeguDistrict) return;
     selectPlace(place);
     setView("parking");
+  }
+
+  function openParkingDetail(spot: ParkingSpotWithDistance) {
+    selectParkingSpot(spot);
+    setView("parking-detail");
   }
 
   function toggleFavorite(index: number) {
@@ -753,7 +799,15 @@ export default function Home() {
 
         {view === "parking" && (
           <>
-            <ScreenHeader title={`${selectedPlace?.daeguDistrict ?? ""} 주차장`} onBack={() => setView("detail")} />
+            <ScreenHeader
+              title={`${selectedPlace?.name ?? ""} 주차 정보`}
+              onBack={() => setView("detail")}
+              right={
+                <span className="p-1 text-slate-300">
+                  <Icon name="heart" className="h-[22px] w-[22px]" />
+                </span>
+              }
+            />
             <div className="flex flex-col gap-3 px-5">
               {parkingQuery.isLoading && (
                 <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
@@ -761,56 +815,186 @@ export default function Home() {
                   <p className="text-[14px] text-muted">주차장 조회 중...</p>
                 </div>
               )}
-              {!parkingQuery.isLoading && parkingQuery.data?.length === 0 && (
+              {!parkingQuery.isLoading && parkingQuery.data?.spots.length === 0 && (
                 <p className="px-1 text-[14px] text-muted">주차장 정보를 찾을 수 없습니다.</p>
               )}
-              {!parkingQuery.isLoading &&
-                parkingQuery.data?.map((s, i) => (
-                  <div key={i} className="rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[16px] font-bold text-ink">{s.name}</div>
-                        <div className="mt-0.5 text-[13px] text-muted">{s.address}</div>
-                      </div>
-                      {s.remainingSpaces !== null ? (
-                        <span className="shrink-0 rounded-full bg-mint-bg px-2.5 py-1 text-[12px] font-semibold text-accent">
-                          실시간
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[12px] text-slate-400">
-                          정보 없음
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2.5 flex items-end gap-4">
-                      <div>
-                        <div className="text-[11px] text-muted">총 주차면</div>
-                        <div className="text-[18px] font-bold text-ink-soft">{s.capacity}면</div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-muted">실시간 잔여</div>
-                        <div className={`text-[18px] font-bold ${s.remainingSpaces !== null ? "text-accent" : "text-slate-300"}`}>
-                          {s.remainingSpaces !== null ? `${s.remainingSpaces}면` : "—"}
-                        </div>
-                      </div>
-                      <div className="ml-auto text-right">
-                        <div className="text-[11px] text-muted">요금</div>
-                        <div className="text-[14px] font-medium text-ink-soft">{s.fee}</div>
-                      </div>
-                    </div>
-                    {s.latitude !== null && s.longitude !== null && (
-                      <a
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${s.latitude},${s.longitude}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-3 flex items-center justify-center gap-1.5 rounded-full border border-hairline py-2 text-[13px] font-medium text-ink-soft"
-                      >
-                        <Icon name="pin" className="h-4 w-4" />
-                        길찾기
-                      </a>
-                    )}
+
+              {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.destination && (
+                <KakaoMap
+                  center={parkingQuery.data.destination}
+                  destinationLabel={selectedPlace?.name ?? ""}
+                  spots={parkingQuery.data.spots
+                    .filter((s) => s.latitude !== null && s.longitude !== null)
+                    .map((s) => ({
+                      id: s.id,
+                      name: s.name,
+                      latitude: s.latitude!,
+                      longitude: s.longitude!,
+                      walkMinutes: s.walkMinutes,
+                    }))}
+                />
+              )}
+
+              {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.spots.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between px-1 pt-1">
+                    <h2 className="flex items-center gap-1 text-[15px] font-bold text-ink">
+                      주차장 목록
+                      <Icon name="info" className="h-3.5 w-3.5 text-slate-300" />
+                    </h2>
+                    {parkingQuery.data.destination && <span className="text-[13px] text-muted">거리순</span>}
                   </div>
-                ))}
+
+                  <div className="flex flex-col gap-2.5">
+                    {parkingQuery.data.spots.map((s) => {
+                      const occ = occupancyLabel(s);
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => openParkingDetail(s)}
+                          className="flex w-full items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+                        >
+                          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
+                            P
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-[16px] font-bold text-ink">{s.name}</span>
+                              {s.ownerType && (
+                                <span className="shrink-0 rounded-full bg-mint-bg px-2 py-0.5 text-[11px] font-medium text-accent">
+                                  {s.ownerType}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 truncate text-[13px] text-muted">
+                              {s.walkMinutes !== null && `도보 ${s.walkMinutes}분 (${s.distanceMeters}m)`}
+                              {s.operatingHours && (s.walkMinutes !== null ? ` · 운영 ${s.operatingHours}` : `운영 ${s.operatingHours}`)}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            {occ && <div className={`text-[14px] font-bold ${occ.className}`}>{occ.label}</div>}
+                            <div className="mt-0.5 text-[13px] text-muted">
+                              {s.remainingSpaces ?? "-"} / {s.capacity}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex gap-2 rounded-2xl bg-slate-50 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
+                    <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+                    <p>주차 요금 및 운영시간은 변동될 수 있어요. 방문 전 현장 안내를 확인해 주세요.</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
+        {view === "parking-detail" && selectedParkingSpot && (
+          <>
+            <ScreenHeader title={selectedParkingSpot.name} onBack={() => setView("parking")} />
+            <div className="flex flex-col gap-3 px-5">
+              <div className="flex h-48 w-full items-center justify-center rounded-2xl bg-slate-100 text-[13px] text-slate-400">
+                사진 영역
+              </div>
+
+              <div className="rounded-2xl bg-white px-4 py-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
+                    P
+                  </div>
+                  <h2 className="min-w-0 truncate text-[18px] font-bold text-ink">{selectedParkingSpot.name}</h2>
+                  {selectedParkingSpot.ownerType && (
+                    <span className="shrink-0 rounded-full bg-mint-bg px-2 py-0.5 text-[11px] font-medium text-accent">
+                      {selectedParkingSpot.ownerType}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 text-[13px] text-muted">{selectedParkingSpot.address}</div>
+              </div>
+
+              <div className="rounded-2xl bg-mint-bg px-4 py-4">
+                <div className="text-[13px] text-muted">현재 주차 여유</div>
+                <div className="mt-1 flex items-end justify-between">
+                  {(() => {
+                    const occ = occupancyLabel(selectedParkingSpot);
+                    return occ ? (
+                      <span className={`text-[18px] font-bold ${occ.className}`}>{occ.label}</span>
+                    ) : (
+                      <span className="text-[14px] text-slate-400">정보 없음</span>
+                    );
+                  })()}
+                  <span className="text-[20px] font-bold text-ink">
+                    {selectedParkingSpot.remainingSpaces ?? "-"} / {selectedParkingSpot.capacity}면
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col divide-y divide-hairline rounded-2xl bg-white px-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                <div className="flex items-start gap-3 py-3.5">
+                  <Icon name="clock" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-mint-mid" />
+                  <div>
+                    <div className="text-[12px] text-muted">운영시간</div>
+                    <div className="mt-0.5 text-[14px] text-ink-soft">
+                      {selectedParkingSpot.operatingHours ?? "정보 없음"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 py-3.5">
+                  <Icon name="bookmark" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-mint-mid" />
+                  <div>
+                    <div className="text-[12px] text-muted">주차 요금</div>
+                    <div className="mt-0.5 flex flex-col text-[14px] text-ink-soft">
+                      {selectedParkingSpot.feeLines?.map((line, i) => <span key={i}>{line}</span>) ?? "정보 없음"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 py-3.5">
+                  <Icon name="parking" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-mint-mid" />
+                  <div>
+                    <div className="text-[12px] text-muted">주차 형태</div>
+                    <div className="mt-0.5 text-[14px] text-ink-soft">
+                      {selectedParkingSpot.lotType ? `${selectedParkingSpot.lotType} 주차장` : "정보 없음"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 py-3.5">
+                  <Icon name="card" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-mint-mid" />
+                  <div>
+                    <div className="text-[12px] text-muted">결제 방법</div>
+                    <div className="mt-0.5 text-[14px] text-ink-soft">
+                      {selectedParkingSpot.paymentMethod ?? "정보 없음"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {selectedParkingSpot.remark && (
+                <div className="flex gap-2 rounded-2xl bg-slate-50 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
+                  <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+                  <p>{selectedParkingSpot.remark}</p>
+                </div>
+              )}
+
+              <button
+                onClick={() => setView("parking")}
+                className="flex items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white"
+              >
+                <Icon name="pin" className="h-4 w-4" />
+                지도에서 보기
+              </button>
+              {selectedParkingSpot.latitude !== null && selectedParkingSpot.longitude !== null && (
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${selectedParkingSpot.latitude},${selectedParkingSpot.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 rounded-full border border-hairline py-3 text-[14px] font-medium text-ink-soft"
+                >
+                  외부 지도 앱으로 길찾기
+                </a>
+              )}
             </div>
           </>
         )}

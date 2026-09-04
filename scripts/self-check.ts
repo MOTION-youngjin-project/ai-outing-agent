@@ -7,7 +7,14 @@ import assert from "node:assert/strict";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
 import { stripTags } from "../src/lib/tools/culturePortal.ts";
-import { formatFee } from "../src/lib/tools/parking.ts";
+import {
+  formatFee,
+  formatOperatingHours,
+  formatFeeLines,
+  formatPaymentMethod,
+  haversineMeters,
+  estimateWalkMinutes,
+} from "../src/lib/tools/parking.ts";
 import { latestBaseDateTime } from "../src/lib/tools/weather.ts";
 import { pickBestPlaceMatch, pickRegionForAddress, inferEnvironmentMode } from "../src/lib/services/matching.ts";
 
@@ -109,5 +116,44 @@ check(
   "mixed"
 );
 check("inferEnvironmentMode 신호 없으면 mixed", inferEnvironmentMode({ ...baseRec, message: "좋은 곳이에요" }), "mixed");
+
+// formatOperatingHours — 24시간 코드와 시간대 문자열("0900") 파싱, 둘 다 없으면 null
+check("formatOperatingHours 전일운영", formatOperatingHours({ operHrWkdaySeCd: "전일운영", wkdayOperBgngHr: "", wkdayOperEndHr: "" }), "24시간");
+check(
+  "formatOperatingHours 시간제운영 파싱",
+  formatOperatingHours({ operHrWkdaySeCd: "시간제운영", wkdayOperBgngHr: "0900", wkdayOperEndHr: "1800" }),
+  "09:00 - 18:00"
+);
+check("formatOperatingHours 정보 없음", formatOperatingHours({ operHrWkdaySeCd: null, wkdayOperBgngHr: null, wkdayOperEndHr: null }), null);
+
+// formatFeeLines — 무료 우선, 상세 필드 조합, 둘 다 없으면 한 줄 요약으로 폴백
+check("formatFeeLines 무료", formatFeeLines({ crgLevySeNm: "무료", gnrlFrstCrgLevyHr: null, gnrlFrstCrg: null, gnrlAddCrgLevyHr: null, gnrlMntbyAddCrg: null, gnrlOneDayCrg: null, gnrlOneHrCrg: null }), ["무료"]);
+check(
+  "formatFeeLines 상세 조합",
+  formatFeeLines({ crgLevySeNm: "유료", gnrlFrstCrgLevyHr: "30", gnrlFrstCrg: 0, gnrlAddCrgLevyHr: "10", gnrlMntbyAddCrg: 300, gnrlOneDayCrg: 6000, gnrlOneHrCrg: null }),
+  ["최초 30분 무료", "이후 10분당 300원", "1일 최대 6,000원"]
+);
+check(
+  "formatFeeLines 상세 없으면 한 줄 요약 폴백",
+  formatFeeLines({ crgLevySeNm: null, gnrlFrstCrgLevyHr: null, gnrlFrstCrg: null, gnrlAddCrgLevyHr: null, gnrlMntbyAddCrg: null, gnrlOneDayCrg: null, gnrlOneHrCrg: 3000 }),
+  ["시간당 3000원"]
+);
+
+// formatPaymentMethod — API 원본이 "+"로 구분해서 주는 걸 사람이 읽기 좋게 ", "로 변환
+check("formatPaymentMethod 복수 수단", formatPaymentMethod("현금+신용카드"), "현금, 신용카드");
+check("formatPaymentMethod 정보 없음", formatPaymentMethod(null), null);
+check("formatPaymentMethod 빈 문자열", formatPaymentMethod(""), null);
+
+// haversineMeters — 같은 지점은 0, 위경도 1도(적도 기준 약 111.2km) 근사값 검증
+check("haversineMeters 동일 지점", Math.round(haversineMeters({ latitude: 35.86, longitude: 128.62 }, { latitude: 35.86, longitude: 128.62 })), 0);
+check(
+  "haversineMeters 위도 1도 차이 ≈111.2km",
+  Math.round(haversineMeters({ latitude: 35.0, longitude: 128.0 }, { latitude: 36.0, longitude: 128.0 }) / 1000),
+  111
+);
+
+// estimateWalkMinutes — 최소 1분 보장, 67m/분 환산
+check("estimateWalkMinutes 최소 1분", estimateWalkMinutes(10), 1);
+check("estimateWalkMinutes 120m ≈ 2분", estimateWalkMinutes(120), 2);
 
 console.log(`✓ self-check 통과 (${passed}건)`);
