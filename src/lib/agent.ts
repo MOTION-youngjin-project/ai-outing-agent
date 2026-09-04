@@ -44,7 +44,9 @@ const MODEL_FALLBACK_CHAIN = [
 
 function isRetryableModelError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
-  return /429|RateLimitQuotaExhaustedError|Too Many Requests|404.*no longer available|모델 응답 시간 초과/i.test(
+  // Recursion limit: 2026-09-04 실측 — 모델이 종료 조건 없이 도구 호출을 반복하다 25턴
+  // 제한에 걸리는 경우가 있었음. 모델 자체의 불안정한 동작이라 다음 모델로 넘기는 게 맞다.
+  return /429|RateLimitQuotaExhaustedError|Too Many Requests|404.*no longer available|모델 응답 시간 초과|Recursion limit/i.test(
     message
   );
 }
