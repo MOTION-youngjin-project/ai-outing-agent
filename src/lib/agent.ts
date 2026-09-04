@@ -120,6 +120,65 @@ export async function runAgent(history: ChatTurn[]): Promise<Recommendation> {
   throw lastError;
 }
 
+export type AgentProgressEvent = { type: "tool_start" | "tool_end"; tool: string };
+
+// runAgent와 로직은 같지만(모델 폴백 체인, 타임아웃), agent.invoke() 대신
+// agent.streamEvents(v3)로 도구 호출 시작/종료를 onProgress로 실시간 통지한다.
+// 응답 자체가 느린 게 아니라 "화면에 아무 진행 상황도 안 보여서" 체감 속도가 느렸던
+// 문제(2026-09-04 사용자 피드백)를 풀기 위한 추가 함수 — 기존 runAgent는 그대로 둔다.
+export async function runAgentStream(
+  history: ChatTurn[],
+  onProgress?: (event: AgentProgressEvent) => void
+): Promise<Recommendation> {
+  let lastError: unknown;
+
+  for (const model of MODEL_FALLBACK_CHAIN) {
+    const llm = new ChatGoogleGenerativeAI({
+      model,
+      apiKey: process.env.GEMINI_API_KEY,
+      temperature: 0,
+    });
+
+    const agent = createAgent({
+      model: llm,
+      tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool, parkingTool],
+      systemPrompt: SYSTEM_PROMPT,
+      responseFormat: RecommendationSchema,
+    });
+
+    try {
+      const run = await agent.streamEvents({ messages: history }, { version: "v3" });
+
+      if (onProgress) {
+        // 도구 호출 스트림은 최종 응답(run.output)과 별개로 흘러오므로 fire-and-forget으로
+        // 소비한다 — 여기서 나는 에러는 아래 run.output 대기 쪽에서 어차피 걸러진다.
+        (async () => {
+          try {
+            for await (const call of run.toolCalls) {
+              onProgress({ type: "tool_start", tool: call.name });
+              call.status.then(
+                () => onProgress({ type: "tool_end", tool: call.name }),
+                () => onProgress({ type: "tool_end", tool: call.name })
+              );
+            }
+          } catch {
+            // ignore — 최종 결과 처리는 아래에서 계속됨
+          }
+        })();
+      }
+
+      const finalState = await withTimeout(run.output, 25000);
+      return finalState.structuredResponse as Recommendation;
+    } catch (err) {
+      lastError = err;
+      if (!isRetryableModelError(err)) throw err;
+      console.warn(`[agent] ${model} 사용 불가, 다음 모델로 재시도`);
+    }
+  }
+
+  throw lastError;
+}
+
 const SUGGEST_SYSTEM_PROMPT =
   "다음은 사용자와 나들이 추천 AI 에이전트의 대화 내역이다. 이 맥락을 이어서 사용자가 다음에 입력할 법한 " +
   "짧고 자연스러운 후속 메시지를 하나만 제안해라. 방금 추천받은 내용에 대한 후속 질문(예: 거기 주차는 어디에 " +

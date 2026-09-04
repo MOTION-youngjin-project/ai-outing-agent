@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeSido } from "@/lib/region";
-import { runAgent, type ChatTurn, type Recommendation } from "@/lib/agent";
+import { runAgentStream, type AgentProgressEvent, type ChatTurn, type Recommendation } from "@/lib/agent";
 import { getCachedWeather } from "./weather";
 import { getCachedAirQuality } from "./airQuality";
 import { resolvePlaceByName } from "./places";
@@ -14,18 +14,23 @@ export interface RecommendationRunResult {
   recommendationRouteId: string | null;
 }
 
+export type RecommendationProgressEvent = AgentProgressEvent | { type: "resolving_places" };
+
 // ponytail: "이 추천이 유효하다고 볼 기간" — 24시간으로 잡음, 조정 가능.
 const AGENT_RUN_TTL_MS = 24 * 60 * 60 * 1000;
 
 // 작업 순서표 13번. 기존 runAgent(LLM)의 결과는 그대로 쓰고(agent.ts는 안 건드림),
 // 그 결과를 agent_runs/recommendation_routes/route_places에 기록만 새로 붙인다.
-export async function createRecommendationRun(history: ChatTurn[]): Promise<RecommendationRunResult> {
+export async function createRecommendationRun(
+  history: ChatTurn[],
+  onProgress?: (event: RecommendationProgressEvent) => void
+): Promise<RecommendationRunResult> {
   const regionName = normalizeSido(history.map((h) => h.content).join(" "));
   const region = regionName ? await findOrCreateSidoRegion(regionName) : null;
 
   let recommendation: Recommendation;
   try {
-    recommendation = await runAgent(history);
+    recommendation = await runAgentStream(history, onProgress);
   } catch (err) {
     await prisma.agentRun.create({
       data: {
@@ -62,18 +67,21 @@ export async function createRecommendationRun(history: ChatTurn[]): Promise<Reco
   // (placeId가 필수 FK라 실제 Place 없이는 만들 수 없음) — 그런 곳이 있으면
   // agent_runs.status를 partial로 표시해서 "LLM은 N곳을 추천했지만 실제 저장된
   // route_places는 그보다 적을 수 있다"는 걸 나중에 알 수 있게 한다.
-  const resolvedPlaces: { place: Place | null; reason: string }[] = [];
-  for (const p of recommendation.places) {
-    // 카카오 API가 실패해도(네트워크/쿼터) 이미 나온 LLM 추천 자체는 살려야 한다 —
-    // 이 장소 하나만 못 찾은 것으로 취급하고 전체 요청을 실패시키지 않는다.
-    let place: Place | null = null;
-    try {
-      place = await resolvePlaceByName(p.name, regionName);
-    } catch (err) {
-      console.error(`장소 매칭 실패(${p.name}):`, err);
-    }
-    resolvedPlaces.push({ place, reason: p.reason });
-  }
+  onProgress?.({ type: "resolving_places" });
+  // 장소마다 독립적인 카카오 검색이라 순차로 기다릴 이유가 없다 — 병렬로 처리.
+  const resolvedPlaces = await Promise.all(
+    recommendation.places.map(async (p) => {
+      // 카카오 API가 실패해도(네트워크/쿼터) 이미 나온 LLM 추천 자체는 살려야 한다 —
+      // 이 장소 하나만 못 찾은 것으로 취급하고 전체 요청을 실패시키지 않는다.
+      let place: Place | null = null;
+      try {
+        place = await resolvePlaceByName(p.name, regionName);
+      } catch (err) {
+        console.error(`장소 매칭 실패(${p.name}):`, err);
+      }
+      return { place, reason: p.reason };
+    })
+  );
   const unresolvedCount = resolvedPlaces.filter((r) => !r.place).length;
 
   const agentRun = await prisma.agentRun.create({
