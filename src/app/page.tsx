@@ -81,6 +81,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
     ),
     bookmark: <path d="M6.5 4h11a1 1 0 011 1v15l-6.5-4-6.5 4V5a1 1 0 011-1z" />,
     send: <path d="M4.5 12l15-7.5-4 15-3.6-5.6L4.5 12z" />,
+    drop: <path d="M12 3.5c3 4 6 7.4 6 11a6 6 0 01-12 0c0-3.6 3-7 6-11z" />,
   };
   return (
     <svg
@@ -120,6 +121,17 @@ const MYPAGE_SAVED_PLACES = [
   { name: "대구미술관", category: "미술관 · 수성구" },
   { name: "앞산 카페거리", category: "카페 · 남구" },
 ];
+const MYPAGE_PREFERENCES = [
+  { icon: "heart", label: "데이트" },
+  { icon: "home", label: "실내 우선" },
+  { icon: "won", label: "저비용" },
+  { icon: "drop", label: "조용한 곳" },
+];
+const MYPAGE_RECENT_QUESTIONS = [
+  { question: "여자친구랑 분위기 좋은 곳 추천해줘", date: "2026.09.03 오후 7:30" },
+  { question: "주차 편한 실내 데이트 코스", date: "2026.09.01 오후 3:45" },
+];
+const MYPAGE_SETTINGS_MENU = ["알림 설정", "방문 예정", "앱 설정", "로그아웃"];
 
 const SUGGESTIONS = [
   "애기랑 나갈만한 곳 있어? 유모차도 가지고 갈 거야",
@@ -880,6 +892,67 @@ export default function Home() {
                       <div className="text-[16px] font-bold text-ink">{p.name}</div>
                       <div className="mt-0.5 text-[13px] text-muted">{p.category}</div>
                     </div>
+                    <Icon name="next" className="h-5 w-5 text-slate-300" />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between px-1 pt-1">
+                <h2 className="text-[15px] font-bold text-ink">선호 조건</h2>
+                <span className="flex items-center gap-0.5 text-[13px] text-muted">
+                  전체 보기
+                  <Icon name="next" className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {MYPAGE_PREFERENCES.map((pref) => (
+                  <span
+                    key={pref.label}
+                    className="flex items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+                  >
+                    {pref.icon === "won" ? (
+                      <span className="text-[13px] font-semibold text-mint-mid">₩</span>
+                    ) : (
+                      <Icon name={pref.icon} className="h-3.5 w-3.5 text-mint-mid" />
+                    )}
+                    {pref.label}
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between px-1 pt-1">
+                <h2 className="text-[15px] font-bold text-ink">최근 질문</h2>
+                <span className="flex items-center gap-0.5 text-[13px] text-muted">
+                  전체 보기
+                  <Icon name="next" className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                {MYPAGE_RECENT_QUESTIONS.map((q, i) => (
+                  <div
+                    key={q.question}
+                    className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
+                  >
+                    <Icon name="sparkle" className="h-5 w-5 shrink-0 text-mint-mid" />
+                    <div className="flex-1">
+                      <div className="text-[14px] font-medium text-ink">{q.question}</div>
+                      <div className="mt-0.5 text-[12px] text-muted">{q.date}</div>
+                    </div>
+                    <Icon name="next" className="h-5 w-5 text-slate-300" />
+                  </div>
+                ))}
+              </div>
+
+              <h2 className="px-1 pt-1 text-[15px] font-bold text-ink">설정</h2>
+              <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                {MYPAGE_SETTINGS_MENU.map((label, i) => (
+                  <div
+                    key={label}
+                    className={`flex items-center justify-between px-4 py-3.5 text-[14px] font-medium text-ink ${
+                      i > 0 ? "border-t border-hairline" : ""
+                    }`}
+                  >
+                    {label}
                     <Icon name="next" className="h-5 w-5 text-slate-300" />
                   </div>
                 ))}
