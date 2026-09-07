@@ -9,7 +9,7 @@ declare global {
       maps: {
         load: (cb: () => void) => void;
         Map: new (container: HTMLElement, options: { center: unknown; level: number }) => {
-          setBounds: (bounds: unknown) => void;
+          setBounds: (bounds: unknown, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number) => void;
         };
         LatLng: new (lat: number, lng: number) => unknown;
         LatLngBounds: new () => { extend: (latlng: unknown) => void };
@@ -113,7 +113,9 @@ export function KakaoMap({
 
         // 목적지 기준 고정 줌 대신, 목적지+모든 주차장이 한 화면에 들어오도록 자동 조정
         // (2026-09-04 실측 — 주차장이 5km+ 떨어져 있어 마커가 화면 밖으로 벗어나는 문제).
-        if (spots.length > 0) map.setBounds(bounds);
+        // 위쪽 패딩(40px)은 yAnchor 1.3으로 핀 위에 튀어나오는 라벨 pill이 뷰포트 경계에서
+        // 잘리는 문제(2026-09-07 리뷰 지적) 방지용.
+        if (spots.length > 0) map.setBounds(bounds, 40, 20, 20, 20);
       })
       .catch(() => {
         if (!cancelled && errorRef.current) {
