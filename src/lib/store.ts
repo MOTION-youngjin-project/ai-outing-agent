@@ -3,7 +3,16 @@ import type { ChatTurn, Recommendation } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
 
 export type Place = NonNullable<Recommendation["places"]>[number];
-export type View = "input" | "loading" | "results" | "detail" | "parking" | "parking-detail" | "mypage";
+export type View =
+  | "input"
+  | "loading"
+  | "results"
+  | "detail"
+  | "parking"
+  | "parking-detail"
+  | "mypage"
+  | "login"
+  | "signup";
 
 interface AppState {
   view: View;

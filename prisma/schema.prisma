@@ -146,11 +146,35 @@ model Place {
   routeStops                 RoutePlace[]
   anchoredParkingSuggestions RouteParkingRecommendation[] @relation("ParkingAnchorPlace")
   templateStops              PopularRouteTemplatePlace[]
+  savedByUsers               SavedPlace[]
 
   @@index([normalizedName, latitude, longitude])
   @@index([regionId, isActive])
   @@index([latitude, longitude])
   @@map("places")
+}
+
+model User {
+  id           BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  email        String       @unique @db.VarChar(255)
+  passwordHash String       @map("password_hash") @db.VarChar(255)
+  name         String?      @db.VarChar(100)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamp(0)
+  savedPlaces  SavedPlace[]
+
+  @@map("users")
+}
+
+model SavedPlace {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt   @map("user_id") @db.UnsignedBigInt
+  placeId   BigInt   @map("place_id") @db.UnsignedBigInt
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, placeId])
+  @@map("saved_places")
 }
 
 model PlaceSourceRecord {

@@ -13,6 +13,9 @@ export type GeoPoint = { latitude: number; longitude: number };
 export type EnrichedPlace = NonNullable<Recommendation["places"]>[number] & {
   category: string | null;
   distanceKm: number | null;
+  // 찜하기(SavedPlace) 저장/삭제 시 실제 DB Place를 가리키는 데 쓴다. 카카오 검색으로
+  // 못 찾은 장소는 null — 저장 버튼을 비활성화해야 한다(가리킬 실제 장소가 없음).
+  placeId: string | null;
 };
 export type EnrichedRecommendation = Omit<Recommendation, "places"> & { places?: EnrichedPlace[] };
 
@@ -150,6 +153,7 @@ export async function createRecommendationRun(
       ...p,
       category: extractCategoryLabel(resolved?.categorySummary ?? null),
       distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
+      placeId: resolved?.publicId ?? null,
     };
   });
 
