@@ -72,7 +72,7 @@ const DAEGU_DISTRICTS = [
   "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
 ] as const;
 
-const PLACE_TAGS = ["실내", "야외", "데이트", "저비용"] as const;
+export const PLACE_TAGS = ["실내", "야외", "데이트", "저비용"] as const;
 
 const PlaceSchema = z.object({
   name: z.string().describe("장소 이름"),

@@ -132,20 +132,25 @@ function ScreenHeader({ title, onBack, right }: { title: string; onBack?: () => 
   );
 }
 
-// ponytail: 선호 조건/최근 질문은 아직 이번 스코프 밖(로그인/저장만 처리) — 디자인을
-// 화면에 반영하기 위한 더미 데이터로 남겨둠. "저장한 장소"는 실제 데이터로 교체됨.
-const MYPAGE_STATS = { savedPlaces: 12, recentRecommendations: 8, savedParking: 3 };
-const MYPAGE_PREFERENCES = [
-  { icon: "heart", label: "데이트" },
-  { icon: "home", label: "실내 우선" },
-  { icon: "won", label: "저비용" },
-  { icon: "drop", label: "조용한 곳" },
-];
-const MYPAGE_RECENT_QUESTIONS = [
-  { question: "여자친구랑 분위기 좋은 곳 추천해줘", date: "2026.09.03 오후 7:30" },
-  { question: "주차 편한 실내 데이트 코스", date: "2026.09.01 오후 3:45" },
-];
+// ponytail: "최근 추천"/"주차 저장" 통계는 여전히 스코프 밖이라 더미로 남겨둠.
+const MYPAGE_STATS = { recentRecommendations: 8, savedParking: 3 };
 const MYPAGE_SETTINGS_MENU = ["알림 설정", "방문 예정", "앱 설정", "로그아웃"];
+
+// FILTER_LABELS(agent.ts의 PLACE_TAGS)와 같은 값 — 선호 조건 칩에 쓸 아이콘만 매핑.
+const PREFERENCE_ICONS: Record<(typeof FILTER_LABELS)[number], string> = {
+  실내: "home",
+  야외: "sun",
+  데이트: "heart",
+  저비용: "won",
+};
+
+function formatKoreanDateTime(iso: string): string {
+  const d = new Date(iso);
+  const ampm = d.getHours() < 12 ? "오전" : "오후";
+  const hour12 = d.getHours() % 12 === 0 ? 12 : d.getHours() % 12;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${ampm} ${hour12}:${pad(d.getMinutes())}`;
+}
 
 const TOOL_LABELS: Record<string, string> = {
   get_air_quality: "대기질 확인 중",
@@ -318,6 +323,30 @@ async function fetchSavedPlaces(): Promise<SavedPlaceResult[]> {
   return data.data ?? [];
 }
 
+async function fetchPreferences(): Promise<string[]> {
+  const res = await fetch("/api/preferences");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.tags ?? [];
+}
+
+async function putPreferences(tags: string[]): Promise<void> {
+  await fetch("/api/preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tags }),
+  });
+}
+
+type RecentQuestion = { id: string; question: string; askedAt: string };
+
+async function fetchRecentQuestions(): Promise<RecentQuestion[]> {
+  const res = await fetch("/api/recent-questions");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
 export default function Home() {
   const {
     view,
@@ -351,6 +380,27 @@ export default function Home() {
     queryFn: fetchSavedPlaces,
     enabled: !!session,
   });
+  const preferencesQuery = useQuery({
+    queryKey: ["preferences"],
+    queryFn: fetchPreferences,
+    enabled: !!session,
+  });
+  const recentQuestionsQuery = useQuery({
+    queryKey: ["recent-questions"],
+    queryFn: fetchRecentQuestions,
+    enabled: !!session,
+  });
+
+  async function togglePreference(tag: (typeof FILTER_LABELS)[number]) {
+    if (!session) {
+      setView("login");
+      return;
+    }
+    const current = preferencesQuery.data ?? [];
+    const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag];
+    queryClient.setQueryData(["preferences"], next);
+    await putPreferences(next);
+  }
 
   // 로그인/회원가입 폼은 이 화면 밖에서 쓸 일이 없는 순수 로컬 상태.
   const [authEmail, setAuthEmail] = useState("");
@@ -468,6 +518,7 @@ export default function Home() {
       setHistory(historyWithReply);
       setView(rec.needsMoreInfo ? "input" : "results");
       suggestMutation.mutate(historyWithReply);
+      if (session) queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
     },
     onError: () => setView("input"),
   });
@@ -1377,7 +1428,7 @@ export default function Home() {
                 )}
                 <div className="mt-4 flex border-t border-hairline pt-3">
                   {[
-                    { icon: "bookmark", label: "저장한 장소", value: session ? (savedPlacesQuery.data?.length ?? 0) : MYPAGE_STATS.savedPlaces },
+                    { icon: "bookmark", label: "저장한 장소", value: session ? (savedPlacesQuery.data?.length ?? 0) : 0 },
                     { icon: "clock", label: "최근 추천", value: MYPAGE_STATS.recentRecommendations },
                     { icon: "parking", label: "주차 저장", value: MYPAGE_STATS.savedParking },
                   ].map((stat, i) => (
@@ -1432,30 +1483,35 @@ export default function Home() {
                   ))}
               </div>
 
-              <div className="flex items-center justify-between px-1 pt-1">
-                <h2 className="text-[15px] font-bold text-ink">선호 조건</h2>
-                <span
-                  title="준비 중인 기능입니다"
-                  className="flex cursor-not-allowed items-center gap-0.5 text-[13px] text-muted/70"
-                >
-                  전체 보기
-                  <Icon name="next" className="h-3.5 w-3.5" />
-                </span>
-              </div>
+              <h2 className="px-1 pt-1 text-[15px] font-bold text-ink">선호 조건</h2>
               <div className="flex flex-wrap gap-2">
-                {MYPAGE_PREFERENCES.map((pref) => (
-                  <span
-                    key={pref.label}
-                    className="flex items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
-                  >
-                    {pref.icon === "won" ? (
-                      <span className="text-[13px] font-semibold text-mint-mid">₩</span>
-                    ) : (
-                      <Icon name={pref.icon} className="h-3.5 w-3.5 text-mint-mid" />
-                    )}
-                    {pref.label}
-                  </span>
-                ))}
+                {!session && (
+                  <button onClick={() => setView("login")} className="text-[13px] text-muted">
+                    로그인하면 선호 조건을 저장할 수 있어요.
+                  </button>
+                )}
+                {session &&
+                  FILTER_LABELS.map((tag) => {
+                    const active = (preferencesQuery.data ?? []).includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => togglePreference(tag)}
+                        className={
+                          active
+                            ? "flex items-center gap-1.5 rounded-full border border-accent bg-mint-bg px-3.5 py-1.5 text-[13px] font-semibold text-accent"
+                            : "flex items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+                        }
+                      >
+                        {tag === "저비용" ? (
+                          <span className="text-[13px] font-semibold text-mint-mid">₩</span>
+                        ) : (
+                          <Icon name={PREFERENCE_ICONS[tag]} className="h-3.5 w-3.5 text-mint-mid" />
+                        )}
+                        {tag}
+                      </button>
+                    );
+                  })}
               </div>
 
               <div className="flex items-center justify-between px-1 pt-1">
@@ -1469,19 +1525,26 @@ export default function Home() {
                 </span>
               </div>
               <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-                {MYPAGE_RECENT_QUESTIONS.map((q, i) => (
-                  <div
-                    key={q.question}
-                    className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
-                  >
-                    <Icon name="sparkle" className="h-5 w-5 shrink-0 text-mint-mid" />
-                    <div className="flex-1">
-                      <div className="text-[14px] font-medium text-ink">{q.question}</div>
-                      <div className="mt-0.5 text-[12px] text-muted">{q.date}</div>
+                {!session && (
+                  <p className="px-4 py-4 text-[14px] text-muted">로그인하면 최근 질문 기록이 여기 보여요.</p>
+                )}
+                {session && recentQuestionsQuery.data?.length === 0 && (
+                  <p className="px-4 py-4 text-[14px] text-muted">아직 질문 기록이 없어요.</p>
+                )}
+                {session &&
+                  (recentQuestionsQuery.data ?? []).map((q, i) => (
+                    <div
+                      key={q.id}
+                      className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
+                    >
+                      <Icon name="sparkle" className="h-5 w-5 shrink-0 text-mint-mid" />
+                      <div className="flex-1">
+                        <div className="text-[14px] font-medium text-ink">{q.question}</div>
+                        <div className="mt-0.5 text-[12px] text-muted">{formatKoreanDateTime(q.askedAt)}</div>
+                      </div>
+                      <Icon name="next" className="h-5 w-5 text-slate-300" />
                     </div>
-                    <Icon name="next" className="h-5 w-5 text-slate-300" />
-                  </div>
-                ))}
+                  ))}
               </div>
 
               <h2 className="px-1 pt-1 text-[15px] font-bold text-ink">설정</h2>

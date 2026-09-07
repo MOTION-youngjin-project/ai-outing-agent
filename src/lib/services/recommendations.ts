@@ -37,10 +37,15 @@ const AGENT_RUN_TTL_MS = 24 * 60 * 60 * 1000;
 export async function createRecommendationRun(
   history: ChatTurn[],
   onProgress?: (event: RecommendationProgressEvent) => void,
-  origin?: GeoPoint | null
+  origin?: GeoPoint | null,
+  userId?: string | null
 ): Promise<RecommendationRunResult> {
   const regionName = normalizeSido(history.map((h) => h.content).join(" "));
   const region = regionName ? await findOrCreateSidoRegion(regionName) : null;
+  // 마이페이지 "최근 질문"에 그대로 보여줄 사용자 원문 — history의 마지막 turn이
+  // 이번 요청에서 사용자가 실제로 입력한 문장이다(이전 turn은 이미 지난 질문).
+  const userQuery = history.at(-1)?.content?.slice(0, 1000);
+  const userIdBigInt = userId ? BigInt(userId) : undefined;
 
   let recommendation: Recommendation;
   try {
@@ -48,6 +53,8 @@ export async function createRecommendationRun(
   } catch (err) {
     await prisma.agentRun.create({
       data: {
+        userId: userIdBigInt,
+        userQuery,
         requestMode: "question",
         currentRegionId: region?.id,
         status: "failed",
@@ -62,6 +69,8 @@ export async function createRecommendationRun(
   if (recommendation.needsMoreInfo || !recommendation.places) {
     const agentRun = await prisma.agentRun.create({
       data: {
+        userId: userIdBigInt,
+        userQuery,
         requestMode: "question",
         currentRegionId: region?.id,
         status: "completed",
@@ -104,6 +113,8 @@ export async function createRecommendationRun(
 
   const agentRun = await prisma.agentRun.create({
     data: {
+      userId: userIdBigInt,
+      userQuery,
       requestMode: "question",
       currentRegionId: region?.id,
       status: unresolvedCount > 0 ? "partial" : "completed",

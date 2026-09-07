@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRecommendationRun, type GeoPoint, type RecommendationProgressEvent } from "@/lib/services/recommendations";
 import type { ChatTurn } from "@/lib/agent";
+import { auth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "history가 필요합니다." }, { status: 400 });
   }
   const validOrigin = parseOrigin(origin);
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
         }
       };
       try {
-        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin);
+        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId);
         emit({ type: "result", result });
       } catch (err) {
         console.error(err);
