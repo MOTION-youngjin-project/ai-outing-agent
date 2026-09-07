@@ -1122,7 +1122,10 @@ export default function Home() {
 
               <div className="flex items-center justify-between px-1 pt-1">
                 <h2 className="text-[15px] font-bold text-ink">저장한 장소</h2>
-                <span className="flex items-center gap-0.5 text-[13px] text-muted">
+                <span
+                  title="준비 중인 기능입니다"
+                  className="flex cursor-not-allowed items-center gap-0.5 text-[13px] text-muted/70"
+                >
                   전체 보기
                   <Icon name="next" className="h-3.5 w-3.5" />
                 </span>
@@ -1147,7 +1150,10 @@ export default function Home() {
 
               <div className="flex items-center justify-between px-1 pt-1">
                 <h2 className="text-[15px] font-bold text-ink">선호 조건</h2>
-                <span className="flex items-center gap-0.5 text-[13px] text-muted">
+                <span
+                  title="준비 중인 기능입니다"
+                  className="flex cursor-not-allowed items-center gap-0.5 text-[13px] text-muted/70"
+                >
                   전체 보기
                   <Icon name="next" className="h-3.5 w-3.5" />
                 </span>
@@ -1170,7 +1176,10 @@ export default function Home() {
 
               <div className="flex items-center justify-between px-1 pt-1">
                 <h2 className="text-[15px] font-bold text-ink">최근 질문</h2>
-                <span className="flex items-center gap-0.5 text-[13px] text-muted">
+                <span
+                  title="준비 중인 기능입니다"
+                  className="flex cursor-not-allowed items-center gap-0.5 text-[13px] text-muted/70"
+                >
                   전체 보기
                   <Icon name="next" className="h-3.5 w-3.5" />
                 </span>
@@ -1196,7 +1205,8 @@ export default function Home() {
                 {MYPAGE_SETTINGS_MENU.map((label, i) => (
                   <div
                     key={label}
-                    className={`flex items-center justify-between px-4 py-3.5 text-[14px] font-medium text-ink ${
+                    title="준비 중인 기능입니다"
+                    className={`flex cursor-not-allowed items-center justify-between px-4 py-3.5 text-[14px] font-medium text-ink/70 ${
                       i > 0 ? "border-t border-hairline" : ""
                     }`}
                   >

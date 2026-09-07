@@ -44,7 +44,9 @@ const MODEL_FALLBACK_CHAIN = [
 
 function isRetryableModelError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
-  return /429|RateLimitQuotaExhaustedError|Too Many Requests|404.*no longer available|모델 응답 시간 초과/i.test(
+  // Recursion limit: 2026-09-04 실측 — 모델이 종료 조건 없이 도구 호출을 반복하다 25턴
+  // 제한에 걸리는 경우가 있었음. 모델 자체의 불안정한 동작이라 다음 모델로 넘기는 게 맞다.
+  return /429|RateLimitQuotaExhaustedError|Too Many Requests|404.*no longer available|모델 응답 시간 초과|Recursion limit/i.test(
     message
   );
 }
@@ -131,8 +133,11 @@ export async function runAgentStream(
   onProgress?: (event: AgentProgressEvent) => void
 ): Promise<Recommendation> {
   let lastError: unknown;
+  let currentAttempt = 0;
 
   for (const model of MODEL_FALLBACK_CHAIN) {
+    const attempt = ++currentAttempt;
+
     const llm = new ChatGoogleGenerativeAI({
       model,
       apiKey: process.env.GEMINI_API_KEY,
@@ -152,13 +157,17 @@ export async function runAgentStream(
       if (onProgress) {
         // 도구 호출 스트림은 최종 응답(run.output)과 별개로 흘러오므로 fire-and-forget으로
         // 소비한다 — 여기서 나는 에러는 아래 run.output 대기 쪽에서 어차피 걸러진다.
+        // attempt 번호로 가드: 재귀 제한 등으로 다음 모델로 넘어간 뒤에도 이전 시도의
+        // tool call이 나중에 끝나면서 onProgress를 부르면, 새 시도가 같은 도구를 아직
+        // 호출 중인데 UI에 완료로 잘못 표시되는 문제(2026-09-07 리뷰 지적)를 막는다.
         (async () => {
           try {
             for await (const call of run.toolCalls) {
+              if (attempt !== currentAttempt) break;
               onProgress({ type: "tool_start", tool: call.name });
               call.status.then(
-                () => onProgress({ type: "tool_end", tool: call.name }),
-                () => onProgress({ type: "tool_end", tool: call.name })
+                () => attempt === currentAttempt && onProgress({ type: "tool_end", tool: call.name }),
+                () => attempt === currentAttempt && onProgress({ type: "tool_end", tool: call.name })
               );
             }
           } catch {
