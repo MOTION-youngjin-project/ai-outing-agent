@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession, signIn, signOut } from "next-auth/react";
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
 import { useAppStore, type Place } from "@/lib/store";
@@ -131,14 +132,9 @@ function ScreenHeader({ title, onBack, right }: { title: string; onBack?: () => 
   );
 }
 
-// ponytail: 로그인/저장 기능이 아직 없어서(팀 플로우차트상 "선택" 항목, 이번 스코프 밖)
-// 마이페이지 디자인을 화면에 반영하기 위한 더미 데이터. 실제 로그인·저장 붙이면 교체.
+// ponytail: 선호 조건/최근 질문은 아직 이번 스코프 밖(로그인/저장만 처리) — 디자인을
+// 화면에 반영하기 위한 더미 데이터로 남겨둠. "저장한 장소"는 실제 데이터로 교체됨.
 const MYPAGE_STATS = { savedPlaces: 12, recentRecommendations: 8, savedParking: 3 };
-const MYPAGE_SAVED_PLACES = [
-  { name: "수성못", category: "야경 명소 · 수성구" },
-  { name: "대구미술관", category: "미술관 · 수성구" },
-  { name: "앞산 카페거리", category: "카페 · 남구" },
-];
 const MYPAGE_PREFERENCES = [
   { icon: "heart", label: "데이트" },
   { icon: "home", label: "실내 우선" },
@@ -199,6 +195,7 @@ export type RecommendProgressEvent = { type: string; tool?: string };
 type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
   category?: string | null;
   distanceKm?: number | null;
+  placeId?: string | null;
 };
 export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[] };
 
@@ -312,6 +309,15 @@ async function fetchCulturalEvents(params: { dtype: string; keyword: string }): 
   return res.ok ? data.data : [];
 }
 
+type SavedPlaceResult = { placeId: string; name: string; categorySummary: string | null; roadAddress: string | null };
+
+async function fetchSavedPlaces(): Promise<SavedPlaceResult[]> {
+  const res = await fetch("/api/saved-places");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
 export default function Home() {
   const {
     view,
@@ -336,8 +342,75 @@ export default function Home() {
     setLocalSuggestion(randomSuggestion());
   }, []);
 
-  // 찜 아이콘은 디자인팀 목업의 시각 요소만 반영 — 로그인/저장 흐름은 이번 스코프 밖이라
-  // 서버 저장 없이 화면에서만 토글되는 장식용 상태.
+  const { data: session } = useSession();
+  const queryClient = useQueryClient();
+
+  // 로그인 상태에서만 조회 — 로그아웃 상태로는 401만 날 뿐이라 요청 자체를 안 보낸다.
+  const savedPlacesQuery = useQuery({
+    queryKey: ["saved-places"],
+    queryFn: fetchSavedPlaces,
+    enabled: !!session,
+  });
+
+  // 로그인/회원가입 폼은 이 화면 밖에서 쓸 일이 없는 순수 로컬 상태.
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authPending, setAuthPending] = useState(false);
+
+  function resetAuthForm() {
+    setAuthEmail("");
+    setAuthPassword("");
+    setAuthName("");
+    setAuthError("");
+  }
+
+  async function handleLogin() {
+    setAuthError("");
+    setAuthPending(true);
+    try {
+      const result = await signIn("credentials", { email: authEmail, password: authPassword, redirect: false });
+      if (result?.error) {
+        setAuthError("이메일 또는 비밀번호가 올바르지 않습니다.");
+        return;
+      }
+      resetAuthForm();
+      setView("mypage");
+    } finally {
+      setAuthPending(false);
+    }
+  }
+
+  async function handleSignup() {
+    setAuthError("");
+    setAuthPending(true);
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail, password: authPassword, name: authName }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setAuthError(data.error ?? "회원가입에 실패했습니다.");
+        return;
+      }
+      const result = await signIn("credentials", { email: authEmail, password: authPassword, redirect: false });
+      if (result?.error) {
+        setAuthError("가입은 됐지만 로그인에 실패했습니다. 다시 로그인해주세요.");
+        setView("login");
+        return;
+      }
+      resetAuthForm();
+      setView("mypage");
+    } finally {
+      setAuthPending(false);
+    }
+  }
+
+  // 찜 아이콘은 디자인팀 목업의 시각 요소만 반영했던 장식용 상태였는데, 이제 로그인
+  // 상태면 /api/saved-places로 실제 저장까지 한다(로그아웃 상태면 로그인 화면으로 유도).
   const [favoriteIndexes, setFavoriteIndexes] = useState<Set<number>>(new Set());
 
   // null = "전체" 선택 상태. 결과 카드의 tags 필드와 매칭해서 필터링한다.
@@ -470,13 +543,38 @@ export default function Home() {
     setView("parking-detail");
   }
 
-  function toggleFavorite(index: number) {
+  async function toggleFavorite(place: PlaceWithMeta, index: number) {
+    if (!session) {
+      setView("login");
+      return;
+    }
+    // 카카오 검색으로 실제 Place를 못 찾은 장소(placeId 없음)는 저장할 DB 행이 없어서
+    // 막는다 — 버튼 자체를 disabled 처리했지만 방어적으로 한 번 더 확인.
+    if (!place.placeId) return;
+
+    const wasSaved = favoriteIndexes.has(index);
     setFavoriteIndexes((prev) => {
       const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
+      if (wasSaved) next.delete(index);
       else next.add(index);
       return next;
     });
+
+    try {
+      if (wasSaved) {
+        await fetch(`/api/saved-places?placeId=${encodeURIComponent(place.placeId)}`, { method: "DELETE" });
+      } else {
+        await fetch("/api/saved-places", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ placeId: place.placeId }),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["saved-places"] });
+    } catch {
+      // 저장 요청 실패해도 조용히 무시 — 하트 표시만 낙관적으로 남고, 마이페이지
+      // 목록은 실제 DB 기준(다음 조회)이라 다시 눌러보면 정확한 상태로 맞춰진다.
+    }
   }
 
 
@@ -812,9 +910,17 @@ export default function Home() {
                             </div>
                           </button>
                           <button
-                            onClick={() => toggleFavorite(i)}
+                            onClick={() => toggleFavorite(p, i)}
+                            disabled={!!session && !p.placeId}
+                            title={session && !p.placeId ? "저장할 수 없는 장소입니다" : undefined}
                             aria-label="찜하기"
-                            className={favoriteIndexes.has(i) ? "text-rose-500" : "text-slate-300"}
+                            className={
+                              favoriteIndexes.has(i)
+                                ? "text-rose-500"
+                                : session && !p.placeId
+                                  ? "text-slate-200"
+                                  : "text-slate-300"
+                            }
                           >
                             <Icon
                               name="heart"
@@ -1138,6 +1244,99 @@ export default function Home() {
           </>
         )}
 
+        {view === "login" && (
+          <>
+            <ScreenHeader title="로그인" onBack={() => setView("mypage")} />
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleLogin();
+              }}
+              className="flex flex-col gap-3 px-5"
+            >
+              <input
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="이메일"
+                className="rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+              />
+              <input
+                type="password"
+                required
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="비밀번호"
+                className="rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+              />
+              {authError && <p className="px-1 text-[13px] text-rose-500">{authError}</p>}
+              <button
+                type="submit"
+                disabled={authPending}
+                className="mt-1 flex items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[15px] font-semibold text-white disabled:bg-slate-200"
+              >
+                로그인
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  resetAuthForm();
+                  setView("signup");
+                }}
+                className="py-1 text-center text-[13px] text-muted"
+              >
+                아직 계정이 없으신가요? <span className="font-semibold text-accent">회원가입</span>
+              </button>
+            </form>
+          </>
+        )}
+
+        {view === "signup" && (
+          <>
+            <ScreenHeader title="회원가입" onBack={() => setView("login")} />
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSignup();
+              }}
+              className="flex flex-col gap-3 px-5"
+            >
+              <input
+                value={authName}
+                onChange={(e) => setAuthName(e.target.value)}
+                placeholder="이름 (선택)"
+                className="rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+              />
+              <input
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="이메일"
+                className="rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+              />
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="비밀번호 (8자 이상)"
+                className="rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+              />
+              {authError && <p className="px-1 text-[13px] text-rose-500">{authError}</p>}
+              <button
+                type="submit"
+                disabled={authPending}
+                className="mt-1 flex items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[15px] font-semibold text-white disabled:bg-slate-200"
+              >
+                회원가입
+              </button>
+            </form>
+          </>
+        )}
+
         {view === "mypage" && (
           <>
             <ScreenHeader
@@ -1150,22 +1349,35 @@ export default function Home() {
               }
             />
             <div className="flex flex-col gap-3 px-5">
-              {/* ponytail: 로그인/저장은 이번 스코프 밖(팀 플로우차트상 "선택" 항목) —
-                  디자인 목업을 화면에 반영하기 위한 더미 데이터. 실제 로그인·저장 붙이면 교체. */}
               <div className="rounded-2xl bg-white px-4 py-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-mint-soft">
-                    <Icon name="user" className="h-7 w-7 text-mint-mid" />
+                {session ? (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-mint-soft">
+                      <Icon name="user" className="h-7 w-7 text-mint-mid" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-[17px] font-bold text-ink">{session.user?.name || session.user?.email}</div>
+                      <div className="mt-0.5 text-[13px] text-muted">저장한 나들이와 설정을 관리해요.</div>
+                    </div>
+                    <button onClick={() => signOut()} className="shrink-0 text-[13px] font-medium text-accent">
+                      로그아웃
+                    </button>
                   </div>
-                  <div className="flex-1">
-                    <div className="text-[17px] font-bold text-ink">로그인 사용자</div>
-                    <div className="mt-0.5 text-[13px] text-muted">저장한 나들이와 설정을 관리해요.</div>
-                  </div>
-                  <Icon name="next" className="h-5 w-5 text-slate-300" />
-                </div>
+                ) : (
+                  <button onClick={() => setView("login")} className="flex w-full items-center gap-3 text-left">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-mint-soft">
+                      <Icon name="user" className="h-7 w-7 text-mint-mid" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-[17px] font-bold text-ink">로그인이 필요해요</div>
+                      <div className="mt-0.5 text-[13px] text-muted">로그인하고 저장한 장소를 확인하세요.</div>
+                    </div>
+                    <Icon name="next" className="h-5 w-5 text-slate-300" />
+                  </button>
+                )}
                 <div className="mt-4 flex border-t border-hairline pt-3">
                   {[
-                    { icon: "bookmark", label: "저장한 장소", value: MYPAGE_STATS.savedPlaces },
+                    { icon: "bookmark", label: "저장한 장소", value: session ? (savedPlacesQuery.data?.length ?? 0) : MYPAGE_STATS.savedPlaces },
                     { icon: "clock", label: "최근 추천", value: MYPAGE_STATS.recentRecommendations },
                     { icon: "parking", label: "주차 저장", value: MYPAGE_STATS.savedParking },
                   ].map((stat, i) => (
@@ -1194,21 +1406,30 @@ export default function Home() {
                 </span>
               </div>
               <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-                {MYPAGE_SAVED_PLACES.map((p, i) => (
-                  <div
-                    key={p.name}
-                    className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
-                  >
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
-                      <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                {!session && (
+                  <p className="px-4 py-4 text-[14px] text-muted">로그인하면 저장한 장소가 여기 보여요.</p>
+                )}
+                {session && savedPlacesQuery.data?.length === 0 && (
+                  <p className="px-4 py-4 text-[14px] text-muted">아직 저장한 장소가 없어요.</p>
+                )}
+                {session &&
+                  (savedPlacesQuery.data ?? []).map((p, i) => (
+                    <div
+                      key={p.placeId}
+                      className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
+                    >
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
+                        <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-[16px] font-bold text-ink">{p.name}</div>
+                        <div className="mt-0.5 text-[13px] text-muted">
+                          {p.categorySummary ?? p.roadAddress ?? ""}
+                        </div>
+                      </div>
+                      <Icon name="next" className="h-5 w-5 text-slate-300" />
                     </div>
-                    <div className="flex-1">
-                      <div className="text-[16px] font-bold text-ink">{p.name}</div>
-                      <div className="mt-0.5 text-[13px] text-muted">{p.category}</div>
-                    </div>
-                    <Icon name="next" className="h-5 w-5 text-slate-300" />
-                  </div>
-                ))}
+                  ))}
               </div>
 
               <div className="flex items-center justify-between px-1 pt-1">
