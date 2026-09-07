@@ -1,8 +1,12 @@
 import { create } from "zustand";
-import type { ChatTurn, Recommendation } from "@/lib/agent";
+import type { ChatTurn } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
+import type { PlaceWithMeta } from "@/lib/clientApi";
 
-export type Place = NonNullable<Recommendation["places"]>[number];
+// /api/recommend가 내려주는 장소는 항상 이 enrichment(category/distanceKm/placeId/좌표)가
+// 붙은 상태라 스토어도 그 모양을 그대로 쓴다 — agent.ts의 원본 스키마 타입만 쓰면
+// ResultsScreen에서 선택한 장소를 여기 저장할 때 실제로 있는 필드가 타입에 안 잡힌다.
+export type Place = PlaceWithMeta;
 export type View =
   | "input"
   | "loading"

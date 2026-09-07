@@ -70,6 +70,20 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
     ),
     send: <path d="M4.5 12l15-7.5-4 15-3.6-5.6L4.5 12z" />,
     drop: <path d="M12 3.5c3 4 6 7.4 6 11a6 6 0 01-12 0c0-3.6 3-7 6-11z" />,
+    users: (
+      <>
+        <circle cx="9" cy="8.6" r="2.8" />
+        <path d="M4 19a5 5 0 0110 0" />
+        <path d="M15.5 6.4a2.8 2.8 0 010 5.4" />
+        <path d="M15 13.4c2.4.3 4 1.8 4.5 5.6" />
+      </>
+    ),
+    share: (
+      <>
+        <path d="M12 15V4M8 8l4-4 4 4" />
+        <path d="M5 12v6.5A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5V12" />
+      </>
+    ),
   };
   return (
     <svg

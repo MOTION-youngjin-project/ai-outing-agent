@@ -92,6 +92,20 @@ const PlaceSchema = z.object({
         "실내: 건물 안에서 즐기는 곳. 야외: 야외 활동 위주인 곳. " +
         "데이트: 연인에게 어울리는 조용하고 분위기 있는 곳. 저비용: 무료이거나 비용 부담이 적은 곳."
     ),
+  visitDuration: z
+    .string()
+    .optional()
+    .describe(
+      "예상 관람/이용 소요시간 (예: '약 2시간'). search_family_facility_info 결과에 실제로 나온 " +
+        "경우에만 채우고, 모르면 비워라 — 지어내지 말 것."
+    ),
+  suggestedRoute: z
+    .string()
+    .optional()
+    .describe(
+      "이 장소 방문 뒤에 자연스럽게 이어갈 수 있는 짧은 동선 제안 한 줄 (예: '미술관 관람 → 수성못 산책'). " +
+        "이 장소와 주변 지역 특성을 아는 경우에만 제안하고, 억지로 지어내지 말고 확신 없으면 비워라."
+    ),
 });
 
 export const RecommendationSchema = z.object({
