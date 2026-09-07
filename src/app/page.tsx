@@ -10,6 +10,7 @@ import { ParkingDetailScreen } from "@/components/screens/ParkingDetailScreen";
 import { LoginScreen } from "@/components/screens/LoginScreen";
 import { SignupScreen } from "@/components/screens/SignupScreen";
 import { MyPageScreen } from "@/components/screens/MyPageScreen";
+import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { BottomNav } from "@/components/BottomNav";
 
 // 화면 하나당 컴포넌트 하나(src/components/screens/*) — 전역 UI 상태(현재 화면, 선택된
@@ -36,6 +37,7 @@ export default function Home() {
         {view === "login" && <LoginScreen />}
         {view === "signup" && <SignupScreen />}
         {view === "mypage" && <MyPageScreen />}
+        {view === "settings" && <SettingsScreen />}
       </div>
 
       {showBottomNav && <BottomNav hasRecommendation={!!flow.recommendation} />}

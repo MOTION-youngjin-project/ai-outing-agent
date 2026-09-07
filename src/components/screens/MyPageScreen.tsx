@@ -10,7 +10,6 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 
 // ponytail: "최근 추천"/"주차 저장" 통계는 여전히 스코프 밖이라 더미로 남겨둠.
 const MYPAGE_STATS = { recentRecommendations: 8, savedParking: 3 };
-const MYPAGE_SETTINGS_MENU = ["알림 설정", "방문 예정", "앱 설정", "로그아웃"];
 
 // FILTER_LABELS(agent.ts의 PLACE_TAGS)와 같은 값 — 선호 조건 칩에 쓸 아이콘만 매핑.
 const PREFERENCE_ICONS: Record<(typeof FILTER_LABELS)[number], string> = {
@@ -60,6 +59,15 @@ export function MyPageScreen() {
     queryClient.setQueryData(["preferences"], next);
     await putPreferences(next);
   }
+
+  // 알림 설정/방문 예정은 뒤에 걸 기능(알림 발송, 방문 예약) 자체가 앱에 없어서
+  // 준비 중으로 남겨둔다 — onClick 없는 항목은 비활성 처리된다.
+  const settingsMenu = [
+    { label: "알림 설정", onClick: undefined },
+    { label: "방문 예정", onClick: undefined },
+    { label: "앱 설정", onClick: () => setView("settings") },
+    { label: "로그아웃", onClick: () => signOut() },
+  ];
 
   return (
     <>
@@ -222,17 +230,19 @@ export function MyPageScreen() {
 
         <h2 className="px-1 pt-1 text-[15px] font-bold text-ink">설정</h2>
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-          {MYPAGE_SETTINGS_MENU.map((label, i) => (
-            <div
-              key={label}
-              title="준비 중인 기능입니다"
-              className={`flex cursor-not-allowed items-center justify-between px-4 py-3.5 text-[14px] font-medium text-ink/70 ${
-                i > 0 ? "border-t border-hairline" : ""
-              }`}
+          {settingsMenu.map((item, i) => (
+            <button
+              key={item.label}
+              onClick={item.onClick}
+              disabled={!item.onClick}
+              title={item.onClick ? undefined : "준비 중인 기능입니다"}
+              className={`flex w-full items-center justify-between px-4 py-3.5 text-left text-[14px] font-medium ${
+                item.onClick ? "text-ink" : "cursor-not-allowed text-ink/70"
+              } ${i > 0 ? "border-t border-hairline" : ""}`}
             >
-              {label}
+              {item.label}
               <Icon name="next" className="h-5 w-5 text-slate-300" />
-            </div>
+            </button>
           ))}
         </div>
       </div>
