@@ -13,7 +13,7 @@
 | AI 모델 | Gemini API |
 | RAG | 실내/가족동반 시설 안내 문서 벡터 검색 |
 | DB | MySQL + Prisma ORM |
-| 공공데이터 | 에어코리아(대기질), 기상청(날씨), 문화포털(공연/전시), 대구시 통합주차정보 |
+| 공공데이터 | 에어코리아(대기질), 기상청(날씨), 문화포털(공연/전시), 대구시 통합주차정보, 카카오 로컬(장소 검색) |
 
 ## 폴더 구조 & 담당 영역
 
@@ -35,6 +35,8 @@ npm install
 cp .env.example .env.local   # 키 채워넣기
 npm run dev
 ```
+
+`KAKAO_API_KEY`(장소 검색용)는 [Kakao Developers](https://developers.kakao.com)에서 앱 생성 후 REST API 키를 발급받아 채운다. **앱 생성 직후엔 로컬 검색이 비활성화 상태**라 그대로 쓰면 `403 OPEN_MAP_AND_LOCAL service` 에러가 난다 — 앱 → 제품 설정 → **카카오맵**을 활성화해야 한다(별도 심사 없음).
 
 ## 협업 규칙
 

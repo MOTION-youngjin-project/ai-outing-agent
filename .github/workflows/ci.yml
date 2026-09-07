@@ -16,7 +16,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: "mysql://user:pass@localhost:3306/db"
       - run: npm run lint
       - run: npm run build
         env:
           GEMINI_API_KEY: dummy-for-build
+          DATABASE_URL: "mysql://user:pass@localhost:3306/db"

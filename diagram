@@ -1,0 +1,558 @@
+Project air_quality_outdoor_activity_agent {
+  database_type: 'PostgreSQL'
+  Note: '비로그인 대기질 기반 야외활동 추천 에이전트. 사용자 원문·프로필·영구 검색 이력은 저장하지 않는다.'
+}
+
+Enum request_mode {
+  question
+  popular
+  retry
+}
+
+Enum environment_mode {
+  indoor
+  outdoor
+  mixed
+}
+
+Enum run_status {
+  pending
+  running
+  completed
+  partial
+  failed
+}
+
+Enum tool_call_status {
+  requested
+  succeeded
+  failed
+  timed_out
+}
+
+Enum data_freshness_status {
+  fresh
+  stale
+  unavailable
+}
+
+Table data_sources {
+  Note: '에어코리아·기상청·문화포털·장소 검색·주차·RAG 등 외부 데이터 공급자와 호출 정책을 관리한다.'
+  id bigint [pk, increment]
+  code varchar(40) [not null, unique, note: 'AIRKOREA, KMA, CULTURE_PORTAL, PLACE_SEARCH, DAEGU_PARKING, RAG']
+  name varchar(100) [not null]
+  source_type varchar(40) [not null, note: 'open_api, csv, vector_store, search_api']
+  base_url varchar(500)
+  enabled boolean [not null, default: true]
+  timeout_ms int [not null, default: 5000]
+  max_retry_count smallint [not null, default: 1]
+  created_at timestamp [not null, default: `now()`]
+}
+
+Table regions {
+  Note: '시도·시군구·읍면동 행정구역과 대표 좌표를 저장하며 대기질·날씨·장소의 지역 기준으로 사용한다.'
+  id bigint [pk, increment]
+  parent_id bigint [ref: > regions.id]
+  region_code varchar(20) [not null, unique]
+  name varchar(100) [not null]
+  level varchar(20) [not null, note: 'sido, sigungu, eupmyeondong']
+  latitude decimal(10,7)
+  longitude decimal(10,7)
+  created_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (parent_id, name)
+  }
+}
+
+Table place_categories {
+  Note: '음식점·카페·공연·전시·체험 등 장소 분류체계와 기본 실내 여부를 관리한다.'
+  id bigint [pk, increment]
+  parent_id bigint [ref: > place_categories.id]
+  code varchar(50) [not null, unique]
+  name varchar(100) [not null]
+  indoor_default boolean [not null, default: false]
+}
+
+Table places {
+  Note: '웹앱 내부의 장소 마스터다. 지도형 상세 화면에 필요한 이름·주소·좌표·연락처·평점·예약·주차 정보를 저장한다.'
+  id bigint [pk, increment]
+  public_id uuid [not null, unique, default: `gen_random_uuid()`, note: '프론트 URL과 API 응답에 사용하는 내부 공개 ID']
+  region_id bigint [ref: > regions.id]
+  name varchar(200) [not null]
+  normalized_name varchar(200) [not null]
+  category_summary varchar(300)
+  road_address varchar(500)
+  jibun_address varchar(500)
+  postal_code varchar(20)
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  phone varchar(50)
+  website_url varchar(500)
+  short_description varchar(1000)
+  description text
+  business_status varchar(30) [not null, default: 'unknown', note: 'open, closed, temporarily_closed, unknown']
+  price_level smallint [note: '1~4 단계의 상대 가격대']
+  average_rating decimal(3,2)
+  review_count int [not null, default: 0]
+  reservation_available boolean
+  parking_available boolean
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+  last_verified_at timestamp
+  is_active boolean [not null, default: true]
+
+  Indexes {
+    (normalized_name, latitude, longitude)
+    (region_id, is_active)
+    (latitude, longitude)
+  }
+}
+
+Table place_source_records {
+  Note: '동일 장소의 외부 API별 ID와 원본 응답을 연결한다. 외부 장소 결과를 내부 장소로 upsert하고 갱신할 때 사용한다.'
+  id bigint [pk, increment]
+  place_id bigint [not null, ref: > places.id]
+  source_id bigint [not null, ref: > data_sources.id]
+  external_place_key varchar(200) [not null]
+  source_page_url varchar(1000)
+  source_rating decimal(3,2)
+  source_review_count int
+  raw_payload_json jsonb [note: '외부 장소 API 응답 원본. 캐시·재가공·필드 변경 대응용']
+  payload_hash varchar(64) [not null]
+  source_updated_at timestamp
+  fetched_at timestamp [not null, default: `now()`]
+  expires_at timestamp
+
+  Indexes {
+    (source_id, external_place_key) [unique]
+    (place_id, source_id)
+    expires_at
+  }
+}
+
+Table place_images {
+  Note: '장소 대표 이미지·썸네일·원본 URL·정렬 순서·저작권 정보를 저장해 지도형 장소 카드와 상세 화면에 제공한다.'
+  id bigint [pk, increment]
+  place_id bigint [not null, ref: > places.id]
+  source_id bigint [ref: > data_sources.id]
+  source_image_key varchar(250)
+  original_url varchar(1500) [not null]
+  stored_url varchar(1500) [note: '내부 CDN/Object Storage에 복사한 경우 사용']
+  thumbnail_url varchar(1500)
+  alt_text varchar(500)
+  mime_type varchar(80)
+  width_px int
+  height_px int
+  sort_order smallint [not null, default: 0]
+  is_primary boolean [not null, default: false]
+  license_info varchar(300)
+  captured_at timestamp
+  created_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (place_id, sort_order)
+    (source_id, source_image_key) [unique]
+  }
+}
+
+Table place_business_hours {
+  Note: '장소의 요일별 영업시간·휴게시간·마지막 주문·휴무 정보를 여러 영업 구간으로 저장한다.'
+  id bigint [pk, increment]
+  place_id bigint [not null, ref: > places.id]
+  day_of_week smallint [not null, note: '0=일요일, 1=월요일 ... 6=토요일']
+  sequence_no smallint [not null, default: 1, note: '분할 영업시간 구간 순서']
+  open_time time
+  close_time time
+  break_start_time time
+  break_end_time time
+  last_order_time time
+  is_closed boolean [not null, default: false]
+  note varchar(300)
+  effective_from date
+  effective_to date
+  updated_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (place_id, day_of_week, sequence_no) [unique]
+  }
+}
+
+Table place_menus {
+  Note: '음식점·카페 등의 메뉴명·가격·설명·이미지와 대표 메뉴 여부를 저장한다.'
+  id bigint [pk, increment]
+  place_id bigint [not null, ref: > places.id]
+  name varchar(200) [not null]
+  description varchar(1000)
+  price int
+  image_url varchar(1500)
+  is_signature boolean [not null, default: false]
+  is_available boolean [not null, default: true]
+  sort_order smallint [not null, default: 0]
+  updated_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (place_id, sort_order)
+  }
+}
+
+Table place_facilities {
+  Note: '주차·유모차·수유실·휠체어·반려동물·Wi-Fi 등 장소별 편의시설 제공 여부를 관리한다.'
+  place_id bigint [not null, ref: > places.id]
+  facility_code varchar(60) [not null, note: 'parking, stroller, nursing_room, wheelchair, pet, wifi, restroom 등']
+  available boolean [not null]
+  detail varchar(500)
+  verified_at timestamp
+
+  Indexes {
+    (place_id, facility_code) [pk]
+  }
+}
+
+Table place_ingestion_events {
+  Note: '추천 과정에서 수신한 외부 장소가 내부 DB에 신규 저장·갱신·건너뜀·실패했는지 기록하는 적재 이력이다.'
+  id bigint [pk, increment]
+  agent_run_id uuid [ref: > agent_runs.id]
+  source_id bigint [not null, ref: > data_sources.id]
+  external_place_key varchar(200) [not null]
+  place_id bigint [ref: > places.id]
+  ingestion_action varchar(30) [not null, note: 'inserted, updated, unchanged, failed']
+  payload_hash varchar(64) [not null]
+  received_at timestamp [not null, default: `now()`]
+  completed_at timestamp
+  error_summary varchar(500)
+
+  Indexes {
+    (agent_run_id, received_at)
+    (source_id, external_place_key, received_at)
+  }
+}
+
+Table place_category_links {
+  Note: '하나의 장소에 여러 카테고리를 연결하고 대표 카테고리를 지정하는 다대다 연결 테이블이다.'
+  place_id bigint [not null, ref: > places.id]
+  category_id bigint [not null, ref: > place_categories.id]
+  is_primary boolean [not null, default: false]
+
+  Indexes {
+    (place_id, category_id) [pk]
+  }
+}
+
+Table cultural_events {
+  Note: '공연·전시·체험 행사의 기간·장소·요금·연령 제한·예약 링크 등 문화행사 상세정보를 저장한다.'
+  id bigint [pk, increment]
+  source_id bigint [not null, ref: > data_sources.id]
+  source_event_key varchar(150) [not null]
+  venue_place_id bigint [ref: > places.id]
+  title varchar(300) [not null]
+  genre varchar(100)
+  start_at timestamp
+  end_at timestamp
+  fee_info varchar(300)
+  age_limit varchar(100)
+  booking_url varchar(500)
+  source_updated_at timestamp
+  synced_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (source_id, source_event_key) [unique]
+    (start_at, end_at)
+  }
+}
+
+Table parking_lots {
+  Note: '주차장 위치·운영시간·요금·전체 면수·실시간 잔여 면수·혼잡도를 저장한다.'
+  id bigint [pk, increment]
+  source_id bigint [not null, ref: > data_sources.id]
+  source_parking_key varchar(150) [not null]
+  region_id bigint [ref: > regions.id]
+  name varchar(200) [not null]
+  address varchar(500)
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  total_spaces int
+  available_spaces int [note: '실시간 API 승인 전에는 NULL']
+  fee_info varchar(300)
+  operating_hours_json jsonb
+  congestion_status varchar(30)
+  realtime_supported boolean [not null, default: false]
+  observed_at timestamp
+  synced_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (source_id, source_parking_key) [unique]
+    (latitude, longitude)
+  }
+}
+
+Table air_quality_snapshots {
+  Note: '지역별 PM10·PM2.5 수치와 등급·측정시각을 시점별로 저장해 현재 지역과 추천 지역을 비교한다.'
+  id bigint [pk, increment]
+  source_id bigint [not null, ref: > data_sources.id]
+  region_id bigint [not null, ref: > regions.id]
+  station_name varchar(120)
+  pm10_value decimal(8,2)
+  pm10_grade smallint
+  pm25_value decimal(8,2)
+  pm25_grade smallint
+  overall_grade varchar(30) [not null, note: '좋음, 보통, 나쁨, 매우 나쁨, 미확인']
+  measured_at timestamp [not null]
+  fetched_at timestamp [not null, default: `now()`]
+  freshness_status data_freshness_status [not null, default: 'fresh']
+  raw_payload_hash varchar(64)
+
+  Indexes {
+    (region_id, measured_at)
+  }
+}
+
+Table weather_snapshots {
+  Note: '지역·예보시각별 기온·강수·풍속 정보를 저장해 실내·야외 추천 판단에 사용한다.'
+  id bigint [pk, increment]
+  source_id bigint [not null, ref: > data_sources.id]
+  region_id bigint [not null, ref: > regions.id]
+  forecast_at timestamp [not null]
+  temperature_c decimal(5,2)
+  precipitation_probability decimal(5,2)
+  precipitation_mm decimal(8,2)
+  wind_speed_mps decimal(6,2)
+  summary varchar(200)
+  fetched_at timestamp [not null, default: `now()`]
+  freshness_status data_freshness_status [not null, default: 'fresh']
+
+  Indexes {
+    (region_id, forecast_at)
+  }
+}
+
+Table rag_documents {
+  Note: '시설 안내·접근성·편의정보 등 RAG 검색 원문 문서와 출처·메타데이터·인덱싱 상태를 관리한다.'
+  id bigint [pk, increment]
+  source_id bigint [not null, ref: > data_sources.id]
+  external_key varchar(200)
+  title varchar(300) [not null]
+  source_url varchar(1000)
+  document_type varchar(80)
+  published_at timestamp
+  source_updated_at timestamp
+  checksum varchar(64) [not null]
+  metadata_json jsonb
+  indexed_at timestamp [not null, default: `now()`]
+  is_active boolean [not null, default: true]
+
+  Indexes {
+    (source_id, external_key) [unique]
+    checksum
+  }
+}
+
+Table rag_chunks {
+  Note: 'RAG 문서를 검색 가능한 단위로 분할한 본문·임베딩·토큰 수·메타데이터를 저장한다.'
+  id bigint [pk, increment]
+  document_id bigint [not null, ref: > rag_documents.id]
+  chunk_index int [not null]
+  content text [not null]
+  embedding vector [note: 'pgvector 사용 시 vector(n)로 구체화']
+  token_count int
+  metadata_json jsonb
+
+  Indexes {
+    (document_id, chunk_index) [unique]
+  }
+}
+
+Table agent_runs {
+  Note: '추천 요청 한 건의 Agent 실행 상태·모드·현재 지역·결과 개수·만료시각을 관리하며 사용자 원문은 저장하지 않는다.'
+  id uuid [pk, default: `gen_random_uuid()`]
+  session_key_hash varchar(64) [note: '비로그인 세션 식별용 해시. 사용자 원문·프로필 저장 금지']
+  request_mode request_mode [not null]
+  current_region_id bigint [ref: > regions.id]
+  environment_mode environment_mode
+  status run_status [not null, default: 'pending']
+  route_count smallint [not null, default: 0, note: '정상 완료 시 5 이상']
+  data_updated_at timestamp
+  started_at timestamp [not null, default: `now()`]
+  completed_at timestamp
+  expires_at timestamp [not null, note: '세션 종료 및 운영 로그 보존정책에 따라 삭제']
+  error_code varchar(80)
+  error_summary varchar(500)
+
+  Indexes {
+    (session_key_hash, started_at)
+    (status, started_at)
+    expires_at
+  }
+}
+
+Table tool_calls {
+  Note: 'Agent가 대기질·날씨·장소·주차·RAG 도구를 호출한 순서·성공 여부·지연시간·오류를 기록한다.'
+  id bigint [pk, increment]
+  agent_run_id uuid [not null, ref: > agent_runs.id]
+  source_id bigint [ref: > data_sources.id]
+  tool_name varchar(100) [not null]
+  status tool_call_status [not null]
+  attempt_no smallint [not null, default: 1]
+  request_params_hash varchar(64) [note: '민감한 원문 파라미터 대신 해시만 저장']
+  result_summary jsonb
+  started_at timestamp [not null, default: `now()`]
+  completed_at timestamp
+  latency_ms int
+  error_code varchar(80)
+  error_summary varchar(500)
+
+  Indexes {
+    (agent_run_id, started_at)
+    (tool_name, status, started_at)
+  }
+}
+
+Table rag_retrievals {
+  Note: '각 RAG 도구 호출에서 검색된 청크의 순위·유사도·재순위 점수와 실제 답변 사용 여부를 기록한다.'
+  id bigint [pk, increment]
+  tool_call_id bigint [not null, ref: > tool_calls.id]
+  chunk_id bigint [not null, ref: > rag_chunks.id]
+  rank_no smallint [not null]
+  similarity_score decimal(8,6)
+  rerank_score decimal(8,6)
+  used_in_answer boolean [not null, default: false]
+
+  Indexes {
+    (tool_call_id, chunk_id) [unique]
+    (tool_call_id, rank_no)
+  }
+}
+
+Table recommendation_routes {
+  Note: 'Agent가 생성한 추천 코스의 순위·추천 이유·실내외 유형·환경 비교·예상 비용·거리·주의사항을 저장한다.'
+  id bigint [pk, increment]
+  agent_run_id uuid [not null, ref: > agent_runs.id]
+  rank_no smallint [not null]
+  title varchar(250) [not null]
+  recommendation_reason text [not null]
+  environment_mode environment_mode [not null]
+  current_air_quality_id bigint [ref: > air_quality_snapshots.id]
+  destination_air_quality_id bigint [ref: > air_quality_snapshots.id]
+  weather_snapshot_id bigint [ref: > weather_snapshots.id]
+  estimated_duration_min int
+  estimated_cost_min int
+  estimated_cost_max int
+  total_distance_m int
+  safety_notice text
+  limitation_notice text
+  created_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (agent_run_id, rank_no) [unique]
+  }
+}
+
+Table route_places {
+  Note: '추천 코스에 포함된 장소를 방문 순서대로 연결하고 체류시간·이동거리·선정 이유를 저장한다.'
+  route_id bigint [not null, ref: > recommendation_routes.id]
+  sequence_no smallint [not null]
+  place_id bigint [not null, ref: > places.id]
+  event_id bigint [ref: > cultural_events.id]
+  stop_type varchar(50) [not null, note: 'meal, cafe, performance, exhibition, activity 등']
+  expected_arrival_at timestamp
+  expected_stay_min int
+  travel_distance_m int
+  travel_duration_min int
+  selection_reason varchar(1000)
+  verification_required boolean [not null, default: false]
+
+  Indexes {
+    (route_id, sequence_no) [pk]
+    (route_id, place_id)
+  }
+}
+
+Table route_parking_recommendations {
+  Note: '코스의 주요 장소별 가까운 주차장 후보와 거리·도보시간·선정 이유·최종 선택 여부를 저장한다.'
+  route_id bigint [not null, ref: > recommendation_routes.id]
+  anchor_place_id bigint [not null, ref: > places.id]
+  parking_lot_id bigint [not null, ref: > parking_lots.id]
+  rank_no smallint [not null]
+  distance_m int [not null]
+  walking_minutes int
+  selection_reason varchar(500)
+  realtime_status_available boolean [not null, default: false]
+  selected boolean [not null, default: false]
+  created_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (route_id, anchor_place_id, rank_no) [pk]
+  }
+}
+
+Table popular_route_templates {
+  Note: '질문이 없는 첫 화면에서 제공할 지역별 인기 코스 템플릿과 노출 기간·인기도를 관리한다.'
+  id bigint [pk, increment]
+  region_id bigint [not null, ref: > regions.id]
+  title varchar(250) [not null]
+  description text
+  environment_mode environment_mode [not null]
+  popularity_score decimal(10,4) [not null, default: 0]
+  valid_from timestamp
+  valid_to timestamp
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null, default: `now()`]
+  updated_at timestamp [not null, default: `now()`]
+
+  Indexes {
+    (region_id, is_active, popularity_score)
+  }
+}
+
+Table popular_route_template_places {
+  Note: '인기 코스 템플릿에 포함되는 장소와 기본 방문 순서·체류시간을 연결한다.'
+  template_id bigint [not null, ref: > popular_route_templates.id]
+  sequence_no smallint [not null]
+  place_id bigint [not null, ref: > places.id]
+  stop_type varchar(50) [not null]
+  default_stay_min int
+
+  Indexes {
+    (template_id, sequence_no) [pk]
+  }
+}
+
+TableGroup external_data {
+  data_sources
+  regions
+  air_quality_snapshots
+  weather_snapshots
+}
+
+TableGroup discovery_content {
+  place_categories
+  places
+  place_source_records
+  place_images
+  place_business_hours
+  place_menus
+  place_facilities
+  place_ingestion_events
+  place_category_links
+  cultural_events
+  parking_lots
+}
+
+TableGroup rag {
+  rag_documents
+  rag_chunks
+  rag_retrievals
+}
+
+TableGroup agent_observability {
+  agent_runs
+  tool_calls
+}
+
+TableGroup recommendation_output {
+  recommendation_routes
+  route_places
+  route_parking_recommendations
+  popular_route_templates
+  popular_route_template_places
+}
