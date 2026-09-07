@@ -25,6 +25,9 @@ type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; ur
 // 번들에 끌어오지 않으려고 여기 따로 둠(같은 파일이 @langchain/core/tools도 import함).
 const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
+// src/lib/agent.ts의 PLACE_TAGS와 같은 값 — 위와 같은 이유로 여기 따로 둠.
+const FILTER_LABELS = ["실내", "야외", "데이트", "저비용"] as const;
+
 // 목업의 아웃라인 아이콘을 인라인 SVG로 옮긴 것. 아이콘 라이브러리를 새로 넣지 않으려고
 // 필요한 것만 직접 그림(유니코드 문자로 때우면 아이콘처럼 안 보여서 교체).
 function Icon({ name, className = "h-5 w-5" }: { name: string; className?: string }) {
@@ -193,19 +196,42 @@ async function fetchAirQuality(regionId: string): Promise<AirQualityInfo | null>
 }
 
 export type RecommendProgressEvent = { type: string; tool?: string };
+type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
+  category?: string | null;
+  distanceKm?: number | null;
+};
+export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[] };
+
+// 거리(km) 배지 계산용 GPS 좌표. 권한 거부/미지원/타임아웃이면 조용히 null —
+// 배지가 안 뜰 뿐 추천 자체를 막을 이유는 아니다.
+function getCurrentPosition(): Promise<{ latitude: number; longitude: number } | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 5000 }
+    );
+  });
+}
 
 // /api/recommend는 NDJSON(줄바꿈 구분 JSON)을 스트리밍한다 — 도구 호출 시작/종료,
 // 장소 정리 단계를 onProgress로 실시간 전달하고, "result"/"error" 줄로 끝난다.
 async function postRecommend(
   history: ChatTurn[],
   onProgress?: (event: RecommendProgressEvent) => void
-): Promise<Recommendation> {
+): Promise<RecommendResult> {
+  const origin = await getCurrentPosition();
+
   let res: Response;
   try {
     res = await fetch("/api/recommend", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ history }),
+      body: JSON.stringify({ history, origin }),
     });
   } catch {
     throw new Error("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
@@ -215,7 +241,7 @@ async function postRecommend(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let result: Recommendation | null = null;
+  let result: RecommendResult | null = null;
   let errorMessage: string | null = null;
 
   while (true) {
@@ -227,7 +253,7 @@ async function postRecommend(
     for (const line of lines) {
       if (!line.trim()) continue;
       const event = JSON.parse(line);
-      if (event.type === "result") result = event.result.recommendation as Recommendation;
+      if (event.type === "result") result = event.result.recommendation as RecommendResult;
       else if (event.type === "error") errorMessage = event.message;
       else onProgress?.(event);
     }
@@ -314,6 +340,9 @@ export default function Home() {
   // 서버 저장 없이 화면에서만 토글되는 장식용 상태.
   const [favoriteIndexes, setFavoriteIndexes] = useState<Set<number>>(new Set());
 
+  // null = "전체" 선택 상태. 결과 카드의 tags 필드와 매칭해서 필터링한다.
+  const [activeFilter, setActiveFilter] = useState<(typeof FILTER_LABELS)[number] | null>(null);
+
   // 검색창 입력값은 제출 전까지 이 화면 밖에서 쓸 일이 없는 순수 로컬 상태라 스토어로 안 옮김.
   const [placeQuery, setPlaceQuery] = useState("");
   const placesMutation = useMutation({ mutationFn: fetchPlacesSearch });
@@ -378,6 +407,11 @@ export default function Home() {
 
   const recommendation = recommendMutation.data ?? null;
   const promptMessage = recommendation?.needsMoreInfo ? recommendation.message : null;
+  // 원래 인덱스(i)를 같이 들고 있어야 찜하기(favoriteIndexes)가 필터링 후에도 올바른
+  // 카드를 가리킨다.
+  const filteredPlaces = (recommendation?.places ?? [])
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => !activeFilter || p.tags?.includes(activeFilter));
   const errorMessage = recommendMutation.error instanceof Error ? recommendMutation.error.message : null;
   const displayedSuggestion =
     recommendMutation.isPending || suggestMutation.isPending
@@ -410,6 +444,7 @@ export default function Home() {
     suggestMutation.reset();
     setActiveTools(new Set());
     setResolvingPlaces(false);
+    setActiveFilter(null);
     setView("loading");
     recommendMutation.mutate(historyWithUser);
   }
@@ -719,23 +754,38 @@ export default function Home() {
               </div>
 
               <div className="flex gap-2 overflow-x-auto pb-1">
-                <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-accent bg-white px-3.5 py-1.5 text-[13px] font-semibold text-accent">
-                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                <button
+                  onClick={() => setActiveFilter(null)}
+                  className={
+                    activeFilter === null
+                      ? "flex shrink-0 items-center gap-1.5 rounded-full border border-accent bg-white px-3.5 py-1.5 text-[13px] font-semibold text-accent"
+                      : "shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-muted"
+                  }
+                >
+                  {activeFilter === null && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
                   전체
-                </span>
-                {["실내", "야외", "데이트", "저비용"].map((label) => (
-                  <span
+                </button>
+                {FILTER_LABELS.map((label) => (
+                  <button
                     key={label}
-                    title="준비 중인 필터입니다"
-                    className="shrink-0 cursor-not-allowed rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-muted/70"
+                    onClick={() => setActiveFilter(activeFilter === label ? null : label)}
+                    className={
+                      activeFilter === label
+                        ? "flex shrink-0 items-center gap-1.5 rounded-full border border-accent bg-white px-3.5 py-1.5 text-[13px] font-semibold text-accent"
+                        : "shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-muted"
+                    }
                   >
+                    {activeFilter === label && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
                     {label}
-                  </span>
+                  </button>
                 ))}
               </div>
 
               <div className="flex flex-col gap-3">
-                {recommendation.places.map((p, i) => (
+                {filteredPlaces.length === 0 && (
+                  <div className="py-6 text-center text-[13px] text-muted">해당 조건에 맞는 장소가 없어요.</div>
+                )}
+                {filteredPlaces.map(({ p, i }) => (
                   <div
                     key={i}
                     className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.06)]"
@@ -773,6 +823,17 @@ export default function Home() {
                           </button>
                         </div>
                         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-2 text-[12px] text-muted">
+                          {p.category && (
+                            <span className="rounded-full bg-mint-bg px-2 py-0.5 font-medium text-accent">
+                              {p.category}
+                            </span>
+                          )}
+                          {p.distanceKm !== null && p.distanceKm !== undefined && (
+                            <span className="flex items-center gap-1">
+                              <Icon name="pin" className="h-3.5 w-3.5" />
+                              {p.distanceKm}km
+                            </span>
+                          )}
                           {p.daeguDistrict && (
                             <span className="flex items-center gap-1">
                               <Icon name="pin" className="h-3.5 w-3.5" />

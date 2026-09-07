@@ -69,6 +69,8 @@ const DAEGU_DISTRICTS = [
   "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
 ] as const;
 
+const PLACE_TAGS = ["실내", "야외", "데이트", "저비용"] as const;
+
 const PlaceSchema = z.object({
   name: z.string().describe("장소 이름"),
   oneLineDescription: z.string().describe("결과 리스트 카드에 보여줄 한 줄 설명"),
@@ -79,6 +81,14 @@ const PlaceSchema = z.object({
   features: z.array(z.string()).optional().describe("주요 정보/특징 목록 (예: 유모차 대여, 수유실)"),
   imageUrl: z.string().optional().describe("대표 이미지 URL (문화포털 도구가 준 경우만)"),
   daeguDistrict: z.enum(DAEGU_DISTRICTS).optional().describe("대구광역시 소속일 때만 구/군 (주차 정보 조회 가능 여부 판단용)"),
+  tags: z
+    .array(z.enum(PLACE_TAGS))
+    .optional()
+    .describe(
+      "이 장소에 확실히 해당하는 태그만 골라 담아라(0개 이상, 지어내지 말 것). " +
+        "실내: 건물 안에서 즐기는 곳. 야외: 야외 활동 위주인 곳. " +
+        "데이트: 연인에게 어울리는 조용하고 분위기 있는 곳. 저비용: 무료이거나 비용 부담이 적은 곳."
+    ),
 });
 
 export const RecommendationSchema = z.object({

@@ -16,7 +16,13 @@ import {
   estimateWalkMinutes,
 } from "../src/lib/tools/parking.ts";
 import { latestBaseDateTime } from "../src/lib/tools/weather.ts";
-import { pickBestPlaceMatch, pickRegionForAddress, inferEnvironmentMode } from "../src/lib/services/matching.ts";
+import {
+  pickBestPlaceMatch,
+  pickRegionForAddress,
+  inferEnvironmentMode,
+  extractCategoryLabel,
+  computeDistanceKm,
+} from "../src/lib/services/matching.ts";
 
 let passed = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -116,6 +122,20 @@ check(
   "mixed"
 );
 check("inferEnvironmentMode 신호 없으면 mixed", inferEnvironmentMode({ ...baseRec, message: "좋은 곳이에요" }), "mixed");
+
+// extractCategoryLabel — 카카오 category_name 계층에서 가장 구체적인 마지막 항목만 추출
+check("extractCategoryLabel 계층에서 마지막 항목", extractCategoryLabel("여행 > 관광,명소 > 공원 > 도시공원"), "도시공원");
+check("extractCategoryLabel 단일 항목", extractCategoryLabel("카페"), "카페");
+check("extractCategoryLabel null", extractCategoryLabel(null), null);
+
+// computeDistanceKm — 소수 첫째자리 반올림, origin/place 중 하나라도 없으면 null
+check(
+  "computeDistanceKm 서울시청-부산시청 대략 325km",
+  Math.round(computeDistanceKm({ latitude: 37.5665, longitude: 126.978 }, { latitude: 35.1796, longitude: 129.0756 })!),
+  325
+);
+check("computeDistanceKm origin 없음", computeDistanceKm(null, { latitude: 35.1796, longitude: 129.0756 }), null);
+check("computeDistanceKm place 없음", computeDistanceKm({ latitude: 37.5665, longitude: 126.978 }, null), null);
 
 // formatOperatingHours — 24시간 코드와 시간대 문자열("0900") 파싱, 둘 다 없으면 null
 check("formatOperatingHours 전일운영", formatOperatingHours({ operHrWkdaySeCd: "전일운영", wkdayOperBgngHr: "", wkdayOperEndHr: "" }), "24시간");
