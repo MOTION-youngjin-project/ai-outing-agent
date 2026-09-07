@@ -56,6 +56,10 @@ export type MapParkingSpot = {
   latitude: number;
   longitude: number;
   walkMinutes: number | null;
+  // 목록 화면(주차장 목록)의 표시 순서(1부터). 지도 마커를 텍스트 라벨 대신 이 번호로
+  // 표시해서 목록과 대응시킨다 — 좌표 있는 것만 지도에 그려서(필터링) 배열 인덱스가
+  // 목록 순서와 어긋날 수 있어 호출부에서 필터링 전에 미리 매긴 번호를 넘겨받는다.
+  order: number;
 };
 
 export function KakaoMap({
@@ -97,24 +101,24 @@ export function KakaoMap({
         const bounds = new kakao.maps.LatLngBounds();
         bounds.extend(centerLatLng);
 
+        // 주차장이 서로 가까이 몰려 있으면(목적지에서 5km+ 떨어진 동네에 여러 곳이
+        // 모여있는 경우 흔함) 텍스트 라벨끼리 겹쳐서 못 읽는 문제(2026-09-07 실측)가 있어,
+        // 항상 떠 있는 텍스트 라벨 대신 작은 번호 배지만 찍는다 — 상세 정보(도보 시간 등)는
+        // 바로 아래 "주차장 목록"이 같은 번호로 보여준다.
         for (const spot of spots) {
           const position = new kakao.maps.LatLng(spot.latitude, spot.longitude);
           bounds.extend(position);
-          const walkLabel = spot.walkMinutes !== null ? `도보 ${spot.walkMinutes}분` : spot.name;
           new kakao.maps.CustomOverlay({
             position,
-            yAnchor: 1.3,
-            content: `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
-              <div style="background:#111827;color:#fff;font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap;">${walkLabel}</div>
-              <div style="width:26px;height:26px;border-radius:999px;background:#14b8a6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3);">P</div>
-            </div>`,
+            yAnchor: 0.5,
+            content: `<div style="width:26px;height:26px;border-radius:999px;background:#14b8a6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3);">${spot.order}</div>`,
           }).setMap(map);
         }
 
         // 목적지 기준 고정 줌 대신, 목적지+모든 주차장이 한 화면에 들어오도록 자동 조정
         // (2026-09-04 실측 — 주차장이 5km+ 떨어져 있어 마커가 화면 밖으로 벗어나는 문제).
-        // 위쪽 패딩(40px)은 yAnchor 1.3으로 핀 위에 튀어나오는 라벨 pill이 뷰포트 경계에서
-        // 잘리는 문제(2026-09-07 리뷰 지적) 방지용.
+        // 위쪽 패딩(40px)은 목적지 마커가 yAnchor 1.3으로 핀 위에 라벨 pill을 띄우기 때문에
+        // 그 라벨이 뷰포트 경계에서 잘리는 문제(2026-09-07 리뷰 지적) 방지용.
         if (spots.length > 0) map.setBounds(bounds, 40, 20, 20, 20);
       })
       .catch(() => {
