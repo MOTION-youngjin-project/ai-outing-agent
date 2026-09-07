@@ -155,12 +155,16 @@ model Place {
 }
 
 model User {
-  id           BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
-  email        String       @unique @db.VarChar(255)
-  passwordHash String       @map("password_hash") @db.VarChar(255)
-  name         String?      @db.VarChar(100)
-  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamp(0)
-  savedPlaces  SavedPlace[]
+  id            BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  email         String       @unique @db.VarChar(255)
+  passwordHash  String       @map("password_hash") @db.VarChar(255)
+  name          String?      @db.VarChar(100)
+  // agent.ts의 PLACE_TAGS(실내/야외/데이트/저비용)와 같은 값만 담는다. 값이 4개뿐이라
+  // 별도 테이블 없이 JSON 배열 하나로 충분하다고 판단.
+  preferredTags Json?        @map("preferred_tags")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamp(0)
+  savedPlaces   SavedPlace[]
+  agentRuns     AgentRun[]
 
   @@map("users")
 }
@@ -416,6 +420,10 @@ model RagChunk {
 model AgentRun {
   id                   String                @id @default(uuid()) @db.Char(36)
   sessionKeyHash       String?               @map("session_key_hash") @db.VarChar(64)
+  userId               BigInt?               @map("user_id") @db.UnsignedBigInt
+  // 마이페이지 "최근 질문"에 그대로 보여줄 사용자 원문 메시지(history의 마지막 turn).
+  // 비로그인 요청은 userId/userQuery 둘 다 null로 남는다(추적 안 함).
+  userQuery            String?               @map("user_query") @db.VarChar(1000)
   requestMode          RequestMode           @map("request_mode")
   currentRegionId      BigInt?               @map("current_region_id") @db.UnsignedBigInt
   environmentMode      EnvironmentMode?      @map("environment_mode")
@@ -427,6 +435,7 @@ model AgentRun {
   expiresAt            DateTime              @map("expires_at") @db.Timestamp(0)
   errorCode            String?               @map("error_code") @db.VarChar(80)
   errorSummary         String?               @map("error_summary") @db.VarChar(500)
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   currentRegion        Region?               @relation(fields: [currentRegionId], references: [id])
   ingestionEvents      PlaceIngestionEvent[]
   toolCalls            ToolCall[]
@@ -435,6 +444,7 @@ model AgentRun {
   @@index([sessionKeyHash, startedAt])
   @@index([status, startedAt])
   @@index([expiresAt])
+  @@index([userId, startedAt])
   @@map("agent_runs")
 }
 
