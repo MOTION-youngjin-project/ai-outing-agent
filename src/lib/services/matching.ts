@@ -1,8 +1,10 @@
 import type { Recommendation } from "@/lib/agent";
+import { haversineMeters } from "../tools/parking.ts";
 
 // 이 파일은 순수 함수만 담는다 — DB/외부 API를 안 건드려서 scripts/self-check.ts가
 // 의존성 없이 바로 import해서 검증할 수 있어야 한다(node --experimental-strip-types는
-// "@/*" 경로 별칭을 런타임에 못 풀어서, 타입 전용 import 말고는 여기서 값 import를 하면 안 됨).
+// "@/*" 경로 별칭을 런타임에 못 풀어서, 타입 전용 import 말고는 여기서 값 import를 하면 안 됨 —
+// 다른 순수 함수 파일을 상대 경로로 값 import하는 건 괜찮음, tools/parking.ts도 마찬가지).
 
 // 카카오가 준 검색 결과 중 LLM이 말한 이름과 가장 잘 맞는 것을 고른다.
 // 이름이 정확히 일치하는 결과를 최우선으로 하고(동명이인 오매칭 완화), 없으면 부분 일치,
@@ -55,4 +57,21 @@ export function inferEnvironmentMode(recommendation: Recommendation): "indoor" |
   if (hasIndoor && !hasOutdoor) return "indoor";
   if (hasOutdoor && !hasIndoor) return "outdoor";
   return "mixed";
+}
+
+// 카카오 category_name은 "여행 > 관광,명소 > 공원 > 도시공원"처럼 대분류>소분류
+// 계층이라, 배지에는 가장 구체적인 마지막 항목만 보여준다.
+export function extractCategoryLabel(categorySummary: string | null): string | null {
+  if (!categorySummary) return null;
+  const parts = categorySummary.split(">").map((s) => s.trim()).filter(Boolean);
+  return parts.at(-1) ?? null;
+}
+
+// 거리(km) 배지 계산. 소수 첫째자리로 반올림(예: 3.2km).
+export function computeDistanceKm(
+  origin: { latitude: number; longitude: number } | null,
+  place: { latitude: number; longitude: number } | null
+): number | null {
+  if (!origin || !place) return null;
+  return Math.round(haversineMeters(origin, place) / 100) / 10;
 }

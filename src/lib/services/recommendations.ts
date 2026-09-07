@@ -5,11 +5,19 @@ import { getCachedWeather } from "./weather";
 import { getCachedAirQuality } from "./airQuality";
 import { resolvePlaceByName } from "./places";
 import { findOrCreateSidoRegion } from "./shared";
-import { inferEnvironmentMode } from "./matching";
+import { inferEnvironmentMode, extractCategoryLabel, computeDistanceKm } from "./matching";
 import type { Place } from "../../../generated/prisma/client";
 
+export type GeoPoint = { latitude: number; longitude: number };
+
+export type EnrichedPlace = NonNullable<Recommendation["places"]>[number] & {
+  category: string | null;
+  distanceKm: number | null;
+};
+export type EnrichedRecommendation = Omit<Recommendation, "places"> & { places?: EnrichedPlace[] };
+
 export interface RecommendationRunResult {
-  recommendation: Recommendation;
+  recommendation: EnrichedRecommendation;
   agentRunId: string;
   recommendationRouteId: string | null;
 }
@@ -19,11 +27,14 @@ export type RecommendationProgressEvent = AgentProgressEvent | { type: "resolvin
 // ponytail: "이 추천이 유효하다고 볼 기간" — 24시간으로 잡음, 조정 가능.
 const AGENT_RUN_TTL_MS = 24 * 60 * 60 * 1000;
 
-// 작업 순서표 13번. 기존 runAgent(LLM)의 결과는 그대로 쓰고(agent.ts는 안 건드림),
-// 그 결과를 agent_runs/recommendation_routes/route_places에 기록만 새로 붙인다.
+// 작업 순서표 13번. 기존 runAgent(LLM)의 결과는 그대로 쓰고, 그 결과를
+// agent_runs/recommendation_routes/route_places에 기록만 새로 붙인다.
+// 거리(km)/카테고리 배지는 LLM에게 맡기지 않고(지어낼 위험), 장소 매칭에 이미 쓰는
+// 카카오 좌표/카테고리 데이터로 여기서 직접 계산해 각 place에 붙여 내려보낸다.
 export async function createRecommendationRun(
   history: ChatTurn[],
-  onProgress?: (event: RecommendationProgressEvent) => void
+  onProgress?: (event: RecommendationProgressEvent) => void,
+  origin?: GeoPoint | null
 ): Promise<RecommendationRunResult> {
   const regionName = normalizeSido(history.map((h) => h.content).join(" "));
   const region = regionName ? await findOrCreateSidoRegion(regionName) : null;
@@ -56,7 +67,11 @@ export async function createRecommendationRun(
         completedAt: new Date(),
       },
     });
-    return { recommendation, agentRunId: agentRun.id, recommendationRouteId: null };
+    return {
+      recommendation: { ...recommendation, places: undefined },
+      agentRunId: agentRun.id,
+      recommendationRouteId: null,
+    };
   }
 
   const weather = regionName ? await getCachedWeather(regionName) : null;
@@ -104,8 +119,8 @@ export async function createRecommendationRun(
       recommendationReason: recommendation.message,
       environmentMode: inferEnvironmentMode(recommendation),
       // 우리가 실제로 아는 건 "사용자가 나들이 가려는 지역"(목적지)의 대기질뿐이다 —
-      // 사용자가 "지금 어디 있는지"는 입력받지 않으므로 currentAirQualityId는 채우지 않는다.
-      // (그 기능이 생기면 여기에 별도 지역의 스냅샷을 조회해서 연결하면 됨.)
+      // origin(GPS 좌표)은 거리 배지 계산용일 뿐 대기질 스냅샷을 조회할 "지역"으로 쓰기엔
+      // 너무 좁은 단위라 currentAirQualityId는 채우지 않는다.
       destinationAirQualityId: airQuality ? BigInt(airQuality.id) : undefined,
       weatherSnapshotId: weather ? BigInt(weather.id) : undefined,
     },
@@ -126,5 +141,21 @@ export async function createRecommendationRun(
     });
   }
 
-  return { recommendation, agentRunId: agentRun.id, recommendationRouteId: route.id.toString() };
+  const enrichedPlaces: EnrichedPlace[] = recommendation.places.map((p, i) => {
+    const resolved = resolvedPlaces[i]?.place ?? null;
+    const resolvedPoint = resolved
+      ? { latitude: resolved.latitude.toNumber(), longitude: resolved.longitude.toNumber() }
+      : null;
+    return {
+      ...p,
+      category: extractCategoryLabel(resolved?.categorySummary ?? null),
+      distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
+    };
+  });
+
+  return {
+    recommendation: { ...recommendation, places: enrichedPlaces },
+    agentRunId: agentRun.id,
+    recommendationRouteId: route.id.toString(),
+  };
 }
