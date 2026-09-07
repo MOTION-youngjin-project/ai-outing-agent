@@ -2,7 +2,6 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
-import type { ParkingSpot } from "@/lib/tools/parking";
 import { fetchParking, type ParkingSpotWithDistance } from "@/lib/clientApi";
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { Icon } from "@/components/Icon";
@@ -19,7 +18,7 @@ export function ParkingScreen() {
   });
 
   function openParkingDetail(spot: ParkingSpotWithDistance) {
-    selectParkingSpot(spot as ParkingSpot);
+    selectParkingSpot(spot);
     setView("parking-detail");
   }
 
