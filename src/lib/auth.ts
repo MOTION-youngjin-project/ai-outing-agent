@@ -30,8 +30,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    // trigger === "update"는 클라이언트에서 useSession().update({ name })을 부를 때
+    // (앱 설정에서 이름 변경 저장 후) — 재로그인 없이 세션의 이름을 바로 갱신하기 위함.
+    async jwt({ token, user, trigger, session }) {
       if (user) token.id = user.id;
+      if (trigger === "update" && session?.name !== undefined) token.name = session.name;
       return token;
     },
     async session({ session, token }) {

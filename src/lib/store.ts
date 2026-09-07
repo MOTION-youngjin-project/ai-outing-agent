@@ -12,7 +12,8 @@ export type View =
   | "parking-detail"
   | "mypage"
   | "login"
-  | "signup";
+  | "signup"
+  | "settings";
 
 interface AppState {
   view: View;
