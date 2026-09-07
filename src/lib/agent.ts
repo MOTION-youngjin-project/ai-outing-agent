@@ -1,5 +1,5 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { createAgent } from "langchain";
+import { createAgent, toolStrategy } from "langchain";
 import { z } from "zod";
 import { airQualityTool } from "./tools/airQuality";
 import { weatherTool } from "./tools/weather";
@@ -34,12 +34,15 @@ const SYSTEM_PROMPT =
 // ponytail: 무료 티어 쿼터는 모델별로 따로 있어서(실측 확인), 쿼터 소진 시
 // 다음 모델로 순서대로 재시도. 유료 결제 전환 시 이 체인은 필요 없어짐.
 // gemini-3.7-flash는 실측 결과 응답 없이 멈추는 경우가 있어 제외 (25초 타임아웃만 낭비).
+// gemini-flash-latest도 제외(2026-09-07 실측): @langchain/google-genai가 모델명에
+// "gemini-3" 문자열이 포함된 경우에만 thought signature 더미값을 채워주는데, 별칭이라
+// 이 문자열이 없어서 실제로는 gemini-3 계열이어도 멀티턴 도구 호출 시
+// "Function call is missing a thought_signature" 400 에러로 항상 실패함.
 const MODEL_FALLBACK_CHAIN = [
   "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
   "gemini-3.5-flash-lite",
-  "gemini-flash-latest",
 ];
 
 function isRetryableModelError(err: unknown): boolean {
@@ -99,29 +102,41 @@ export const RecommendationSchema = z.object({
 
 export type Recommendation = z.infer<typeof RecommendationSchema>;
 
-// history는 지금까지의 대화(사용자가 방금 보낸 메시지 포함) 전체를 받는다.
-// 단일 메시지만 넘기면 "거기", "다른 곳도" 같은 후속 질문의 맥락을 에이전트가 전혀
-// 모르게 된다 (5순위 대화 맥락 기억 요구사항과 직결).
-export async function runAgent(history: ChatTurn[]): Promise<Recommendation> {
+// responseFormat에 zod 스키마를 그대로 주면(네이티브 JSON 스키마 구조화 출력) langchain이
+// $schema/additionalProperties 같은, Gemini API가 거부하는 필드를 못 걸러주는 버그가 있어
+// (2026-09-07 실측 — gemini-flash-latest에서 400 에러 재현, node_modules 소스로 원인 확인)
+// toolStrategy로 강제로 function-calling 기반 구조화 출력을 쓴다 — 이 경로는 스키마를
+// 제대로 정제해서 보낸다.
+function buildAgent(model: string) {
+  const llm = new ChatGoogleGenerativeAI({
+    model,
+    apiKey: process.env.GEMINI_API_KEY,
+    temperature: 0,
+  });
+
+  return createAgent({
+    model: llm,
+    tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool, parkingTool],
+    systemPrompt: SYSTEM_PROMPT,
+    responseFormat: toolStrategy(RecommendationSchema),
+  });
+}
+
+// runAgent/runAgentStream이 공유하던 모델 폴백 루프(모델별 agent 생성, 재시도 가능 에러면
+// 다음 모델로) + attempt 가드(재시도로 다음 모델에 넘어간 뒤에도 이전 시도의 fire-and-forget
+// 콜백이 살아있는지 판별)를 한 곳에 모았다. 두 함수는 agent를 "어떻게 호출하는지"만 다르다.
+async function withModelFallback<T>(
+  run: (agent: ReturnType<typeof buildAgent>, isCurrent: () => boolean) => Promise<T>
+): Promise<T> {
   let lastError: unknown;
+  let currentAttempt = 0;
 
   for (const model of MODEL_FALLBACK_CHAIN) {
-    const llm = new ChatGoogleGenerativeAI({
-      model,
-      apiKey: process.env.GEMINI_API_KEY,
-      temperature: 0,
-    });
-
-    const agent = createAgent({
-      model: llm,
-      tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool, parkingTool],
-      systemPrompt: SYSTEM_PROMPT,
-      responseFormat: RecommendationSchema,
-    });
+    const attempt = ++currentAttempt;
+    const agent = buildAgent(model);
 
     try {
-      const result = await withTimeout(agent.invoke({ messages: history }), 25000);
-      return result.structuredResponse as Recommendation;
+      return await run(agent, () => attempt === currentAttempt);
     } catch (err) {
       lastError = err;
       if (!isRetryableModelError(err)) throw err;
@@ -130,6 +145,16 @@ export async function runAgent(history: ChatTurn[]): Promise<Recommendation> {
   }
 
   throw lastError;
+}
+
+// history는 지금까지의 대화(사용자가 방금 보낸 메시지 포함) 전체를 받는다.
+// 단일 메시지만 넘기면 "거기", "다른 곳도" 같은 후속 질문의 맥락을 에이전트가 전혀
+// 모르게 된다 (5순위 대화 맥락 기억 요구사항과 직결).
+export async function runAgent(history: ChatTurn[]): Promise<Recommendation> {
+  return withModelFallback(async (agent) => {
+    const result = await withTimeout(agent.invoke({ messages: history }), 25000);
+    return result.structuredResponse as Recommendation;
+  });
 }
 
 export type AgentProgressEvent = { type: "tool_start" | "tool_end"; tool: string };
@@ -142,60 +167,34 @@ export async function runAgentStream(
   history: ChatTurn[],
   onProgress?: (event: AgentProgressEvent) => void
 ): Promise<Recommendation> {
-  let lastError: unknown;
-  let currentAttempt = 0;
+  return withModelFallback(async (agent, isCurrent) => {
+    const run = await agent.streamEvents({ messages: history }, { version: "v3" });
 
-  for (const model of MODEL_FALLBACK_CHAIN) {
-    const attempt = ++currentAttempt;
-
-    const llm = new ChatGoogleGenerativeAI({
-      model,
-      apiKey: process.env.GEMINI_API_KEY,
-      temperature: 0,
-    });
-
-    const agent = createAgent({
-      model: llm,
-      tools: [airQualityTool, weatherTool, culturePortalTool, facilityInfoTool, parkingTool],
-      systemPrompt: SYSTEM_PROMPT,
-      responseFormat: RecommendationSchema,
-    });
-
-    try {
-      const run = await agent.streamEvents({ messages: history }, { version: "v3" });
-
-      if (onProgress) {
-        // 도구 호출 스트림은 최종 응답(run.output)과 별개로 흘러오므로 fire-and-forget으로
-        // 소비한다 — 여기서 나는 에러는 아래 run.output 대기 쪽에서 어차피 걸러진다.
-        // attempt 번호로 가드: 재귀 제한 등으로 다음 모델로 넘어간 뒤에도 이전 시도의
-        // tool call이 나중에 끝나면서 onProgress를 부르면, 새 시도가 같은 도구를 아직
-        // 호출 중인데 UI에 완료로 잘못 표시되는 문제(2026-09-07 리뷰 지적)를 막는다.
-        (async () => {
-          try {
-            for await (const call of run.toolCalls) {
-              if (attempt !== currentAttempt) break;
-              onProgress({ type: "tool_start", tool: call.name });
-              call.status.then(
-                () => attempt === currentAttempt && onProgress({ type: "tool_end", tool: call.name }),
-                () => attempt === currentAttempt && onProgress({ type: "tool_end", tool: call.name })
-              );
-            }
-          } catch {
-            // ignore — 최종 결과 처리는 아래에서 계속됨
+    if (onProgress) {
+      // 도구 호출 스트림은 최종 응답(run.output)과 별개로 흘러오므로 fire-and-forget으로
+      // 소비한다 — 여기서 나는 에러는 아래 run.output 대기 쪽에서 어차피 걸러진다.
+      // isCurrent()로 가드: 재귀 제한 등으로 다음 모델로 넘어간 뒤에도 이전 시도의
+      // tool call이 나중에 끝나면서 onProgress를 부르면, 새 시도가 같은 도구를 아직
+      // 호출 중인데 UI에 완료로 잘못 표시되는 문제(2026-09-07 리뷰 지적)를 막는다.
+      (async () => {
+        try {
+          for await (const call of run.toolCalls) {
+            if (!isCurrent()) break;
+            onProgress({ type: "tool_start", tool: call.name });
+            call.status.then(
+              () => isCurrent() && onProgress({ type: "tool_end", tool: call.name }),
+              () => isCurrent() && onProgress({ type: "tool_end", tool: call.name })
+            );
           }
-        })();
-      }
-
-      const finalState = await withTimeout(run.output, 25000);
-      return finalState.structuredResponse as Recommendation;
-    } catch (err) {
-      lastError = err;
-      if (!isRetryableModelError(err)) throw err;
-      console.warn(`[agent] ${model} 사용 불가, 다음 모델로 재시도`);
+        } catch {
+          // ignore — 최종 결과 처리는 아래에서 계속됨
+        }
+      })();
     }
-  }
 
-  throw lastError;
+    const finalState = await withTimeout(run.output, 25000);
+    return finalState.structuredResponse as Recommendation;
+  });
 }
 
 const SUGGEST_SYSTEM_PROMPT =
