@@ -66,10 +66,14 @@ export function KakaoMap({
   center,
   destinationLabel,
   spots,
+  className,
 }: {
   center: { latitude: number; longitude: number };
   destinationLabel: string;
   spots: MapParkingSpot[];
+  // 기본은 카드형(둥근 모서리, 고정 높이 18rem) — 화면 전체를 채우는 바텀시트 배경 등
+  // 다른 레이아웃이 필요할 때만 넘긴다(예: "absolute inset-0").
+  className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -135,7 +139,13 @@ export function KakaoMap({
 
   if (!process.env.NEXT_PUBLIC_KAKAO_JS_KEY) {
     return (
-      <div className="flex h-72 w-full items-center justify-center rounded-2xl bg-slate-100 text-center text-[13px] text-muted">
+      <div
+        className={
+          className
+            ? `flex items-center justify-center bg-slate-100 text-center text-[13px] text-muted ${className}`
+            : "flex h-72 w-full items-center justify-center rounded-2xl bg-slate-100 text-center text-[13px] text-muted"
+        }
+      >
         카카오맵 JS 키가 설정되지 않았습니다.
         <br />
         NEXT_PUBLIC_KAKAO_JS_KEY를 확인해주세요.
@@ -143,8 +153,12 @@ export function KakaoMap({
     );
   }
 
+  // className이 없으면 기본(카드형, relative)을 쓰고, 있으면 그대로 다 넘긴다 —
+  // "relative"를 항상 같이 붙이면 호출부가 "absolute"를 넘겨도 Tailwind가 둘 다
+  // 클래스 목록에 있을 때 relative를 이긴다(같은 지정도, 나중 스타일시트 순서로 결정
+  // 되고 className 문자열 안 순서가 아님) — 그러면 absolute가 무시돼서 높이가 0이 됨.
   return (
-    <div className="relative h-72 w-full overflow-hidden rounded-2xl bg-slate-100">
+    <div className={className ? `overflow-hidden bg-slate-100 ${className}` : "relative h-72 w-full overflow-hidden rounded-2xl bg-slate-100"}>
       <div ref={containerRef} className="h-full w-full" />
       <div ref={errorRef} hidden className="absolute inset-0 flex items-center justify-center bg-slate-100 text-[13px] text-muted">
         지도를 불러오지 못했습니다.

@@ -84,6 +84,7 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
         <path d="M5 12v6.5A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5V12" />
       </>
     ),
+    triangleAlert: <path d="M12 4.2L21.5 20H2.5L12 4.2z" strokeLinejoin="round" />,
   };
   return (
     <svg
