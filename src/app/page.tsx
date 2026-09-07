@@ -900,6 +900,7 @@ export default function Home() {
                   center={parkingQuery.data.destination}
                   destinationLabel={selectedPlace?.name ?? ""}
                   spots={parkingQuery.data.spots
+                    .map((s, i) => ({ ...s, order: i + 1 }))
                     .filter((s) => s.latitude !== null && s.longitude !== null)
                     .map((s) => ({
                       id: s.id,
@@ -907,6 +908,7 @@ export default function Home() {
                       latitude: s.latitude!,
                       longitude: s.longitude!,
                       walkMinutes: s.walkMinutes,
+                      order: s.order,
                     }))}
                 />
               )}
@@ -922,7 +924,7 @@ export default function Home() {
                   </div>
 
                   <div className="flex flex-col gap-2.5">
-                    {parkingQuery.data.spots.map((s) => {
+                    {parkingQuery.data.spots.map((s, i) => {
                       const occ = occupancyLabel(s);
                       return (
                         <button
@@ -931,7 +933,7 @@ export default function Home() {
                           className="flex w-full items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
                         >
                           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
-                            P
+                            {i + 1}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
