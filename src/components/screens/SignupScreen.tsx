@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useAppStore } from "@/lib/store";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
 
 export function SignupScreen() {
-  const { setView } = useAppStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,10 +32,10 @@ export function SignupScreen() {
       const result = await signIn("credentials", { email, password, redirect: false });
       if (result?.error) {
         setError("가입은 됐지만 로그인에 실패했습니다. 다시 로그인해주세요.");
-        setView("login");
+        router.push(`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`);
         return;
       }
-      setView("mypage");
+      router.push(next || "/mypage");
     } finally {
       setPending(false);
     }
@@ -41,7 +43,7 @@ export function SignupScreen() {
 
   return (
     <>
-      <ScreenHeader title="회원가입" onBack={() => setView("login")} />
+      <ScreenHeader title="회원가입" onBack={() => router.back()} />
       <form
         onSubmit={(e) => {
           e.preventDefault();

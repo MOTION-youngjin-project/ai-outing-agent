@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession, signOut } from "next-auth/react";
-import { useAppStore } from "@/lib/store";
+import { useRouter } from "next/navigation";
 import { fetchSavedPlaces, fetchPreferences, putPreferences, fetchRecentQuestions } from "@/lib/clientApi";
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
@@ -29,15 +28,12 @@ function formatKoreanDateTime(iso: string): string {
 }
 
 export function MyPageScreen() {
-  const { setView } = useAppStore();
+  const router = useRouter();
   const auth = useSession();
   const queryClient = useQueryClient();
 
-  // 마이페이지는 로그인 사용자 전용 — 세션이 없으면 화면을 그리지 않고 로그인으로 보낸다.
-  useEffect(() => {
-    if (auth.status === "unauthenticated") setView("login");
-  }, [auth.status, setView]);
-
+  // 로그인 필요 여부는 middleware.ts가 이미 서버 단에서 걸러준다 — 여긴 세션 로딩 중
+  // 잠깐의 깜빡임만 막는다.
   const authed = auth.status === "authenticated";
   const savedPlacesQuery = useQuery({
     queryKey: ["saved-places"],
@@ -67,7 +63,7 @@ export function MyPageScreen() {
   const settingsMenu = [
     { label: "알림 설정", onClick: undefined },
     { label: "방문 예정", onClick: undefined },
-    { label: "앱 설정", onClick: () => setView("settings") },
+    { label: "앱 설정", onClick: () => router.push("/settings") },
     { label: "로그아웃", onClick: () => signOut() },
   ];
 
@@ -78,9 +74,9 @@ export function MyPageScreen() {
     <>
       <ScreenHeader
         title="마이페이지"
-        onBack={() => setView("input")}
+        onBack={() => router.push("/")}
         right={
-          <button onClick={() => setView("settings")} aria-label="설정" className="p-1 text-muted">
+          <button onClick={() => router.push("/settings")} aria-label="설정" className="p-1 text-muted">
             <Icon name="gear" className="h-[22px] w-[22px]" />
           </button>
         }

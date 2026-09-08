@@ -263,6 +263,28 @@ export async function getDaeguParkingNearby(
   return enrichWithRealtime(items);
 }
 
+// /주차장/[pkltId] 상세 라우트의 새로고침/직링크 복원용. getDaeguParking(Nearby)는 상위
+// 5개로 자른 뒤라 그 밖의 pkltId는 못 찾는다 — 여긴 자르기 전 전체 목록에서 찾는다.
+export async function getParkingSpotById(
+  district: string,
+  pkltId: string,
+  origin?: { latitude: number; longitude: number } | null
+): Promise<(ParkingSpot & { distanceMeters: number | null; walkMinutes: number | null }) | null> {
+  const sggCd = DISTRICT_CODES[district];
+  if (!sggCd) return null;
+
+  const all = await fetchParking(sggCd);
+  const item = all.find((i) => i.prkInfo.pkltId === pkltId);
+  if (!item) return null;
+
+  const [spot] = await enrichWithRealtime([item]);
+  if (!origin || spot.latitude === null || spot.longitude === null) {
+    return { ...spot, distanceMeters: null, walkMinutes: null };
+  }
+  const distanceMeters = Math.round(haversineMeters(origin, { latitude: spot.latitude, longitude: spot.longitude }));
+  return { ...spot, distanceMeters, walkMinutes: estimateWalkMinutes(distanceMeters) };
+}
+
 export const parkingTool = tool(
   async ({ district }) => {
     if (!DISTRICT_CODES[district]) {

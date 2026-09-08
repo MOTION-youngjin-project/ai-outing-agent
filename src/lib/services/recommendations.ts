@@ -127,6 +127,24 @@ export async function createRecommendationRun(
   );
   const unresolvedCount = resolvedPlaces.filter((r) => !r.place).length;
 
+  // route_places.enriched_snapshot에 그대로 저장할 값이라 routePlace insert보다 먼저
+  // 계산해둔다(라우팅 전환: /recommend/[runId]/place/[placeId] 새로고침 시 이 스냅샷으로
+  // LLM이 만든 reason/tags/features 등을 복원한다 — Place 테이블엔 없는 값들).
+  const enrichedPlaces: EnrichedPlace[] = recommendation.places.map((p, i) => {
+    const resolved = resolvedPlaces[i]?.place ?? null;
+    const resolvedPoint = resolved
+      ? { latitude: resolved.latitude.toNumber(), longitude: resolved.longitude.toNumber() }
+      : null;
+    return {
+      ...p,
+      category: extractCategoryLabel(resolved?.categorySummary ?? null),
+      distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
+      placeId: resolved?.publicId ?? null,
+      latitude: resolvedPoint?.latitude ?? null,
+      longitude: resolvedPoint?.longitude ?? null,
+    };
+  });
+
   // 이 블록 전체(agentRun/route/routePlace 기록)가 실패해도(DB 커넥션 풀 등) 이미 LLM이
   // 만들어낸 추천과 카카오 매칭 결과는 살려서 사용자에게 그대로 돌려준다 — 카카오 장소
   // 매칭 실패를 관대하게 처리하는 것과 같은 원칙. agentRunId/recommendationRouteId는
@@ -167,6 +185,10 @@ export async function createRecommendationRun(
     recommendationRouteId = route.id.toString();
 
     // 장소마다 독립적인 insert라 순차로 기다릴 이유가 없다 — 한 번에 배치로 처리.
+    // 카카오 매칭 실패한 곳(placeId FK 없음)은 여기서 제외되므로, "partial" 런을
+    // /recommend/[runId]로 나중에 다시 열면 그때 봤던 장소보다 적게 보일 수 있다 —
+    // 기존에도 있던 한계(agentRun.status가 partial로 남는 것과 같은 원인)라 새로 감수하는
+    // 트레이드오프는 아니다.
     const routePlacesData = resolvedPlaces
       .filter((r) => r.place)
       .map(({ place, reason }, i) => ({
@@ -176,6 +198,7 @@ export async function createRecommendationRun(
         stopType: "visit",
         selectionReason: reason.slice(0, 1000),
         verificationRequired: false,
+        enrichedSnapshot: enrichedPlaces[i],
       }));
     if (routePlacesData.length > 0) {
       await prisma.routePlace.createMany({ data: routePlacesData });
@@ -183,21 +206,6 @@ export async function createRecommendationRun(
   } catch (err) {
     console.error("추천 기록 저장 실패(추천 결과는 정상 반환):", err);
   }
-
-  const enrichedPlaces: EnrichedPlace[] = recommendation.places.map((p, i) => {
-    const resolved = resolvedPlaces[i]?.place ?? null;
-    const resolvedPoint = resolved
-      ? { latitude: resolved.latitude.toNumber(), longitude: resolved.longitude.toNumber() }
-      : null;
-    return {
-      ...p,
-      category: extractCategoryLabel(resolved?.categorySummary ?? null),
-      distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
-      placeId: resolved?.publicId ?? null,
-      latitude: resolvedPoint?.latitude ?? null,
-      longitude: resolvedPoint?.longitude ?? null,
-    };
-  });
 
   return {
     recommendation: { ...recommendation, places: enrichedPlaces },

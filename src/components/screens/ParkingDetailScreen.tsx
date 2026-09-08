@@ -1,17 +1,24 @@
 "use client";
 
-import { useAppStore } from "@/lib/store";
+import { useRouter } from "next/navigation";
 import { occupancyLabel } from "@/lib/parkingDisplay";
+import type { ParkingSpotWithDistance } from "@/lib/clientApi";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 
-export function ParkingDetailScreen() {
-  const { selectedParkingSpot, setView } = useAppStore();
-  if (!selectedParkingSpot) return null;
-
-  const spot = selectedParkingSpot;
+export function ParkingDetailScreen({
+  spot,
+  runId,
+  placeId,
+}: {
+  spot: ParkingSpotWithDistance;
+  runId: string;
+  placeId: string;
+}) {
+  const router = useRouter();
   const occ = occupancyLabel(spot);
   const hasCoords = spot.latitude !== null && spot.longitude !== null;
+  const parkingListHref = `/recommend/${runId}/place/${placeId}/parking`;
 
   function share() {
     if (typeof navigator === "undefined" || !navigator.share) return;
@@ -22,7 +29,7 @@ export function ParkingDetailScreen() {
 
   function openDirections() {
     if (!hasCoords) {
-      setView("parking");
+      router.push(parkingListHref);
       return;
     }
     window.open(
@@ -36,7 +43,7 @@ export function ParkingDetailScreen() {
     <>
       <ScreenHeader
         title={spot.name}
-        onBack={() => setView("parking")}
+        onBack={() => router.push(parkingListHref)}
         right={
           <div className="flex items-center gap-3">
             {typeof navigator !== "undefined" && !!navigator.share && (

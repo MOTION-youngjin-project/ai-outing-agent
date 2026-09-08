@@ -13,7 +13,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
 export function InputScreen({ flow }: { flow: RecommendationFlow }) {
-  const { view, input, setInput, regionId, setRegionId } = useAppStore();
+  const { input, setInput, regionId, setRegionId } = useAppStore();
   const {
     regions,
     promptMessage,
@@ -21,6 +21,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
     displayedSuggestion,
     showSuggestionChip,
     progressLabel,
+    isPending,
     sendMessage,
     acceptSuggestion,
   } = flow;
@@ -53,7 +54,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           <select
             value={regionId}
             onChange={(e) => setRegionId(e.target.value)}
-            disabled={view === "loading"}
+            disabled={isPending}
             className="flex-1 bg-transparent text-[15px] font-medium text-ink outline-none disabled:opacity-50"
           >
             <option value="">지역을 선택하세요</option>
@@ -101,14 +102,14 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           </div>
         )}
 
-        {view === "loading" && (
+        {isPending && (
           <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
             <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
             <p className="text-[14px] text-muted">{progressLabel}</p>
           </div>
         )}
 
-        {view === "input" && !promptMessage && !errorMessage && (
+        {!isPending && !promptMessage && !errorMessage && (
           <p className="px-1 pt-1 text-[13px] leading-relaxed text-muted">
             지역을 고르고 하고 싶은 걸 편하게 적어주세요.
             <br />
@@ -150,13 +151,13 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                     acceptSuggestion();
                   }
                 }}
-                disabled={view === "loading"}
+                disabled={isPending}
                 className="relative w-full bg-transparent py-2 text-[15px] text-ink outline-none disabled:opacity-50"
               />
             </div>
             <button
               type="submit"
-              disabled={view === "loading" || !regionId}
+              disabled={isPending || !regionId}
               aria-label="보내기"
               className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white transition-colors disabled:bg-slate-200 disabled:text-slate-400"
             >

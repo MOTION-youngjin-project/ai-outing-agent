@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { useAppStore } from "@/lib/store";
+import { useRouter } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
 
 const inputClass =
   "rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60";
 
 export function SettingsScreen() {
-  const { setView } = useAppStore();
+  const router = useRouter();
   const { data: session, update } = useSession();
 
   const [name, setName] = useState(session?.user?.name ?? "");
@@ -77,7 +77,7 @@ export function SettingsScreen() {
 
   return (
     <>
-      <ScreenHeader title="앱 설정" onBack={() => setView("mypage")} />
+      <ScreenHeader title="앱 설정" onBack={() => router.back()} />
       <div className="flex flex-col gap-6 px-5">
         <div className="flex flex-col gap-2.5">
           <h2 className="px-1 text-[13px] font-semibold text-muted">이름</h2>

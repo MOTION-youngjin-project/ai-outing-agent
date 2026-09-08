@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useAppStore, type Place } from "@/lib/store";
 import { fetchRegions, fetchWeather, fetchAirQuality, fetchParking, type RecommendResult, type PlaceWithMeta } from "@/lib/clientApi";
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { splitHeadline } from "@/lib/textFormat";
 import { FILTER_LABELS } from "@/lib/placeTags";
+import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 
@@ -31,10 +32,12 @@ function ParkingCongestionBadge({ district, placeName }: { district: string; pla
   );
 }
 
-export function ResultsScreen({ recommendation }: { recommendation: RecommendResult }) {
-  const { regionId, setView, selectPlace } = useAppStore();
+export function ResultsScreen({ recommendation, runId }: { recommendation: RecommendResult; runId: string }) {
+  const { regionId } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const weatherQuery = useQuery({
     queryKey: ["weather", regionId],
@@ -69,20 +72,19 @@ export function ResultsScreen({ recommendation }: { recommendation: RecommendRes
     .map((p, i) => ({ p, i }))
     .filter(({ p }) => !activeFilter || p.tags?.includes(activeFilter));
 
-  function openDetail(place: Place) {
-    selectPlace(place);
-    setView("detail");
+  function openDetail(place: PlaceWithMeta) {
+    if (!place.placeId) return;
+    router.push(`/recommend/${runId}/place/${place.placeId}`);
   }
 
-  function viewParkingFor(place: Place) {
-    if (!place.daeguDistrict) return;
-    selectPlace(place);
-    setView("parking");
+  function viewParkingFor(place: PlaceWithMeta) {
+    if (!place.daeguDistrict || !place.placeId) return;
+    router.push(`/recommend/${runId}/place/${place.placeId}/parking`);
   }
 
   async function toggleFavorite(place: PlaceWithMeta, index: number) {
     if (!session) {
-      setView("login");
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
     // 카카오 검색으로 실제 Place를 못 찾은 장소(placeId 없음)는 저장할 DB 행이 없어서
@@ -119,7 +121,7 @@ export function ResultsScreen({ recommendation }: { recommendation: RecommendRes
 
   return (
     <>
-      <ScreenHeader title="추천 결과" onBack={() => setView("input")} />
+      <ScreenHeader title="추천 결과" onBack={() => router.push("/")} />
       <div className="flex flex-col gap-3 px-5">
         <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3.5 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <span className="flex items-center gap-1.5">
@@ -247,13 +249,14 @@ export function ResultsScreen({ recommendation }: { recommendation: RecommendRes
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => openDetail(p)}
-                    className="flex-1 rounded-full border border-hairline py-1.5 text-[12px] font-medium text-ink-soft"
+                    disabled={!p.placeId}
+                    className="flex-1 rounded-full border border-hairline py-1.5 text-[12px] font-medium text-ink-soft disabled:opacity-50"
                   >
                     상세 보기
                   </button>
                   <button
                     onClick={() => viewParkingFor(p)}
-                    disabled={!p.daeguDistrict}
+                    disabled={!p.daeguDistrict || !p.placeId}
                     className="flex-1 rounded-full bg-mint-bg py-1.5 text-[12px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
                   >
                     주차 정보
@@ -268,7 +271,7 @@ export function ResultsScreen({ recommendation }: { recommendation: RecommendRes
           <Icon name="sparkle" className="h-[18px] w-[18px] shrink-0 text-accent" />
           <span className="flex-1 truncate text-[14px] text-muted">다른 분위기로 다시 추천해보세요</span>
           <button
-            onClick={() => setView("input")}
+            onClick={() => router.push("/")}
             className="shrink-0 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white"
           >
             다른 곳 추천
