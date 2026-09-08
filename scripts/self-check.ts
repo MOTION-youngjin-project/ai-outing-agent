@@ -6,7 +6,8 @@
 import assert from "node:assert/strict";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
-import { stripTags } from "../src/lib/tools/culturePortal.ts";
+import { stripTags, isEventEnded } from "../src/lib/tools/culturePortal.ts";
+import { isQuotaExhausted, markQuotaExhausted } from "../src/lib/agent.ts";
 import {
   formatFee,
   formatOperatingHours,
@@ -50,6 +51,22 @@ check("gradeFromPm10 매우나쁨 시작(151)", gradeFromPm10(151), "매우나�
 // stripTags — 실제 HTML 태그는 지우되, 제목의 장식용 꺾쇠괄호는 보존
 check("stripTags 실제 태그 제거", stripTags("<p>hello</p>"), "hello");
 check("stripTags 한글 꺾쇠괄호 보존", stripTags("<공간드림 1472> 개인전"), "<공간드림 1472> 개인전");
+
+// isEventEnded — 2026-09-08 사용자 피드백("끝난 행사가 보임") 재발 방지.
+// now를 주입해서 실제 시계와 무관하게 검증한다.
+const CHECK_NOW = new Date("2026-09-08T12:00:00+09:00").getTime();
+check("isEventEnded 이미 끝남", isEventEnded("20260901 ~ 20260906", CHECK_NOW), true);
+check("isEventEnded 아직 진행중", isEventEnded("20260902 ~ 20260913", CHECK_NOW), false);
+check("isEventEnded 오늘이 마지막날(자정 전까지 진행중 취급)", isEventEnded("20260901 ~ 20260908", CHECK_NOW), false);
+check("isEventEnded 형식이 다르면 숨기지 않음", isEventEnded("상시", CHECK_NOW), false);
+
+// isQuotaExhausted/markQuotaExhausted — 2026-09-08 성능 조사에서 추가한 모델별 쿨다운.
+// 매 요청마다 이미 죽은 모델을 다시 두드리지 않게 하는 로직이라 회귀 시 조용히 다시 느려진다.
+const QUOTA_CHECK_MODEL = "__self-check-model__";
+check("isQuotaExhausted 마킹 전에는 false", isQuotaExhausted(QUOTA_CHECK_MODEL, 1000), false);
+markQuotaExhausted(QUOTA_CHECK_MODEL, 1000);
+check("isQuotaExhausted 마킹 직후(쿨다운 내)", isQuotaExhausted(QUOTA_CHECK_MODEL, 1000 + 1000), true);
+check("isQuotaExhausted 쿨다운(60초) 지나면 해제", isQuotaExhausted(QUOTA_CHECK_MODEL, 1000 + 60_000 + 1), false);
 
 // formatFee — crgLevySeNm이 null일 때 "null" 문자열이 그대로 노출되던 버그
 check("formatFee 무료", formatFee("무료", null), "무료");

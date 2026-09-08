@@ -96,6 +96,8 @@ export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
   category?: string | null;
   distanceKm?: number | null;
   placeId?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[] };
 export type RecommendProgressEvent = { type: string; tool?: string };

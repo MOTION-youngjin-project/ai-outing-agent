@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { fetchParking, type ParkingSpotWithDistance } from "@/lib/clientApi";
@@ -7,6 +8,12 @@ import { occupancyLabel } from "@/lib/parkingDisplay";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { KakaoMap } from "@/components/KakaoMap";
+
+// 시트가 접혔을 때(지도 위주)/펼쳐졌을 때(목록 위주) 상단이 컨테이너 높이에서 차지하는
+// 비율. 드래그하면 이 둘 사이에서 자유롭게 움직이다가 손을 떼면 가까운 쪽으로 스냅한다.
+const SNAP_PEEK = 0.56;
+const SNAP_EXPANDED = 0.1;
+const SNAP_MID = (SNAP_PEEK + SNAP_EXPANDED) / 2;
 
 export function ParkingScreen() {
   const { selectedPlace, setView, selectParkingSpot } = useAppStore();
@@ -16,6 +23,32 @@ export function ParkingScreen() {
     queryFn: () => fetchParking(selectedPlace!.daeguDistrict!, selectedPlace!.name),
     enabled: !!selectedPlace?.daeguDistrict,
   });
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startY: number; startRatio: number; height: number } | null>(null);
+  const [sheetRatio, setSheetRatio] = useState(SNAP_PEEK);
+  const [dragging, setDragging] = useState(false);
+
+  function onHandlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
+    const height = containerRef.current?.clientHeight ?? 1;
+    dragRef.current = { startY: e.clientY, startRatio: sheetRatio, height };
+    setDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function onHandlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return;
+    const { startY, startRatio, height } = dragRef.current;
+    const deltaRatio = (e.clientY - startY) / height;
+    setSheetRatio(Math.min(SNAP_PEEK, Math.max(SNAP_EXPANDED, startRatio + deltaRatio)));
+  }
+
+  function onHandlePointerUp() {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    setDragging(false);
+    setSheetRatio((current) => (current < SNAP_MID ? SNAP_EXPANDED : SNAP_PEEK));
+  }
 
   function openParkingDetail(spot: ParkingSpotWithDistance) {
     selectParkingSpot(spot);
@@ -33,19 +66,21 @@ export function ParkingScreen() {
           </span>
         }
       />
-      <div className="flex flex-col gap-3 px-5">
-        {parkingQuery.isLoading && (
-          <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-            <p className="text-[14px] text-muted">주차장 조회 중...</p>
-          </div>
-        )}
-        {!parkingQuery.isLoading && parkingQuery.data?.spots.length === 0 && (
-          <p className="px-1 text-[14px] text-muted">주차장 정보를 찾을 수 없습니다.</p>
-        )}
 
-        {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.destination && (
+      {parkingQuery.isLoading && (
+        <div className="flex items-center gap-2 px-5">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+          <p className="text-[14px] text-muted">주차장 조회 중...</p>
+        </div>
+      )}
+      {!parkingQuery.isLoading && parkingQuery.data?.spots.length === 0 && (
+        <p className="px-6 text-[14px] text-muted">주차장 정보를 찾을 수 없습니다.</p>
+      )}
+
+      {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.destination && (
+        <div ref={containerRef} className="relative h-[calc(100dvh-76px)] overflow-hidden">
           <KakaoMap
+            className="absolute inset-0"
             center={parkingQuery.data.destination}
             destinationLabel={selectedPlace?.name ?? ""}
             spots={parkingQuery.data.spots
@@ -60,62 +95,83 @@ export function ParkingScreen() {
                 order: s.order,
               }))}
           />
-        )}
 
-        {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.spots.length > 0 && (
-          <>
-            <div className="flex items-center justify-between px-1 pt-1">
-              <h2 className="flex items-center gap-1 text-[15px] font-bold text-ink">
-                주차장 목록
-                <Icon name="info" className="h-3.5 w-3.5 text-slate-300" />
-              </h2>
-              {parkingQuery.data.destination && <span className="text-[13px] text-muted">거리순</span>}
+          {/* 드래그 바텀시트 — 손 떼면 SNAP_EXPANDED/SNAP_PEEK 중 가까운 쪽으로 스냅.
+              드래그 중엔 transition을 꺼서 손가락을 그대로 따라가게 한다. */}
+          <div
+            className={`absolute inset-x-0 bottom-0 z-10 flex flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-2px_16px_rgba(17,24,39,0.1)] ${
+              dragging ? "" : "transition-[top] duration-200 ease-out"
+            }`}
+            style={{ top: `${sheetRatio * 100}%` }}
+          >
+            <div
+              onPointerDown={onHandlePointerDown}
+              onPointerMove={onHandlePointerMove}
+              onPointerUp={onHandlePointerUp}
+              onPointerCancel={onHandlePointerUp}
+              className="flex shrink-0 cursor-grab touch-none select-none items-center justify-center py-2.5 active:cursor-grabbing"
+            >
+              <span className="h-1 w-9 rounded-full bg-slate-300" />
             </div>
 
-            <div className="flex flex-col gap-2.5">
-              {parkingQuery.data.spots.map((s, i) => {
-                const occ = occupancyLabel(s);
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => openParkingDetail(s)}
-                    className="flex w-full items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
-                  >
-                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
-                      {i + 1}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-[16px] font-bold text-ink">{s.name}</span>
-                        {s.ownerType && (
-                          <span className="shrink-0 rounded-full bg-mint-bg px-2 py-0.5 text-[11px] font-medium text-accent">
-                            {s.ownerType}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 truncate text-[13px] text-muted">
-                        {s.walkMinutes !== null && `도보 ${s.walkMinutes}분 (${s.distanceMeters}m)`}
-                        {s.operatingHours && (s.walkMinutes !== null ? ` · 운영 ${s.operatingHours}` : `운영 ${s.operatingHours}`)}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      {occ && <div className={`text-[14px] font-bold ${occ.className}`}>{occ.label}</div>}
-                      <div className="mt-0.5 text-[13px] text-muted">
-                        {s.remainingSpaces ?? "-"} / {s.capacity}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
+              {parkingQuery.data.spots.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between px-1">
+                    <h2 className="flex items-center gap-1 text-[15px] font-bold text-ink">
+                      주차장 목록
+                      <Icon name="info" className="h-3.5 w-3.5 text-slate-300" />
+                    </h2>
+                    <span className="text-[13px] text-muted">거리순</span>
+                  </div>
 
-            <div className="flex gap-2 rounded-2xl bg-slate-50 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
-              <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
-              <p>주차 요금 및 운영시간은 변동될 수 있어요. 방문 전 현장 안내를 확인해 주세요.</p>
+                  <div className="flex flex-col gap-2.5">
+                    {parkingQuery.data.spots.map((s, i) => {
+                      const occ = occupancyLabel(s);
+                      return (
+                        <button
+                          key={s.id}
+                          onClick={() => openParkingDetail(s)}
+                          className="flex w-full items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)] ring-1 ring-hairline"
+                        >
+                          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
+                            {i + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-[16px] font-bold text-ink">{s.name}</span>
+                              {s.ownerType && (
+                                <span className="shrink-0 rounded-full bg-mint-bg px-2 py-0.5 text-[11px] font-medium text-accent">
+                                  {s.ownerType}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 truncate text-[13px] text-muted">
+                              {s.walkMinutes !== null && `도보 ${s.walkMinutes}분 (${s.distanceMeters}m)`}
+                              {s.operatingHours && (s.walkMinutes !== null ? ` · 운영 ${s.operatingHours}` : `운영 ${s.operatingHours}`)}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            {occ && <div className={`text-[14px] font-bold ${occ.className}`}>{occ.label}</div>}
+                            <div className="mt-0.5 text-[13px] text-muted">
+                              {s.remainingSpaces ?? "-"} / {s.capacity}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex gap-2 rounded-2xl bg-slate-50 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
+                    <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+                    <p>주차 요금 및 운영시간은 변동될 수 있어요. 방문 전 현장 안내를 확인해 주세요.</p>
+                  </div>
+                </>
+              )}
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

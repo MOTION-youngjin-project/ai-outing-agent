@@ -4,10 +4,32 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { useAppStore, type Place } from "@/lib/store";
-import { fetchRegions, fetchWeather, fetchAirQuality, type RecommendResult, type PlaceWithMeta } from "@/lib/clientApi";
+import { fetchRegions, fetchWeather, fetchAirQuality, fetchParking, type RecommendResult, type PlaceWithMeta } from "@/lib/clientApi";
+import { occupancyLabel } from "@/lib/parkingDisplay";
+import { splitHeadline } from "@/lib/textFormat";
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+
+// 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
+// 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
+// 같은 데이터/로직(occupancyLabel)을 재사용한다. district가 있는 장소에서만 표시.
+function ParkingCongestionBadge({ district, placeName }: { district: string; placeName: string }) {
+  const { data } = useQuery({
+    queryKey: ["parking-congestion", district, placeName],
+    queryFn: () => fetchParking(district, placeName),
+  });
+  const closest = data?.spots[0];
+  const occ = closest ? occupancyLabel(closest) : null;
+  if (!occ) return null;
+
+  return (
+    <span className={`flex items-center gap-1 ${occ.className}`}>
+      <Icon name="users" className="h-3.5 w-3.5" />
+      {occ.label}
+    </span>
+  );
+}
 
 export function ResultsScreen({ recommendation }: { recommendation: RecommendResult }) {
   const { regionId, setView, selectPlace } = useAppStore();
@@ -93,10 +115,7 @@ export function ResultsScreen({ recommendation }: { recommendation: RecommendRes
   }
 
   // 목업의 AI 코멘트 카드는 굵은 한 줄 + 설명 본문 구조라, message의 첫 문장을 헤드라인으로 쓴다.
-  const aiMessage = recommendation.message ?? "";
-  const aiSplitAt = aiMessage.search(/[.!?]\s/);
-  const aiHeadline = aiSplitAt > 0 ? aiMessage.slice(0, aiSplitAt + 1) : aiMessage;
-  const aiBody = aiSplitAt > 0 ? aiMessage.slice(aiSplitAt + 1).trim() : "";
+  const { headline: aiHeadline, body: aiBody } = splitHeadline(recommendation.message ?? "");
 
   return (
     <>
@@ -170,84 +189,76 @@ export function ResultsScreen({ recommendation }: { recommendation: RecommendRes
           {filteredPlaces.map(({ p, i }) => (
             <div
               key={i}
-              className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.06)]"
+              className="flex overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.06)]"
             >
-              <div className="flex gap-3 p-3">
+              <button onClick={() => openDetail(p)} className="relative w-[132px] shrink-0">
                 {p.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="h-[104px] w-[104px] shrink-0 rounded-xl object-cover"
-                  />
+                  <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-[104px] w-[104px] shrink-0 items-center justify-center rounded-xl bg-mint-soft">
+                  <div className="flex h-full min-h-[120px] w-full items-center justify-center bg-mint-soft">
                     <Icon name="pin" className="h-7 w-7 text-mint-mid" />
                   </div>
                 )}
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="flex items-start justify-between gap-2">
-                    <button onClick={() => openDetail(p)} className="min-w-0 flex-1 text-left">
-                      <div className="truncate text-[17px] font-bold text-ink">{p.name}</div>
-                      <div className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-muted">
-                        {p.oneLineDescription}
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => toggleFavorite(p, i)}
-                      disabled={!!session && !p.placeId}
-                      title={session && !p.placeId ? "저장할 수 없는 장소입니다" : undefined}
-                      aria-label="찜하기"
-                      className={
-                        favoriteIndexes.has(i)
-                          ? "text-rose-500"
-                          : session && !p.placeId
-                            ? "text-slate-200"
-                            : "text-slate-300"
-                      }
-                    >
-                      <Icon
-                        name="heart"
-                        className={`h-[22px] w-[22px] ${favoriteIndexes.has(i) ? "fill-rose-500" : ""}`}
-                      />
-                    </button>
-                  </div>
-                  <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-2 text-[12px] text-muted">
-                    {p.category && (
-                      <span className="rounded-full bg-mint-bg px-2 py-0.5 font-medium text-accent">
-                        {p.category}
-                      </span>
-                    )}
-                    {p.distanceKm !== null && p.distanceKm !== undefined && (
-                      <span className="flex items-center gap-1">
-                        <Icon name="pin" className="h-3.5 w-3.5" />
-                        {p.distanceKm}km
-                      </span>
-                    )}
-                    {p.daeguDistrict && (
-                      <span className="flex items-center gap-1">
-                        <Icon name="pin" className="h-3.5 w-3.5" />
-                        {p.daeguDistrict}
-                      </span>
-                    )}
-                    {p.fee && <span className="truncate">{p.fee}</span>}
-                  </div>
+                {p.tags?.[0] && (
+                  <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-white">
+                    {p.tags[0]} 추천
+                  </span>
+                )}
+              </button>
+              <div className="flex min-w-0 flex-1 flex-col p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <button onClick={() => openDetail(p)} className="min-w-0 flex-1 text-left">
+                    <div className="truncate text-[16px] font-bold text-ink">{p.name}</div>
+                    <div className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-muted">
+                      {p.oneLineDescription}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => toggleFavorite(p, i)}
+                    disabled={!!session && !p.placeId}
+                    title={session && !p.placeId ? "저장할 수 없는 장소입니다" : undefined}
+                    aria-label="찜하기"
+                    className={
+                      favoriteIndexes.has(i)
+                        ? "text-rose-500"
+                        : session && !p.placeId
+                          ? "text-slate-200"
+                          : "text-slate-300"
+                    }
+                  >
+                    <Icon
+                      name="heart"
+                      className={`h-5 w-5 ${favoriteIndexes.has(i) ? "fill-rose-500" : ""}`}
+                    />
+                  </button>
                 </div>
-              </div>
-              <div className="flex gap-2 border-t border-hairline px-3 py-2.5">
-                <button
-                  onClick={() => openDetail(p)}
-                  className="flex-1 rounded-full border border-hairline py-2 text-[13px] font-medium text-ink-soft"
-                >
-                  상세 보기
-                </button>
-                <button
-                  onClick={() => viewParkingFor(p)}
-                  disabled={!p.daeguDistrict}
-                  className="flex-1 rounded-full bg-mint-bg py-2 text-[13px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
-                >
-                  주차 정보
-                </button>
+                <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-[11px] text-muted">
+                  {(p.daeguDistrict || (p.distanceKm !== null && p.distanceKm !== undefined)) && (
+                    <span className="flex items-center gap-1">
+                      <Icon name="pin" className="h-3.5 w-3.5" />
+                      {[p.daeguDistrict, p.distanceKm != null ? `${p.distanceKm}km` : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
+                  {p.daeguDistrict && <ParkingCongestionBadge district={p.daeguDistrict} placeName={p.name} />}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => openDetail(p)}
+                    className="flex-1 rounded-full border border-hairline py-1.5 text-[12px] font-medium text-ink-soft"
+                  >
+                    상세 보기
+                  </button>
+                  <button
+                    onClick={() => viewParkingFor(p)}
+                    disabled={!p.daeguDistrict}
+                    className="flex-1 rounded-full bg-mint-bg py-1.5 text-[12px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    주차 정보
+                  </button>
+                </div>
               </div>
             </div>
           ))}

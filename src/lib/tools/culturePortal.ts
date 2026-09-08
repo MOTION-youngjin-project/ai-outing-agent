@@ -29,6 +29,15 @@ function extractTag(xml: string, tag: string): string {
   return match ? match[1] : "";
 }
 
+// eventPeriod는 이 API에서 항상 "YYYYMMDD ~ YYYYMMDD" 형식으로 온다(실측 확인).
+// 형식이 다르면(향후 API 변경 등) 모르는 채로 숨기지 않고 그냥 보여준다.
+export function isEventEnded(eventPeriod: string, now = Date.now()): boolean {
+  const endStr = eventPeriod.split("~")[1]?.trim();
+  if (!endStr || !/^\d{8}$/.test(endStr)) return false;
+  const end = new Date(`${endStr.slice(0, 4)}-${endStr.slice(4, 6)}-${endStr.slice(6, 8)}T23:59:59`);
+  return end.getTime() < now;
+}
+
 export type PerformanceItem = {
   title: string;
   eventPeriod: string;
@@ -65,7 +74,8 @@ async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
     imageUrl: extractTag(item, "imageObject"),
   }));
 
-  return parsed;
+  // 이미 끝난 행사는 검색 결과(직접 검색 화면·AI 추천 도구 둘 다)에서 제외한다.
+  return parsed.filter((item) => !isEventEnded(item.eventPeriod));
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
