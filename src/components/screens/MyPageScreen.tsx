@@ -80,9 +80,9 @@ export function MyPageScreen() {
         title="마이페이지"
         onBack={() => setView("input")}
         right={
-          <span className="p-1 text-muted">
+          <button onClick={() => setView("settings")} aria-label="설정" className="p-1 text-muted">
             <Icon name="gear" className="h-[22px] w-[22px]" />
-          </span>
+          </button>
         }
       />
       <div className="flex flex-col gap-3 px-5">
