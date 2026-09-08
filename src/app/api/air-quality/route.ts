@@ -26,8 +26,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "regionId 또는 region 파라미터가 필요합니다." }, { status: 400 });
   }
 
-  if (!process.env.AIRKOREA_API_KEY) {
-    return NextResponse.json({ error: "AIRKOREA_API_KEY가 설정되지 않았습니다." }, { status: 503 });
+  if (!process.env.DATA_GO_KR_API_KEY) {
+    return NextResponse.json({ error: "DATA_GO_KR_API_KEY가 설정되지 않았습니다." }, { status: 503 });
   }
 
   try {

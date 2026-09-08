@@ -81,8 +81,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ponytail: 에어코리아와 동일하게 SERVICETIMEOUT_ERROR가 잦아 최대 3회 재시도.
 export async function fetchWeather(nx: number, ny: number) {
-  const apiKey = process.env.KMA_API_KEY;
-  if (!apiKey) throw new Error("KMA_API_KEY가 설정되지 않았습니다.");
+  const apiKey = process.env.DATA_GO_KR_API_KEY;
+  if (!apiKey) throw new Error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.");
 
   const MAX_ATTEMPTS = 3;
   let lastError: unknown;
