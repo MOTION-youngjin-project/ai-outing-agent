@@ -253,14 +253,32 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               {cultureMutation.data.length === 0 && (
                 <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
               )}
-              {cultureMutation.data.map((event, i) => (
-                <div key={i} className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-                  <div className="text-[15px] font-semibold text-ink">{event.title}</div>
-                  <div className="text-[13px] text-muted">
-                    {event.eventSite} · {event.eventPeriod}
+              {cultureMutation.data.map((event, i) =>
+                event.url ? (
+                  <a
+                    key={i}
+                    href={event.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+                  >
+                    <div className="flex-1">
+                      <div className="text-[15px] font-semibold text-ink">{event.title}</div>
+                      <div className="text-[13px] text-muted">
+                        {event.eventSite} · {event.eventPeriod}
+                      </div>
+                    </div>
+                    <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />
+                  </a>
+                ) : (
+                  <div key={i} className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                    <div className="text-[15px] font-semibold text-ink">{event.title}</div>
+                    <div className="text-[13px] text-muted">
+                      {event.eventSite} · {event.eventPeriod}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>

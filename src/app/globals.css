@@ -33,3 +33,26 @@ body {
     "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* 클릭 가능한 요소는 이 앱에서 전부 button 태그라 여기 한 곳으로 전체 적용된다.
+   brightness는 accent-deep("액센트 눌림/호버"용으로 정의만 돼 있고 안 쓰이던 토큰)이
+   민트 버튼에서 실제로 어떻게 보이는지에 맞춘 값 — 흰 배경 버튼에도 같이 먹혀서
+   버튼마다 별도 색을 하드코딩할 필요가 없다. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  button:not(:disabled):hover {
+    filter: brightness(0.97);
+  }
+}
+
+button:not(:disabled):active {
+  transform: scale(0.97);
+  filter: brightness(0.94);
+}
