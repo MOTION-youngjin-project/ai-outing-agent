@@ -193,18 +193,10 @@ export type ParkingSpot = {
   remark: string | null;
 };
 
-// LangChain 도구와 /api/parking 라우트가 공유하는 구조화된 조회 함수.
-// 좌표는 API가 주지만 기준점(사용자가 실제로 서있는 위치)이 없어 거리순 정렬은 지원하지 않는다.
-export async function getDaeguParking(district: string): Promise<ParkingSpot[]> {
-  const sggCd = DISTRICT_CODES[district];
-  if (!sggCd) return [];
-
-  // sysgrpyYn(실시간 연동 플래그)이 Y인 주차장이 실제로 실시간 잔여대수를 가질
-  // 확률이 훨씬 높아서(실측 확인함), 앞쪽에 오도록 정렬한 뒤 5개를 뽑는다.
-  const all = await fetchParking(sggCd);
-  const items = [...all]
-    .sort((a, b) => Number(b.prkInfo.sysgrpyYn === "Y") - Number(a.prkInfo.sysgrpyYn === "Y"))
-    .slice(0, 5);
+// 상위 N개로 좁혀진 정적 목록에 실시간 잔여대수를 붙여 ParkingSpot으로 변환한다 —
+// getDaeguParking(실시간연동 우선)과 getDaeguParkingNearby(거리 우선) 둘 다 이 마지막
+// 단계는 동일해서 공유한다.
+async function enrichWithRealtime(items: ParkingItem[]): Promise<ParkingSpot[]> {
   const apiKey = process.env.DAEGU_PARKING_API_KEY;
   const remainingSpacesList = apiKey
     ? await Promise.all(items.map((i) => fetchRealtimeParking(i.prkInfo.pkltId, apiKey)))
@@ -228,6 +220,47 @@ export async function getDaeguParking(district: string): Promise<ParkingSpot[]> 
     phone: i.prkFcltInfo.telno,
     remark: i.prkOperInfo.rmrk,
   }));
+}
+
+// LangChain 도구가 쓰는 조회 함수. 기준점(사용자가 실제로 서있는 위치)이 없어 거리순
+// 정렬은 지원하지 않는다 — 대신 sysgrpyYn(실시간 연동 플래그)이 Y인 주차장이 실제로
+// 실시간 잔여대수를 가질 확률이 훨씬 높아서(실측 확인함) 그걸 우선한다.
+export async function getDaeguParking(district: string): Promise<ParkingSpot[]> {
+  const sggCd = DISTRICT_CODES[district];
+  if (!sggCd) return [];
+
+  const all = await fetchParking(sggCd);
+  const items = [...all]
+    .sort((a, b) => Number(b.prkInfo.sysgrpyYn === "Y") - Number(a.prkInfo.sysgrpyYn === "Y"))
+    .slice(0, 5);
+  return enrichWithRealtime(items);
+}
+
+// /api/parking 라우트가 쓰는 조회 함수 — 목적지 좌표가 있을 때는 실시간 연동 여부와
+// 무관하게 실제로 가장 가까운 곳을 고른다. 2026-09-08 실측: getDaeguParking처럼
+// "실시간연동 우선, 그 안에서 원본 API 순서"로 5개를 뽑으면 그 순서가 위치와 무관해서
+// 5~6km 떨어진 곳이 뽑히는 문제가 있었음(대구미술관 기준 실제로 재현) — 화면에 이미
+// "거리순"이라고 표시하고 있으니 실제 동작도 그래야 한다. 실시간 데이터 없는 곳은
+// remainingSpaces가 null로 남고 UI가 이미 그 경우를 처리한다.
+export async function getDaeguParkingNearby(
+  district: string,
+  origin: { latitude: number; longitude: number }
+): Promise<ParkingSpot[]> {
+  const sggCd = DISTRICT_CODES[district];
+  if (!sggCd) return [];
+
+  const all = await fetchParking(sggCd);
+  const items = all
+    .filter((i): i is ParkingItem & { prkFcltInfo: { lat: number; lot: number } } =>
+      i.prkFcltInfo.lat !== null && i.prkFcltInfo.lot !== null
+    )
+    .sort(
+      (a, b) =>
+        haversineMeters(origin, { latitude: a.prkFcltInfo.lat, longitude: a.prkFcltInfo.lot }) -
+        haversineMeters(origin, { latitude: b.prkFcltInfo.lat, longitude: b.prkFcltInfo.lot })
+    )
+    .slice(0, 5);
+  return enrichWithRealtime(items);
 }
 
 export const parkingTool = tool(
