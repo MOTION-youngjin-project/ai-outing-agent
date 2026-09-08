@@ -55,6 +55,43 @@ export function ParkingScreen() {
     setView("parking-detail");
   }
 
+  // 지도 위 바텀시트(목적지 좌표 있음)와 목록만 보여주는 폴백(목적지 좌표 없음) 둘 다
+  // 같은 항목 UI를 쓴다.
+  function ParkingSpotItem({ spot, index }: { spot: ParkingSpotWithDistance; index: number }) {
+    const occ = occupancyLabel(spot);
+    return (
+      <button
+        onClick={() => openParkingDetail(spot)}
+        className="flex w-full items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)] ring-1 ring-hairline"
+      >
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
+          {index + 1}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[16px] font-bold text-ink">{spot.name}</span>
+            {spot.ownerType && (
+              <span className="shrink-0 rounded-full bg-mint-bg px-2 py-0.5 text-[11px] font-medium text-accent">
+                {spot.ownerType}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 truncate text-[13px] text-muted">
+            {spot.walkMinutes !== null && `도보 ${spot.walkMinutes}분 (${spot.distanceMeters}m)`}
+            {spot.operatingHours &&
+              (spot.walkMinutes !== null ? ` · 운영 ${spot.operatingHours}` : `운영 ${spot.operatingHours}`)}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          {occ && <div className={`text-[14px] font-bold ${occ.className}`}>{occ.label}</div>}
+          <div className="mt-0.5 text-[13px] text-muted">
+            {spot.remainingSpaces ?? "-"} / {spot.capacity}
+          </div>
+        </div>
+      </button>
+    );
+  }
+
   return (
     <>
       <ScreenHeader
@@ -76,6 +113,25 @@ export function ParkingScreen() {
       {!parkingQuery.isLoading && parkingQuery.data?.spots.length === 0 && (
         <p className="px-6 text-[14px] text-muted">주차장 정보를 찾을 수 없습니다.</p>
       )}
+
+      {/* 카카오가 이 장소 이름을 못 찾아 목적지 좌표가 없는 경우 — 지도는 못 그려도
+          이 구의 대표 주차장 목록 자체는 유효한 데이터라 목록만이라도 보여준다. */}
+      {!parkingQuery.isLoading &&
+        parkingQuery.data &&
+        parkingQuery.data.spots.length > 0 &&
+        !parkingQuery.data.destination && (
+          <div className="flex flex-col gap-3 px-5">
+            <div className="flex gap-2 rounded-2xl bg-mint-bg px-4 py-3.5 text-[12px] leading-relaxed text-ink-soft">
+              <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-mint-mid" />
+              <p>이 장소의 정확한 위치를 찾지 못해 이 지역 대표 주차장을 보여드려요. 거리 정렬은 지원하지 않아요.</p>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {parkingQuery.data.spots.map((s, i) => (
+                <ParkingSpotItem key={s.id} spot={s} index={i} />
+              ))}
+            </div>
+          </div>
+        )}
 
       {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.destination && (
         <div ref={containerRef} className="relative h-[calc(100dvh-76px)] overflow-hidden">
@@ -126,40 +182,9 @@ export function ParkingScreen() {
                   </div>
 
                   <div className="flex flex-col gap-2.5">
-                    {parkingQuery.data.spots.map((s, i) => {
-                      const occ = occupancyLabel(s);
-                      return (
-                        <button
-                          key={s.id}
-                          onClick={() => openParkingDetail(s)}
-                          className="flex w-full items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)] ring-1 ring-hairline"
-                        >
-                          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
-                            {i + 1}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate text-[16px] font-bold text-ink">{s.name}</span>
-                              {s.ownerType && (
-                                <span className="shrink-0 rounded-full bg-mint-bg px-2 py-0.5 text-[11px] font-medium text-accent">
-                                  {s.ownerType}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-0.5 truncate text-[13px] text-muted">
-                              {s.walkMinutes !== null && `도보 ${s.walkMinutes}분 (${s.distanceMeters}m)`}
-                              {s.operatingHours && (s.walkMinutes !== null ? ` · 운영 ${s.operatingHours}` : `운영 ${s.operatingHours}`)}
-                            </div>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            {occ && <div className={`text-[14px] font-bold ${occ.className}`}>{occ.label}</div>}
-                            <div className="mt-0.5 text-[13px] text-muted">
-                              {s.remainingSpaces ?? "-"} / {s.capacity}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                    {parkingQuery.data.spots.map((s, i) => (
+                      <ParkingSpotItem key={s.id} spot={s} index={i} />
+                    ))}
                   </div>
 
                   <div className="flex gap-2 rounded-2xl bg-slate-50 px-4 py-3.5 text-[12px] leading-relaxed text-muted">

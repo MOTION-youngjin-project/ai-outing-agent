@@ -19,7 +19,14 @@ export async function GET(req: NextRequest) {
     // 없음) 좌표 기준 정렬이 불가능하니 기존처럼 실시간 연동 우선 5곳(getDaeguParking).
     const destination = placeName ? await resolvePlaceByName(placeName, district) : null;
     if (!destination) {
-      const spots = await getDaeguParking(district);
+      // 카카오가 이 장소 이름을 못 찾은 경우(예: "사문진 주막촌 및 나루터") — 거리 계산이
+      // 안 되니 distanceMeters/walkMinutes는 null로 채워서 클라이언트 타입과 맞춘다.
+      // 지도는 못 그려도 이 구의 대표 주차장 목록 자체는 유효한 데이터라 그대로 내려준다.
+      const spots = (await getDaeguParking(district)).map((s) => ({
+        ...s,
+        distanceMeters: null,
+        walkMinutes: null,
+      }));
       return NextResponse.json({ spots, destination: null });
     }
 
