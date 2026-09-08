@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDaeguParking, DAEGU_DISTRICTS, haversineMeters, estimateWalkMinutes } from "@/lib/tools/parking";
+import { getDaeguParking, getDaeguParkingNearby, DAEGU_DISTRICTS, haversineMeters, estimateWalkMinutes } from "@/lib/tools/parking";
 import { resolvePlaceByName } from "@/lib/services/places";
 
 export async function GET(req: NextRequest) {
@@ -14,16 +14,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const spots = await getDaeguParking(district);
-
-    // placeName이 있으면 목적지 좌표를 찾아 거리/도보시간을 계산해 가까운 순으로 정렬한다.
-    // 못 찾으면(카카오 검색 결과 없음) 거리 정보 없이 원래 순서 그대로 반환.
+    // placeName이 있으면 목적지 좌표를 먼저 찾아서, 그 좌표 기준으로 실제 가장 가까운
+    // 5곳을 고른다(getDaeguParkingNearby). 못 찾으면(카카오 검색 결과 없음/placeName
+    // 없음) 좌표 기준 정렬이 불가능하니 기존처럼 실시간 연동 우선 5곳(getDaeguParking).
     const destination = placeName ? await resolvePlaceByName(placeName, district) : null;
     if (!destination) {
+      const spots = await getDaeguParking(district);
       return NextResponse.json({ spots, destination: null });
     }
 
     const origin = { latitude: destination.latitude.toNumber(), longitude: destination.longitude.toNumber() };
+    const spots = await getDaeguParkingNearby(district, origin);
     const withDistance = spots
       .map((s) => {
         if (s.latitude === null || s.longitude === null) {
