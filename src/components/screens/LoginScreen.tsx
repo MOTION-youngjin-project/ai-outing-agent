@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useAppStore } from "@/lib/store";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
 
 export function LoginScreen() {
-  const { setView } = useAppStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -21,7 +23,7 @@ export function LoginScreen() {
         setError("이메일 또는 비밀번호가 올바르지 않습니다.");
         return;
       }
-      setView("mypage");
+      router.push(next || "/mypage");
     } finally {
       setPending(false);
     }
@@ -29,7 +31,7 @@ export function LoginScreen() {
 
   return (
     <>
-      <ScreenHeader title="로그인" onBack={() => setView("mypage")} />
+      <ScreenHeader title="로그인" onBack={() => router.back()} />
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -63,7 +65,7 @@ export function LoginScreen() {
         </button>
         <button
           type="button"
-          onClick={() => setView("signup")}
+          onClick={() => router.push(`/signup${next ? `?next=${encodeURIComponent(next)}` : ""}`)}
           className="py-1 text-center text-[13px] text-muted"
         >
           아직 계정이 없으신가요? <span className="font-semibold text-accent">회원가입</span>

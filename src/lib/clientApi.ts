@@ -105,7 +105,8 @@ export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
   latitude?: number | null;
   longitude?: number | null;
 };
-export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[] };
+// agentRunId: /recommend/[runId] 라우팅용 — 새로고침/직링크 복원 때 이 id로 결과를 다시 조회한다.
+export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[]; agentRunId: string };
 export type RecommendProgressEvent = { type: string; tool?: string };
 
 // 거리(km) 배지 계산용 GPS 좌표. 권한 거부/미지원/타임아웃이면 조용히 null —
@@ -159,8 +160,9 @@ export async function postRecommend(
     for (const line of lines) {
       if (!line.trim()) continue;
       const event = JSON.parse(line);
-      if (event.type === "result") result = event.result.recommendation as RecommendResult;
-      else if (event.type === "error") errorMessage = event.message;
+      if (event.type === "result") {
+        result = { ...event.result.recommendation, agentRunId: event.result.agentRunId } as RecommendResult;
+      } else if (event.type === "error") errorMessage = event.message;
       else onProgress?.(event);
     }
   }
@@ -168,6 +170,28 @@ export async function postRecommend(
   if (errorMessage) throw new Error(errorMessage);
   if (!result) throw new Error("알 수 없는 오류가 발생했습니다.");
   return result;
+}
+
+// /recommend/[runId] 새로고침/직링크 복원용 — 결과를 DB에서 다시 조회한다.
+export async function fetchRecommendation(runId: string): Promise<RecommendResult> {
+  const res = await fetch(`/api/recommend/${runId}`);
+  if (!res.ok) throw new Error("추천 결과를 찾을 수 없습니다.");
+  const data = await res.json();
+  return data.data;
+}
+
+// /recommend/[runId]/place/[placeId]/parking/[pkltId] 새로고침/직링크 복원용.
+export async function fetchParkingSpotById(
+  pkltId: string,
+  district: string,
+  placeName?: string
+): Promise<ParkingSpotWithDistance | null> {
+  const params = new URLSearchParams({ district });
+  if (placeName) params.set("placeName", placeName);
+  const res = await fetch(`/api/parking/${pkltId}?${params}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.data ?? null;
 }
 
 export async function postSuggest(history: ChatTurn[]): Promise<string | null> {

@@ -2,8 +2,8 @@
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAppStore } from "@/lib/store";
-import { fetchParking, type ParkingSpotWithDistance } from "@/lib/clientApi";
+import { useRouter } from "next/navigation";
+import { fetchParking, type ParkingSpotWithDistance, type PlaceWithMeta } from "@/lib/clientApi";
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -15,13 +15,21 @@ const SNAP_PEEK = 0.56;
 const SNAP_EXPANDED = 0.1;
 const SNAP_MID = (SNAP_PEEK + SNAP_EXPANDED) / 2;
 
-export function ParkingScreen() {
-  const { selectedPlace, setView, selectParkingSpot } = useAppStore();
+export function ParkingScreen({
+  place,
+  runId,
+  placeId,
+}: {
+  place: PlaceWithMeta;
+  runId: string;
+  placeId: string;
+}) {
+  const router = useRouter();
 
   const parkingQuery = useQuery({
-    queryKey: ["parking", selectedPlace?.daeguDistrict, selectedPlace?.name],
-    queryFn: () => fetchParking(selectedPlace!.daeguDistrict!, selectedPlace!.name),
-    enabled: !!selectedPlace?.daeguDistrict,
+    queryKey: ["parking", place.daeguDistrict, place.name],
+    queryFn: () => fetchParking(place.daeguDistrict!, place.name),
+    enabled: !!place.daeguDistrict,
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,8 +59,7 @@ export function ParkingScreen() {
   }
 
   function openParkingDetail(spot: ParkingSpotWithDistance) {
-    selectParkingSpot(spot);
-    setView("parking-detail");
+    router.push(`/recommend/${runId}/place/${placeId}/parking/${spot.id}`);
   }
 
   // 지도 위 바텀시트(목적지 좌표 있음)와 목록만 보여주는 폴백(목적지 좌표 없음) 둘 다
@@ -95,8 +102,8 @@ export function ParkingScreen() {
   return (
     <>
       <ScreenHeader
-        title={`${selectedPlace?.name ?? ""} 주차 정보`}
-        onBack={() => setView("detail")}
+        title={`${place.name} 주차 정보`}
+        onBack={() => router.push(`/recommend/${runId}/place/${placeId}`)}
         right={
           <span className="p-1 text-slate-300">
             <Icon name="heart" className="h-[22px] w-[22px]" />
@@ -138,7 +145,7 @@ export function ParkingScreen() {
           <KakaoMap
             className="absolute inset-0"
             center={parkingQuery.data.destination}
-            destinationLabel={selectedPlace?.name ?? ""}
+            destinationLabel={place.name}
             spots={parkingQuery.data.spots
               .map((s, i) => ({ ...s, order: i + 1 }))
               .filter((s) => s.latitude !== null && s.longitude !== null)

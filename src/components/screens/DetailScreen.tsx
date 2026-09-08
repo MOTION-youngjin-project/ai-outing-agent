@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useAppStore } from "@/lib/store";
-import { fetchWeather, fetchAirQuality } from "@/lib/clientApi";
+import { fetchWeather, fetchAirQuality, type PlaceWithMeta } from "@/lib/clientApi";
 import { splitHeadline } from "@/lib/textFormat";
+import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { KakaoMap } from "@/components/KakaoMap";
@@ -21,10 +22,12 @@ function airQualityPhrase(grade: string): string {
   return "외출을 자제하세요";
 }
 
-export function DetailScreen() {
-  const { selectedPlace, regionId, setView } = useAppStore();
+export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: string }) {
+  const { regionId } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
   const [saved, setSaved] = useState(false);
   const [savePending, setSavePending] = useState(false);
 
@@ -39,8 +42,7 @@ export function DetailScreen() {
     enabled: !!regionId,
   });
 
-  if (!selectedPlace) return null;
-  const p = selectedPlace;
+  const p = place;
 
   const { headline: reasonHeadline, body: reasonBody } = splitHeadline(p.reason ?? "");
   const isIndoor = p.tags?.includes("실내");
@@ -48,7 +50,7 @@ export function DetailScreen() {
 
   async function toggleSave() {
     if (!session) {
-      setView("login");
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
     if (!p.placeId) return;
@@ -83,7 +85,7 @@ export function DetailScreen() {
     <>
       <ScreenHeader
         title="상세 보기"
-        onBack={() => setView("results")}
+        onBack={() => router.push(`/recommend/${runId}`)}
         right={
           <div className="flex items-center gap-3">
             {typeof navigator !== "undefined" && !!navigator.share && (
@@ -242,9 +244,9 @@ export function DetailScreen() {
             <Icon name="heart" className={`h-4 w-4 ${saved ? "fill-rose-500" : ""}`} />
             {saved ? "저장됨" : "이 장소 저장"}
           </button>
-          {p.daeguDistrict && (
+          {p.daeguDistrict && p.placeId && (
             <button
-              onClick={() => setView("parking")}
+              onClick={() => router.push(`/recommend/${runId}/place/${p.placeId}/parking`)}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white"
             >
               <Icon name="parking" className="h-4 w-4" />

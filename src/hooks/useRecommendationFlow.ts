@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 import { useAppStore } from "@/lib/store";
@@ -9,6 +10,7 @@ import {
   fetchRegions,
   postRecommend,
   postSuggest,
+  type Region,
   type RecommendProgressEvent,
 } from "@/lib/clientApi";
 
@@ -39,15 +41,19 @@ function summarize(rec: Recommendation): string {
 }
 
 // 추천 요청(질문 입력 → 로딩 진행 상황 → 결과) 흐름 전체를 여기 한 곳에 모았다.
-// InputScreen(진행 상황 표시)과 ResultsScreen(결과 데이터)이 같은 recommendMutation을
-// 공유해야 해서(useMutation은 컴포넌트마다 따로 호출하면 상태가 안 섞임, useQuery처럼
-// 캐시로 자동 공유되지 않음) Home에서 한 번만 호출해 두 화면에 나눠 내려준다.
-export function useRecommendationFlow() {
-  const { history, setHistory, input, setInput, regionId, setView } = useAppStore();
+// initialRegions: 홈(/) 서버 컴포넌트가 SSR로 미리 조회해둔 시/도 목록 — regions
+// useQuery의 initialData로 꽂아서 첫 로딩 깜빡임을 없앤다.
+export function useRecommendationFlow(initialRegions?: Region[]) {
+  const { history, setHistory, input, setInput, regionId } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
-  const regionsQuery = useQuery({ queryKey: ["regions", "sido"], queryFn: fetchRegions });
+  const regionsQuery = useQuery({
+    queryKey: ["regions", "sido"],
+    queryFn: fetchRegions,
+    initialData: initialRegions,
+  });
   const regions = regionsQuery.data ?? [];
 
   // 서버/클라이언트 초기 렌더가 일치해야 하므로 고정값으로 시작하고, 마운트 후에만 랜덤화한다.
@@ -86,11 +92,16 @@ export function useRecommendationFlow() {
         { role: "assistant", content: summarize(rec) },
       ];
       setHistory(historyWithReply);
-      setView(rec.needsMoreInfo ? "input" : "results");
+      // 결과가 있으면 /recommend/[runId]로 이동 — 방금 받은 응답을 캐시에 미리 채워서
+      // 결과 화면이 도착하자마자 재요청 없이 바로 렌더된다(새로고침 시엔 이 캐시가 없으니
+      // 자동으로 GET /api/recommend/[runId]를 다시 호출 — 그게 원하는 동작).
+      if (!rec.needsMoreInfo && rec.places && rec.places.length > 0) {
+        queryClient.setQueryData(["recommend", rec.agentRunId], rec);
+        router.push(`/recommend/${rec.agentRunId}`);
+      }
       suggestMutation.mutate(historyWithReply);
       if (session) queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
     },
-    onError: () => setView("input"),
   });
 
   function sendMessage() {
@@ -108,7 +119,6 @@ export function useRecommendationFlow() {
     suggestMutation.reset();
     setActiveTools(new Set());
     setResolvingPlaces(false);
-    setView("loading");
     recommendMutation.mutate(historyWithUser);
   }
 

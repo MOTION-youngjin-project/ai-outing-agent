@@ -547,6 +547,11 @@ model RoutePlace {
   travelDurationMin    Int?                @map("travel_duration_min")
   selectionReason      String?             @map("selection_reason") @db.VarChar(1000)
   verificationRequired Boolean             @default(false) @map("verification_required")
+  // 라우팅 전환용: 새로고침/직링크로 /recommend/[runId]/place/[placeId]를 다시 열 때
+  // LLM이 만든 상세 필드(oneLineDescription/tags/features/visitDuration/suggestedRoute 등,
+  // PlaceWithMeta 그대로)를 재현하는 데 쓴다. Place 테이블엔 이 필드들이 없다(LLM이 이번
+  // 추천에서만 생성한 값이라 장소 고유 정보가 아님).
+  enrichedSnapshot     Json?               @map("enriched_snapshot")
   route                RecommendationRoute @relation(fields: [routeId], references: [id])
   place                Place               @relation(fields: [placeId], references: [id])
   event                CulturalEvent?      @relation(fields: [eventId], references: [id])
