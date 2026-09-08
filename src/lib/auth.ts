@@ -6,6 +6,9 @@ import { prisma } from "./prisma";
 // OAuth(카카오 등) 없이 이메일+비밀번호만 지원하므로 Adapter 없이 JWT 세션으로 충분하다
 // (Account/Session 테이블이 필요 없음 — Credentials 인증은 next-auth Adapter가 관리 못 함).
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Vercel 같은 자동 신뢰 플랫폼이 아니라 pm2+리버스 프록시로 직접 호스팅하는 서버라,
+  // 이게 없으면 모든 요청이 "UntrustedHost" 에러로 막힌다(2026-09-08 배포 후 실측 확인).
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/" },
   providers: [
