@@ -138,9 +138,14 @@ export function MyPageScreen() {
                 key={p.placeId}
                 className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
               >
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
-                  <Icon name="pin" className="h-5 w-5 text-mint-mid" />
-                </div>
+                {p.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                  <img src={p.imageUrl} alt={p.name} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
+                ) : (
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
+                    <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                  </div>
+                )}
                 <div className="flex-1">
                   <div className="text-[16px] font-bold text-ink">{p.name}</div>
                   <div className="mt-0.5 text-[13px] text-muted">

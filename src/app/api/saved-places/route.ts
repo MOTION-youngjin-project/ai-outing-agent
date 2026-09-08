@@ -13,7 +13,7 @@ export async function GET() {
   const saved = await prisma.savedPlace.findMany({
     where: { userId: BigInt(session.user.id) },
     orderBy: { createdAt: "desc" },
-    include: { place: true },
+    include: { place: { include: { images: { where: { isPrimary: true }, take: 1 } } } },
   });
 
   const data = saved.map((s) => ({
@@ -21,6 +21,7 @@ export async function GET() {
     name: s.place.name,
     categorySummary: s.place.categorySummary,
     roadAddress: s.place.roadAddress,
+    imageUrl: s.place.images[0]?.thumbnailUrl ?? s.place.images[0]?.originalUrl ?? null,
   }));
 
   return NextResponse.json({ data });

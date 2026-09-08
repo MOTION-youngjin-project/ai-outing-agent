@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDataSource } from "./shared";
 import { pickBestPlaceMatch, pickRegionForAddress } from "./matching";
+import { fetchPlaceImage } from "@/lib/tools/tourApi";
 import type { Place } from "../../../generated/prisma/client";
 
 // 카카오 로컬 - 키워드로 장소 검색
@@ -100,7 +101,12 @@ async function upsertPlaceFromDoc(doc: KakaoDocument, sourceId: bigint): Promise
   });
 
   const isFresh = existingRecord?.expiresAt ? existingRecord.expiresAt > new Date() : false;
-  if (existingRecord && isFresh) return existingRecord.place;
+  if (existingRecord && isFresh) {
+    // Kakao 캐시는 신선해도 이미지는 이 기능이 생기기 전부터 있던 장소라 아직 없을 수
+    // 있다 — ensurePlaceImage 자체가 이미 있으면 즉시 반환이라 여기서 매번 불러도 싸다.
+    await ensurePlaceImage(existingRecord.place, null);
+    return existingRecord.place;
+  }
 
   const address = doc.road_address_name || doc.address_name;
   const region = address ? await findRegionByAddress(address) : null;
@@ -136,7 +142,33 @@ async function upsertPlaceFromDoc(doc: KakaoDocument, sourceId: bigint): Promise
     },
   });
 
+  await ensurePlaceImage(place, region?.name ?? null);
+
   return place;
+}
+
+// 이미지는 한 번 캐시되면 다시 안 가져온다 — TourAPI 무료 쿼터가 하루 1,000건뿐이고
+// 장소 사진은 자주 안 바뀌어서, place_source_records처럼 TTL로 매번 갱신할 이유가 없다.
+// 실패해도(TourAPI 오류, 검색 결과 없음) 장소 자체는 그대로 살린다 — 사진은 있으면
+// 화면에 보여주고 없으면 아이콘 placeholder로 대체되는 부가 기능일 뿐이다.
+async function ensurePlaceImage(place: Place, regionName: string | null): Promise<void> {
+  const existing = await prisma.placeImage.findFirst({ where: { placeId: place.id } });
+  if (existing) return;
+
+  try {
+    const image = await fetchPlaceImage(place.name, regionName);
+    if (!image) return;
+    await prisma.placeImage.create({
+      data: {
+        placeId: place.id,
+        originalUrl: image.originalUrl,
+        thumbnailUrl: image.thumbnailUrl,
+        isPrimary: true,
+      },
+    });
+  } catch (err) {
+    console.error(`장소 이미지 조회 실패(${place.name}):`, err);
+  }
 }
 
 // 카카오 로컬 검색을 항상 실시간으로 호출하고(검색 결과 자체는 캐시하지 않음),
