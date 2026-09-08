@@ -5,9 +5,13 @@ interface AppState {
   input: string;
   history: ChatTurn[];
   regionId: string;
+  sidebarOpen: boolean;
   setInput: (input: string) => void;
   setHistory: (history: ChatTurn[]) => void;
   setRegionId: (regionId: string) => void;
+  openSidebar: () => void;
+  closeSidebar: () => void;
+  toggleSidebar: () => void;
 }
 
 // ponytail: 새로고침 시 초기화(영속화 안 함) — 사용자 대화를 영구 저장하지 않는다는
@@ -18,7 +22,11 @@ export const useAppStore = create<AppState>((set) => ({
   input: "",
   history: [],
   regionId: "",
+  sidebarOpen: false,
   setInput: (input) => set({ input }),
   setHistory: (history) => set({ history }),
   setRegionId: (regionId) => set({ regionId }),
+  openSidebar: () => set({ sidebarOpen: true }),
+  closeSidebar: () => set({ sidebarOpen: false }),
+  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 }));
