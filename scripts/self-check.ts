@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
 import { stripTags, isEventEnded } from "../src/lib/tools/culturePortal.ts";
-import { isQuotaExhausted, markQuotaExhausted } from "../src/lib/agent.ts";
+import { isInCooldown, markCooldown } from "../src/lib/agent.ts";
 import {
   formatFee,
   formatOperatingHours,
@@ -60,13 +60,14 @@ check("isEventEnded 아직 진행중", isEventEnded("20260902 ~ 20260913", CHECK
 check("isEventEnded 오늘이 마지막날(자정 전까지 진행중 취급)", isEventEnded("20260901 ~ 20260908", CHECK_NOW), false);
 check("isEventEnded 형식이 다르면 숨기지 않음", isEventEnded("상시", CHECK_NOW), false);
 
-// isQuotaExhausted/markQuotaExhausted — 2026-09-08 성능 조사에서 추가한 모델별 쿨다운.
-// 매 요청마다 이미 죽은 모델을 다시 두드리지 않게 하는 로직이라 회귀 시 조용히 다시 느려진다.
-const QUOTA_CHECK_MODEL = "__self-check-model__";
-check("isQuotaExhausted 마킹 전에는 false", isQuotaExhausted(QUOTA_CHECK_MODEL, 1000), false);
-markQuotaExhausted(QUOTA_CHECK_MODEL, 1000);
-check("isQuotaExhausted 마킹 직후(쿨다운 내)", isQuotaExhausted(QUOTA_CHECK_MODEL, 1000 + 1000), true);
-check("isQuotaExhausted 쿨다운(60초) 지나면 해제", isQuotaExhausted(QUOTA_CHECK_MODEL, 1000 + 60_000 + 1), false);
+// isInCooldown/markCooldown — 2026-09-08 성능 조사에서 추가한 모델별 쿨다운(쿼터 소진뿐
+// 아니라 recursion limit 등 재시도 가능한 에러 전반에 적용). 매 요청마다 이미 문제 있는
+// 모델을 다시 두드리지 않게 하는 로직이라 회귀 시 조용히 다시 느려진다.
+const COOLDOWN_CHECK_MODEL = "__self-check-model__";
+check("isInCooldown 마킹 전에는 false", isInCooldown(COOLDOWN_CHECK_MODEL, 1000), false);
+markCooldown(COOLDOWN_CHECK_MODEL, 1000);
+check("isInCooldown 마킹 직후(쿨다운 내)", isInCooldown(COOLDOWN_CHECK_MODEL, 1000 + 1000), true);
+check("isInCooldown 쿨다운(60초) 지나면 해제", isInCooldown(COOLDOWN_CHECK_MODEL, 1000 + 60_000 + 1), false);
 
 // formatFee — crgLevySeNm이 null일 때 "null" 문자열이 그대로 노출되던 버그
 check("formatFee 무료", formatFee("무료", null), "무료");
