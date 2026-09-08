@@ -6,7 +6,15 @@ import { useAppStore } from "@/lib/store";
 import { fetchWeather, fetchAirQuality, fetchPlacesSearch, fetchCulturalEvents } from "@/lib/clientApi";
 import type { RecommendationFlow } from "@/hooks/useRecommendationFlow";
 import { Icon } from "@/components/Icon";
-import { ScreenHeader } from "@/components/ScreenHeader";
+import { SidebarToggleButton } from "@/components/SidebarToggleButton";
+
+// 클릭하면 입력창에 문구만 채워넣는 보조 칩(제출은 안 함) — 별도 필터 상태를 만들지 않는다.
+const QUICK_PROMPTS = [
+  { label: "데이트", icon: "heart", text: "여자친구랑 데이트할만한 곳 있어?" },
+  { label: "아이와 함께", icon: "users", text: "아이와 함께 갈 만한 곳 있어?" },
+  { label: "혼자", icon: "user", text: "혼자 조용히 갈 만한 곳 있어?" },
+  { label: "저비용", icon: null, text: "돈 안 쓰고 반나절 나갔다 올 데 있어?" },
+] as const;
 
 // src/lib/tools/culturePortal.ts의 DTYPES와 같은 값 — 서버 전용 도구 모듈을 클라이언트
 // 번들에 끌어오지 않으려고 여기 따로 둠(같은 파일이 @langchain/core/tools도 import함).
@@ -47,8 +55,25 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
 
   return (
     <>
-      <ScreenHeader title="어디로 나가볼까요?" />
+      <div className="flex items-center justify-between px-5 pb-1 pt-5">
+        <SidebarToggleButton />
+        {weatherQuery.data && (
+          <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+            <Icon name="sun" className="h-4 w-4 text-amber-400" />
+            {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C` : weatherQuery.data.summary}
+          </span>
+        )}
+      </div>
       <div className="flex flex-1 flex-col gap-3 px-5">
+        <div className="pb-1 pt-3">
+          <h1 className="text-[26px] font-bold leading-tight text-accent">어디로 나가볼까요?</h1>
+          <p className="mt-2 text-[13px] leading-relaxed text-muted">
+            지역을 고르고 하고 싶은 걸 편하게 적어주세요.
+            <br />
+            날씨와 대기질을 함께 확인해서 코스를 추천해드려요.
+          </p>
+        </div>
+
         <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
           <select
@@ -109,14 +134,6 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           </div>
         )}
 
-        {!isPending && !promptMessage && !errorMessage && (
-          <p className="px-1 pt-1 text-[13px] leading-relaxed text-muted">
-            지역을 고르고 하고 싶은 걸 편하게 적어주세요.
-            <br />
-            날씨와 대기질을 함께 확인해서 코스를 추천해드려요.
-          </p>
-        )}
-
         <div className="flex flex-col gap-2 pt-2">
           {showSuggestionChip && !input && (
             <button
@@ -164,9 +181,33 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               <Icon name="send" className="h-[18px] w-[18px]" />
             </button>
           </form>
+
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {QUICK_PROMPTS.map((q) => (
+              <button
+                key={q.label}
+                type="button"
+                onClick={() => setInput(q.text)}
+                className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+              >
+                {q.icon ? (
+                  <Icon name={q.icon} className="h-3.5 w-3.5 text-mint-mid" />
+                ) : (
+                  <span className="text-[13px] font-semibold text-mint-mid">₩</span>
+                )}
+                {q.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-2.5">
+        <div className="mt-6 flex items-center gap-3">
+          <span className="h-px flex-1 bg-hairline" />
+          <span className="shrink-0 text-[12px] text-muted">이렇게도 찾아보세요</span>
+          <span className="h-px flex-1 bg-hairline" />
+        </div>
+
+        <div className="flex flex-col gap-2.5">
           <h2 className="px-1 text-[13px] font-semibold text-muted">장소 검색</h2>
           <form
             onSubmit={(e) => {

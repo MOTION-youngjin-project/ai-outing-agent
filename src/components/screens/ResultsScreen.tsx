@@ -10,7 +10,11 @@ import { splitHeadline } from "@/lib/textFormat";
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
-import { ScreenHeader } from "@/components/ScreenHeader";
+import { SidebarToggleButton } from "@/components/SidebarToggleButton";
+
+// 결과 화면에서 조건을 더 추가하고 싶을 때 누르는 정적 문구 칩 — 실시간 재요청 없이
+// 홈으로 이동해 그 문구를 입력창에 채워준다(아래 QUICK_REFINEMENTS 참고).
+const QUICK_REFINEMENTS = ["주차 포함", "더 저렴하게", "실내 위주로"] as const;
 
 // 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
 // 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
@@ -33,11 +37,22 @@ function ParkingCongestionBadge({ district, placeName }: { district: string; pla
 }
 
 export function ResultsScreen({ recommendation, runId }: { recommendation: RecommendResult; runId: string }) {
-  const { regionId } = useAppStore();
+  const { regionId, history, setInput } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
+
+  // 새로고침/직링크로 들어오면 history가 비어있다 — 그럴 땐 지어내지 말고 사용자 버블을 생략한다.
+  const lastUserMessage = [...history].reverse().find((t) => t.role === "user")?.content ?? null;
+
+  // 조건 추가/퀵필터는 결과 화면 안에서 바로 재요청하지 않고 홈으로 이동해 입력창에 문구를
+  // 채워준다. ponytail: 결과 화면 내 인라인 재요청 대신 홈으로 이동, 실시간 갱신은 다음 스코프.
+  const [refineInput, setRefineInput] = useState("");
+  function goRefine(text: string) {
+    setInput(text);
+    router.push("/");
+  }
 
   const weatherQuery = useQuery({
     queryKey: ["weather", regionId],
@@ -121,8 +136,17 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
 
   return (
     <>
-      <ScreenHeader title="추천 결과" onBack={() => router.push("/")} />
-      <div className="flex flex-col gap-3 px-5">
+      <div className="flex items-center justify-between px-5 pb-1 pt-5">
+        <SidebarToggleButton />
+        <button
+          onClick={() => router.push("/")}
+          aria-label="새 질문"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+        >
+          <Icon name="plus" className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex flex-col gap-3 px-5 pt-3">
         <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3.5 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <span className="flex items-center gap-1.5">
             <Icon name="pin" className="h-[18px] w-[18px] text-muted" />
@@ -146,6 +170,19 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           )}
         </div>
 
+        {lastUserMessage && (
+          <div className="flex justify-end">
+            <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-[14px] text-white">
+              {lastUserMessage}
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5 px-1 text-[12px] font-semibold text-accent">
+          <Icon name="sparkle" className="h-3.5 w-3.5" />
+          AI 추천
+        </div>
+
         <div className="rounded-2xl border border-accent/40 bg-mint-bg px-4 py-4">
           <div className="flex gap-2">
             <Icon name="sparkle" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-accent" />
@@ -155,6 +192,8 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             </div>
           </div>
         </div>
+        {/* ponytail: 코스 합산 시간/비용/도보 이동 시간 정보 없음(API 미제공), 백엔드에
+            필드 추가되면 스크린샷처럼 타임라인 UI로 확장 */}
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button
@@ -267,16 +306,41 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           ))}
         </div>
 
-        <div className="mt-2 flex items-center gap-2 rounded-full bg-white p-1.5 pl-4 shadow-[0_1px_4px_rgba(17,24,39,0.07)]">
-          <Icon name="sparkle" className="h-[18px] w-[18px] shrink-0 text-accent" />
-          <span className="flex-1 truncate text-[14px] text-muted">다른 분위기로 다시 추천해보세요</span>
-          <button
-            onClick={() => router.push("/")}
-            className="shrink-0 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white"
-          >
-            다른 곳 추천
-          </button>
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          {QUICK_REFINEMENTS.map((label) => (
+            <button
+              key={label}
+              onClick={() => goRefine(label)}
+              className="shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+            >
+              {label}
+            </button>
+          ))}
         </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const text = refineInput.trim();
+            if (text) goRefine(text);
+          }}
+          className="flex items-center gap-2 rounded-full bg-white p-1.5 pl-4 shadow-[0_1px_4px_rgba(17,24,39,0.07)]"
+        >
+          <input
+            value={refineInput}
+            onChange={(e) => setRefineInput(e.target.value)}
+            placeholder="조건을 추가하거나 다른 코스를 물어보세요"
+            className="flex-1 bg-transparent py-2 text-[14px] text-ink outline-none placeholder:text-muted/60"
+          />
+          <button
+            type="submit"
+            disabled={!refineInput.trim()}
+            aria-label="보내기"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            <Icon name="send" className="h-[18px] w-[18px]" />
+          </button>
+        </form>
       </div>
     </>
   );
