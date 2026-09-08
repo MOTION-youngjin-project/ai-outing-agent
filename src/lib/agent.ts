@@ -54,31 +54,29 @@ function isRetryableModelError(err: unknown): boolean {
   );
 }
 
-function isQuotaError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return /429|RateLimitQuotaExhaustedError|Too Many Requests/i.test(message);
-}
+// 재시도 가능한 에러(쿼터 소진뿐 아니라 recursion limit, 응답 시간 초과 등)가 한 번 확인된
+// 모델은 재요청마다 다시 물어봐야 어차피 또 같은 이유로 실패할 확률이 높으니 잠깐(1분)
+// 건너뛴다 — 2026-09-08 학교 서버 배포 직후 실측: gemini-3.6-flash/3.5-flash가 429가 아니라
+// recursion limit으로 반복 실패하는데, 처음엔 쿼터 에러만 쿨다운 대상으로 좁혀놔서 매 요청마다
+// 이 둘을 다시 두드리다 낭비가 컸고, 운 나쁘면 나머지 모델까지 recursion에 걸려 전체 요청이
+// 실패했음. 서버 프로세스가 켜져있는 동안만 유효한 메모리 캐시(재시작·인스턴스 여러 개면 공유
+// 안 됨) — 이 규모에 Redis 등 공유 저장소는 과함.
+const MODEL_COOLDOWN_MS = 60_000;
+const modelCooldownUntil = new Map<string, number>();
 
-// 쿼터 소진(429)이 한 번 확인된 모델은 재요청마다 다시 물어봐야 어차피 또 실패하므로
-// 잠깐(1분) 건너뛴다 — 2026-09-08 실측: 같은 세션에서 연속 요청마다 이미 죽은 모델을
-// 매번 재시도하느라 응답이 느려지는 게 확인됨. 서버 프로세스가 켜져있는 동안만 유효한
-// 메모리 캐시(재시작·인스턴스 여러 개면 공유 안 됨) — 이 규모에 Redis 등 공유 저장소는 과함.
-const QUOTA_COOLDOWN_MS = 60_000;
-const quotaExhaustedUntil = new Map<string, number>();
-
-export function isQuotaExhausted(model: string, now = Date.now()): boolean {
-  const until = quotaExhaustedUntil.get(model);
+export function isInCooldown(model: string, now = Date.now()): boolean {
+  const until = modelCooldownUntil.get(model);
   return until !== undefined && until > now;
 }
 
-export function markQuotaExhausted(model: string, now = Date.now()): void {
-  quotaExhaustedUntil.set(model, now + QUOTA_COOLDOWN_MS);
+export function markCooldown(model: string, now = Date.now()): void {
+  modelCooldownUntil.set(model, now + MODEL_COOLDOWN_MS);
 }
 
 // 체인의 모든 모델이 쿨다운 중이어도 마지막 후보는 무조건 시도한다 — 전부 건너뛰고
 // 아무것도 안 하는 것보다, 밑져야 본전으로 한 번 더 시도하는 게 낫다.
 function shouldSkipForCooldown(model: string): boolean {
-  return isQuotaExhausted(model) && model !== MODEL_FALLBACK_CHAIN[MODEL_FALLBACK_CHAIN.length - 1];
+  return isInCooldown(model) && model !== MODEL_FALLBACK_CHAIN[MODEL_FALLBACK_CHAIN.length - 1];
 }
 
 // 모델이 아예 응답 없이 멈추는 경우(실측 확인: gemini-3.7-flash)가 있어, 다음 모델로
@@ -186,7 +184,7 @@ async function withModelFallback<T>(
     } catch (err) {
       lastError = err;
       if (!isRetryableModelError(err)) throw err;
-      if (isQuotaError(err)) markQuotaExhausted(model);
+      markCooldown(model);
       console.warn(`[agent] ${model} 사용 불가, 다음 모델로 재시도`);
     }
   }
@@ -278,8 +276,8 @@ export async function suggestNextMessage(history: ChatTurn[]): Promise<string> {
       );
       return (result.content as string).trim();
     } catch (err) {
-      if (isQuotaError(err)) markQuotaExhausted(model);
       if (!isRetryableModelError(err)) return "";
+      markCooldown(model);
     }
   }
   return "";
