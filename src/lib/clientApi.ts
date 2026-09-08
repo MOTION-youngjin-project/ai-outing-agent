@@ -16,7 +16,13 @@ export type PlaceResult = {
   phone: string | null;
 };
 export type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; url: string; imageUrl: string };
-export type SavedPlaceResult = { placeId: string; name: string; categorySummary: string | null; roadAddress: string | null };
+export type SavedPlaceResult = {
+  placeId: string;
+  name: string;
+  categorySummary: string | null;
+  roadAddress: string | null;
+  imageUrl: string | null;
+};
 export type RecentQuestion = { id: string; question: string; askedAt: string };
 
 export async function fetchRegions(): Promise<Region[]> {
