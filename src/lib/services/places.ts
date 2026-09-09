@@ -77,10 +77,10 @@ export interface CachedPlace {
   daeguDistrict: (typeof DAEGU_DISTRICTS)[number] | null;
 }
 
-// 장소 검색(카카오) 결과에도 주차 정보 조회가 되도록, 추천 결과와 같은 방식으로
-// 대구광역시 구/군 소속 여부를 region 부모 체인으로 판단한다(LLM이 채워주는
-// agent.ts의 daeguDistrict와 달리 여긴 이미 저장된 region 매칭 결과를 그대로 씀).
-async function resolveDaeguDistrict(
+// 대구광역시 구/군 소속 여부를 region 부모 체인(= 카카오 주소 매칭 결과)으로 판단한다.
+// LLM이 채워주는 agent.ts의 daeguDistrict는 자주 비거나 틀리므로, 장소 검색이든 추천이든
+// 실제 Place를 찾은 뒤에는 항상 이 함수 결과를 정답으로 쓴다.
+export async function resolveDaeguDistrict(
   regionId: bigint | null | undefined
 ): Promise<(typeof DAEGU_DISTRICTS)[number] | null> {
   if (!regionId) return null;

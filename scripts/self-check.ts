@@ -26,8 +26,10 @@ import {
 } from "../src/lib/services/matching.ts";
 
 let passed = 0;
+// Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
+const show = (v: unknown) => JSON.stringify(v, (_k, val) => (typeof val === "bigint" ? `${val}n` : val));
 function check(name: string, actual: unknown, expected: unknown) {
-  assert.deepStrictEqual(actual, expected, `${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  assert.deepStrictEqual(actual, expected, `${name}: expected ${show(expected)}, got ${show(actual)}`);
   passed++;
 }
 
@@ -105,22 +107,31 @@ check("pickBestPlaceMatch 결과 없음", pickBestPlaceMatch("아무거나", [])
 
 // pickRegionForAddress — 오늘 실제로 났던 버그(정확히 일치 검색이라 "대구"가 "대구광역시" 시드
 // 행을 못 찾고 매번 중복 생성하던 것)의 재발 방지 + 구/군 우선 매칭까지 함께 검증.
+const DAEGU = { id: 1n, name: "대구광역시", level: "시도", parentId: null };
+const SEOUL = { id: 2n, name: "서울특별시", level: "시도", parentId: null };
 const REGION_FIXTURES = [
-  { name: "대구광역시", level: "시도" },
-  { name: "수성구", level: "구군" },
-  { name: "중구", level: "구군" },
+  DAEGU,
+  SEOUL,
+  { id: 11n, name: "수성구", level: "구군", parentId: 1n },
+  { id: 12n, name: "중구", level: "구군", parentId: 1n },
 ];
 check(
   "pickRegionForAddress 구/군 우선",
   pickRegionForAddress("대구 수성구 미술관로 40", REGION_FIXTURES),
-  { name: "수성구", level: "구군" }
+  REGION_FIXTURES[2]
 );
 check(
   "pickRegionForAddress 구/군 없으면 시/도로 완화(축약형 vs 정식명칭)",
   pickRegionForAddress("대구 남구 앞산순환로 574", REGION_FIXTURES),
-  { name: "대구광역시", level: "시도" }
+  DAEGU
 );
-check("pickRegionForAddress 매칭 실패", pickRegionForAddress("서울 강남구 테헤란로", REGION_FIXTURES), null);
+// 구/군 이름은 시/도끼리 겹친다 — 서울 중구 주소에 대구 중구가 붙으면 엉뚱한 주차 정보가 뜬다.
+check(
+  "pickRegionForAddress 다른 시/도의 동명 구/군은 매칭 안 함",
+  pickRegionForAddress("서울 중구 세종대로 110", REGION_FIXTURES),
+  SEOUL
+);
+check("pickRegionForAddress 매칭 실패", pickRegionForAddress("부산 해운대구 우동", REGION_FIXTURES), null);
 
 // inferEnvironmentMode — agent.ts가 구조화된 필드로 안 주는 실내/야외를 텍스트에서 추론.
 const baseRec = { needsMoreInfo: false as const, message: "" };

@@ -21,20 +21,25 @@ export function pickBestPlaceMatch<T extends { place_name: string }>(
 }
 
 // 주소 문자열과 후보 Region 목록으로 가장 적절한 Region을 고른다.
-// 구/군 단위가 주소 토큰과 정확히 일치하면 그걸 우선하고(예: "대구 수성구..." → 수성구),
-// 없으면 시/도 단위로 완화한다(예: "대구 남구..." → 남구는 시드 안 됐으면 대구광역시).
-export function pickRegionForAddress<T extends { name: string; level: string }>(
+// 먼저 주소 첫 토큰으로 시/도를 잡고("대구" → 대구광역시), 그 시/도에 속한 구/군만
+// 토큰 일치로 좁힌다(예: "대구 수성구..." → 수성구). 구/군을 못 찾으면 시/도로 완화한다.
+// 구/군 이름은 시/도끼리 겹치므로(서울 중구 vs 대구 중구) 부모 시/도 제한이 필수다 —
+// 없으면 서울 중구 장소에 대구 중구 주차 정보가 붙는다.
+export function pickRegionForAddress<T extends { id: bigint; name: string; level: string; parentId: bigint | null }>(
   address: string,
   regions: T[]
 ): T | null {
   const tokens = address.split(" ").filter(Boolean);
-
-  const district = regions.find((r) => r.level === "구군" && tokens.includes(r.name));
-  if (district) return district;
-
   const firstToken = tokens[0];
   if (!firstToken) return null;
-  return regions.find((r) => r.level === "시도" && r.name.includes(firstToken)) ?? null;
+
+  const sido = regions.find((r) => r.level === "시도" && r.name.includes(firstToken));
+  if (!sido) return null;
+
+  const district = regions.find(
+    (r) => r.level === "구군" && r.parentId === sido.id && tokens.includes(r.name)
+  );
+  return district ?? sido;
 }
 
 const INDOOR_KEYWORDS = ["실내", "미술관", "박물관", "전시", "공연장", "쇼핑몰"];
