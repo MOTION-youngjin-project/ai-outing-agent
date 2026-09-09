@@ -2,12 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { fetchWeather, fetchAirQuality, fetchPlacesSearch, fetchCulturalEvents } from "@/lib/clientApi";
 import type { RecommendationFlow } from "@/hooks/useRecommendationFlow";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
+import { CourseCard } from "@/components/CourseCard";
+
+// 결과 화면에서도 쓰는 것과 같은 문구 — 결과 화면은 홈으로 이동해 채우지만, 여긴 이미
+// 홈(채팅)이라 입력창에 바로 채우기만 하면 된다.
+const QUICK_REFINEMENTS = ["주차 포함", "더 저렴하게", "실내 위주로"] as const;
 
 // 클릭하면 입력창에 문구만 채워넣는 보조 칩(제출은 안 함) — 별도 필터 상태를 만들지 않는다.
 const QUICK_PROMPTS = [
@@ -22,9 +28,12 @@ const QUICK_PROMPTS = [
 const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
 export function InputScreen({ flow }: { flow: RecommendationFlow }) {
-  const { input, setInput, regionId, setRegionId } = useAppStore();
+  const { input, setInput, regionId, setRegionId, history, setHistory, setLastRecommendation } = useAppStore();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     regions,
+    recommendation,
     promptMessage,
     errorMessage,
     displayedSuggestion,
@@ -34,6 +43,25 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
     sendMessage,
     acceptSuggestion,
   } = flow;
+
+  // 결과가 도착하면(needsMoreInfo든 코스든) 홈 화면 대신 채팅 스레드 형태로 전환한다
+  // (디자인/채팅.png). "새 질문"을 눌러야 다시 홈 화면으로 돌아간다.
+  const inConversation = !!recommendation;
+  const hasCourse = !!recommendation && !recommendation.needsMoreInfo && (recommendation.places?.length ?? 0) > 0;
+  const lastUserMessage = [...history].reverse().find((t) => t.role === "user")?.content ?? null;
+  const regionName = regions.find((r) => r.id === regionId)?.name;
+
+  function startNewQuestion() {
+    setHistory([]);
+    setInput("");
+    setLastRecommendation(null);
+  }
+
+  function openCourseDetail() {
+    if (!recommendation) return;
+    queryClient.setQueryData(["recommend", recommendation.agentRunId], recommendation);
+    router.push(`/recommend/${recommendation.agentRunId}`);
+  }
 
   const weatherQuery = useQuery({
     queryKey: ["weather", regionId],
@@ -58,66 +86,114 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
     <>
       <div className="flex items-center justify-between px-5 pb-1 pt-5">
         <SidebarToggleButton />
-        {weatherQuery.data && (
-          <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-            <Icon name="sun" className="h-4 w-4 text-amber-400" />
-            {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C` : weatherQuery.data.summary}
-          </span>
+        {inConversation ? (
+          <button
+            onClick={startNewQuestion}
+            aria-label="새 질문"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+          >
+            <Icon name="plus" className="h-4 w-4" />
+          </button>
+        ) : (
+          weatherQuery.data && (
+            <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+              <Icon name="sun" className="h-4 w-4 text-amber-400" />
+              {weatherQuery.data.temperatureC !== null
+                ? `${weatherQuery.data.temperatureC}°C`
+                : weatherQuery.data.summary}
+            </span>
+          )
         )}
       </div>
       <div className="flex flex-1 flex-col gap-3 px-5">
-        <div className="pb-1 pt-3">
-          <h1 className="text-[26px] font-bold leading-tight text-accent">어디로 나가볼까요?</h1>
-          <p className="mt-2 text-[13px] leading-relaxed text-muted">
-            지역을 고르고 하고 싶은 걸 편하게 적어주세요.
-            <br />
-            날씨와 대기질을 함께 확인해서 코스를 추천해드려요.
-          </p>
-        </div>
+        {!inConversation && (
+          <>
+            <div className="pb-1 pt-3">
+              <h1 className="text-[26px] font-bold leading-tight text-accent">어디로 나가볼까요?</h1>
+              <p className="mt-2 text-[13px] leading-relaxed text-muted">
+                지역을 고르고 하고 싶은 걸 편하게 적어주세요.
+                <br />
+                날씨와 대기질을 함께 확인해서 코스를 추천해드려요.
+              </p>
+            </div>
 
-        <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-          <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
-          <select
-            value={regionId}
-            onChange={(e) => setRegionId(e.target.value)}
-            disabled={isPending}
-            className="flex-1 bg-transparent text-[15px] font-medium text-ink outline-none disabled:opacity-50"
-          >
-            <option value="">지역을 선택하세요</option>
-            {regions.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+              <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
+              <select
+                value={regionId}
+                onChange={(e) => setRegionId(e.target.value)}
+                disabled={isPending}
+                className="flex-1 bg-transparent text-[15px] font-medium text-ink outline-none disabled:opacity-50"
+              >
+                <option value="">지역을 선택하세요</option>
+                {regions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {(weatherQuery.data || airQualityQuery.data) && (
-          <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-            {airQualityQuery.data && (
-              <span className="flex items-center gap-1.5">
-                <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
-                <span className="text-muted">미세먼지</span>
-                <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
-              </span>
+            {(weatherQuery.data || airQualityQuery.data) && (
+              <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                {airQualityQuery.data && (
+                  <span className="flex items-center gap-1.5">
+                    <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
+                    <span className="text-muted">미세먼지</span>
+                    <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
+                  </span>
+                )}
+                {weatherQuery.data && (
+                  <span className="flex items-center gap-1.5">
+                    <Icon name="sun" className="h-[18px] w-[18px] text-amber-400" />
+                    <span className="font-medium text-ink-soft">
+                      {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
+                      {weatherQuery.data.summary}
+                    </span>
+                  </span>
+                )}
+              </div>
             )}
-            {weatherQuery.data && (
-              <span className="flex items-center gap-1.5">
-                <Icon name="sun" className="h-[18px] w-[18px] text-amber-400" />
-                <span className="font-medium text-ink-soft">
-                  {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
-                  {weatherQuery.data.summary}
-                </span>
-              </span>
-            )}
-          </div>
+          </>
         )}
 
-        {promptMessage && (
-          <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
-            <div className="flex gap-2">
-              <Icon name="sparkle" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-accent" />
-              <p className="text-[15px] font-semibold leading-relaxed text-ink">{promptMessage}</p>
+        {inConversation && (
+          <div className="flex flex-col gap-3 pt-2">
+            {lastUserMessage && (
+              <div className="flex justify-end">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-[14px] leading-relaxed text-white">
+                  {lastUserMessage}
+                </div>
+              </div>
+            )}
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mint-soft">
+                <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <span className="text-[12px] font-semibold text-muted">AI 추천</span>
+                {promptMessage && (
+                  <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
+                    <p className="text-[14px] leading-relaxed text-ink">{promptMessage}</p>
+                  </div>
+                )}
+                {hasCourse && recommendation && (
+                  <>
+                    <CourseCard
+                      recommendation={recommendation}
+                      regionName={regionName}
+                      weather={weatherQuery.data}
+                      airQuality={airQualityQuery.data}
+                      onOpenDetail={openCourseDetail}
+                    />
+                    {recommendation.message && (
+                      <div className="rounded-2xl bg-white px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                        {recommendation.message}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -184,24 +260,37 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           </form>
 
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {QUICK_PROMPTS.map((q) => (
-              <button
-                key={q.label}
-                type="button"
-                onClick={() => setInput(q.text)}
-                className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
-              >
-                {q.icon ? (
-                  <Icon name={q.icon} className="h-3.5 w-3.5 text-mint-mid" />
-                ) : (
-                  <span className="text-[13px] font-semibold text-mint-mid">₩</span>
-                )}
-                {q.label}
-              </button>
-            ))}
+            {inConversation
+              ? QUICK_REFINEMENTS.map((text) => (
+                  <button
+                    key={text}
+                    type="button"
+                    onClick={() => setInput(text)}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+                  >
+                    {text}
+                  </button>
+                ))
+              : QUICK_PROMPTS.map((q) => (
+                  <button
+                    key={q.label}
+                    type="button"
+                    onClick={() => setInput(q.text)}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+                  >
+                    {q.icon ? (
+                      <Icon name={q.icon} className="h-3.5 w-3.5 text-mint-mid" />
+                    ) : (
+                      <span className="text-[13px] font-semibold text-mint-mid">₩</span>
+                    )}
+                    {q.label}
+                  </button>
+                ))}
           </div>
         </div>
 
+        {!inConversation && (
+        <>
         <div className="mt-6 flex items-center gap-3">
           <span className="h-px flex-1 bg-hairline" />
           <span className="shrink-0 text-[12px] text-muted">이렇게도 찾아보세요</span>
@@ -326,6 +415,8 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </>
   );
