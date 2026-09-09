@@ -8,7 +8,7 @@ import { BottomNav } from "@/components/BottomNav";
 // 자체가 fixed 처리), 콘텐츠는 기존 460px 단일 컬럼 + 하단 탭바.
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-[460px] flex-1 lg:max-w-none">
+    <div className="mx-auto flex w-full max-w-[460px] flex-1 lg:max-w-none lg:pl-[280px]">
       <Sidebar />
       <div className="mx-auto flex w-full max-w-[460px] flex-1 flex-col bg-page">
         <div className="flex flex-1 flex-col pb-24 lg:pb-6">{children}</div>
