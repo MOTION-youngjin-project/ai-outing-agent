@@ -94,6 +94,21 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
         <path d="M20 20l-4.3-4.3" />
       </>
     ),
+    bus: (
+      <>
+        <rect x="4" y="4" width="16" height="13" rx="2.5" />
+        <path d="M4 12h16M8 17v2M16 17v2" />
+        <circle cx="8" cy="8.5" r="0.6" fill="currentColor" />
+      </>
+    ),
+    train: (
+      <>
+        <rect x="6" y="3" width="12" height="14" rx="4" />
+        <path d="M6 11h12M9 20l-2 2M15 20l2 2" />
+        <circle cx="9.5" cy="7" r="0.6" fill="currentColor" />
+        <circle cx="14.5" cy="7" r="0.6" fill="currentColor" />
+      </>
+    ),
   };
   return (
     <svg

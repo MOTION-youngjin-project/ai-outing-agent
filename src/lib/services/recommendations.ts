@@ -4,7 +4,7 @@ import { normalizeSido } from "@/lib/region";
 import { runAgentStream, type AgentProgressEvent, type ChatTurn, type Recommendation } from "@/lib/agent";
 import { getCachedWeather } from "./weather";
 import { getCachedAirQuality } from "./airQuality";
-import { resolvePlaceByName } from "./places";
+import { resolvePlaceByName, resolveDaeguDistrict } from "./places";
 import { findOrCreateSidoRegion } from "./shared";
 import { inferEnvironmentMode, extractCategoryLabel, computeDistanceKm } from "./matching";
 import type { Place } from "../../../generated/prisma/client";
@@ -130,20 +130,26 @@ export async function createRecommendationRun(
   // route_places.enriched_snapshot에 그대로 저장할 값이라 routePlace insert보다 먼저
   // 계산해둔다(라우팅 전환: /recommend/[runId]/place/[placeId] 새로고침 시 이 스냅샷으로
   // LLM이 만든 reason/tags/features 등을 복원한다 — Place 테이블엔 없는 값들).
-  const enrichedPlaces: EnrichedPlace[] = recommendation.places.map((p, i) => {
-    const resolved = resolvedPlaces[i]?.place ?? null;
-    const resolvedPoint = resolved
-      ? { latitude: resolved.latitude.toNumber(), longitude: resolved.longitude.toNumber() }
-      : null;
-    return {
-      ...p,
-      category: extractCategoryLabel(resolved?.categorySummary ?? null),
-      distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
-      placeId: resolved?.publicId ?? null,
-      latitude: resolvedPoint?.latitude ?? null,
-      longitude: resolvedPoint?.longitude ?? null,
-    };
-  });
+  const enrichedPlaces: EnrichedPlace[] = await Promise.all(
+    recommendation.places.map(async (p, i) => {
+      const resolved = resolvedPlaces[i]?.place ?? null;
+      const resolvedPoint = resolved
+        ? { latitude: resolved.latitude.toNumber(), longitude: resolved.longitude.toNumber() }
+        : null;
+      return {
+        ...p,
+        category: extractCategoryLabel(resolved?.categorySummary ?? null),
+        distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
+        placeId: resolved?.publicId ?? null,
+        latitude: resolvedPoint?.latitude ?? null,
+        longitude: resolvedPoint?.longitude ?? null,
+        // LLM은 대구 안 유명 장소인데도 daeguDistrict를 자주 비우고(주차 버튼이 통째로
+        // 비활성됨) 가끔 틀린 구를 채운다 — 카카오로 실제 Place를 찾았으면 그 주소에서
+        // 나온 구/군을 정답으로 덮어쓰고, 못 찾았을 때만 LLM 값을 그대로 둔다.
+        daeguDistrict: resolved ? ((await resolveDaeguDistrict(resolved.regionId)) ?? undefined) : p.daeguDistrict,
+      };
+    })
+  );
 
   // 이 블록 전체(agentRun/route/routePlace 기록)가 실패해도(DB 커넥션 풀 등) 이미 LLM이
   // 만들어낸 추천과 카카오 매칭 결과는 살려서 사용자에게 그대로 돌려준다 — 카카오 장소
@@ -189,16 +195,20 @@ export async function createRecommendationRun(
     // /recommend/[runId]로 나중에 다시 열면 그때 봤던 장소보다 적게 보일 수 있다 —
     // 기존에도 있던 한계(agentRun.status가 partial로 남는 것과 같은 원인)라 새로 감수하는
     // 트레이드오프는 아니다.
+    // enrichedPlaces는 LLM이 준 원본 순서 그대로라, filter 뒤의 인덱스로 접근하면
+    // 매칭 실패한 장소가 하나라도 있을 때 스냅샷이 밀려서 엉뚱한 장소에 붙는다 —
+    // 원본 인덱스를 들고 다닌 뒤에 거른다.
     const routePlacesData = resolvedPlaces
+      .map((r, index) => ({ ...r, index }))
       .filter((r) => r.place)
-      .map(({ place, reason }, i) => ({
+      .map(({ place, reason, index }, i) => ({
         routeId: route.id,
         sequenceNo: i + 1,
         placeId: place!.id,
         stopType: "visit",
         selectionReason: reason.slice(0, 1000),
         verificationRequired: false,
-        enrichedSnapshot: enrichedPlaces[i],
+        enrichedSnapshot: enrichedPlaces[index],
       }));
     if (routePlacesData.length > 0) {
       await prisma.routePlace.createMany({ data: routePlacesData });

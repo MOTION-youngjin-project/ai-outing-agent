@@ -12,7 +12,7 @@ if (!connectionUrl) {
 
 const url = new URL(connectionUrl);
 const caPath = path.join(process.cwd(), "prisma", "ca.pem");
-// ponytail: ca.pem은 Aiven 운영 DB 전용 인증서라 로컬 개발 DB에는 없는 게 정상 —
+// ponytail: prisma/ca.pem은 DB가 TLS를 요구할 때만 두는 인증서라 없는 게 기본 —
 // 없으면 SSL 없이 접속한다 (src/lib/prisma.ts와 동일한 폴백).
 const ssl = fs.existsSync(caPath) ? { ca: fs.readFileSync(caPath, "utf8"), rejectUnauthorized: true } : undefined;
 
