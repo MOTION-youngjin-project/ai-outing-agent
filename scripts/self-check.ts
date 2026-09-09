@@ -5,6 +5,7 @@
 // 실행: node --experimental-strip-types scripts/self-check.ts
 import assert from "node:assert/strict";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
+import { formatPlannedDate, todayIso } from "../src/lib/textFormat.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
 import { stripTags, isEventEnded } from "../src/lib/tools/culturePortal.ts";
 import { isInCooldown, markCooldown } from "../src/lib/agent.ts";
@@ -204,5 +205,16 @@ check(
 // estimateWalkMinutes — 최소 1분 보장, 67m/분 환산
 check("estimateWalkMinutes 최소 1분", estimateWalkMinutes(10), 1);
 check("estimateWalkMinutes 120m ≈ 2분", estimateWalkMinutes(120), 2);
+
+// 방문 예정일 — 시각 없는 날짜라 타임존에 따라 하루씩 밀리기 쉬운 부분만 고정한다.
+check("formatPlannedDate 요일 계산", formatPlannedDate("2026-09-20"), "9월 20일 (일)");
+check("formatPlannedDate 월초 경계", formatPlannedDate("2026-01-01"), "1월 1일 (목)");
+// UTC 기준으로 읽지 않으면 UTC-5 같은 지역에서 하루 앞당겨져 19일로 나온다.
+check("formatPlannedDate 자정 경계에서 안 밀림", formatPlannedDate("2026-03-01"), "3월 1일 (일)");
+// todayIso는 로컬 날짜여야 한다 — UTC로 읽으면 밤 시간대에 하루 어긋난다.
+// new Date(y, m, d, ...)는 어느 타임존에서 돌리든 그 지역의 해당 날짜를 만들므로
+// 이 검사는 실행 머신 타임존과 무관하게 결정적이다.
+check("todayIso 로컬 자정 직전", todayIso(new Date(2026, 8, 9, 23, 30)), "2026-09-09");
+check("todayIso 로컬 자정 직후", todayIso(new Date(2026, 8, 10, 0, 30)), "2026-09-10");
 
 console.log(`✓ self-check 통과 (${passed}건)`);

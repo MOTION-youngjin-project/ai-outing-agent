@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { fetchWeather, fetchAirQuality, type PlaceWithMeta } from "@/lib/clientApi";
+import {
+  fetchWeather,
+  fetchAirQuality,
+  fetchSavedPlaces,
+  putPlannedVisit,
+  type PlaceWithMeta,
+} from "@/lib/clientApi";
 import { splitHeadline } from "@/lib/textFormat";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
@@ -28,8 +34,17 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
-  const [saved, setSaved] = useState(false);
   const [savePending, setSavePending] = useState(false);
+
+  // 저장 여부를 로컬 state로만 들고 있으면 이미 저장한 장소를 다시 열었을 때 항상
+  // "저장 안 됨"으로 보인다 — 서버 목록에서 파생시킨다. 방문 예정일도 여기서 같이 온다.
+  const savedQuery = useQuery({
+    queryKey: ["saved-places"],
+    queryFn: () => fetchSavedPlaces(),
+    enabled: !!session,
+  });
+  const savedEntry = savedQuery.data?.find((s) => s.placeId === place.placeId) ?? null;
+  const saved = !!savedEntry;
 
   const weatherQuery = useQuery({
     queryKey: ["weather", regionId],
@@ -57,7 +72,6 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
 
     setSavePending(true);
     const wasSaved = saved;
-    setSaved(!wasSaved);
     try {
       if (wasSaved) {
         await fetch(`/api/saved-places?placeId=${encodeURIComponent(p.placeId)}`, { method: "DELETE" });
@@ -68,6 +82,17 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
           body: JSON.stringify({ placeId: p.placeId }),
         });
       }
+      queryClient.invalidateQueries({ queryKey: ["saved-places"] });
+    } finally {
+      setSavePending(false);
+    }
+  }
+
+  async function changePlannedVisit(date: string | null) {
+    if (!place.placeId) return;
+    setSavePending(true);
+    try {
+      await putPlannedVisit(place.placeId, date);
       queryClient.invalidateQueries({ queryKey: ["saved-places"] });
     } finally {
       setSavePending(false);
@@ -262,6 +287,34 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
             </button>
           )}
         </div>
+
+        {/* 방문 예정일은 저장한 장소에만 붙는다(저장이 선행 조건) — 날짜 입력은 브라우저
+            기본 date 피커를 그대로 쓴다. 라이브러리 없이 모바일에선 네이티브 달력이 뜬다. */}
+        {saved && (
+          <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+            <Icon name="clock" className="h-[18px] w-[18px] shrink-0 text-mint-mid" />
+            <label htmlFor="planned-visit" className="text-[14px] text-ink-soft">
+              방문 예정일
+            </label>
+            <input
+              id="planned-visit"
+              type="date"
+              value={savedEntry?.plannedVisitAt ?? ""}
+              disabled={savePending}
+              onChange={(e) => changePlannedVisit(e.target.value === "" ? null : e.target.value)}
+              className="ml-auto rounded-full bg-mint-bg px-3 py-1.5 text-[13px] text-ink outline-none disabled:opacity-50"
+            />
+            {savedEntry?.plannedVisitAt && (
+              <button
+                onClick={() => changePlannedVisit(null)}
+                disabled={savePending}
+                className="shrink-0 text-[12px] font-semibold text-muted disabled:opacity-50"
+              >
+                해제
+              </button>
+            )}
+          </div>
+        )}
 
         {p.placeId && p.latitude !== null && p.latitude !== undefined && p.longitude !== null && p.longitude !== undefined && (
           <button

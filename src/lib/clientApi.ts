@@ -26,6 +26,8 @@ export type SavedPlaceResult = {
   categorySummary: string | null;
   roadAddress: string | null;
   imageUrl: string | null;
+  // "YYYY-MM-DD" 또는 null(방문 예정 아님).
+  plannedVisitAt: string | null;
 };
 export type RecentQuestion = { id: string; question: string; askedAt: string };
 
@@ -100,11 +102,21 @@ export async function fetchCulturalEvents(params: { dtype: string; keyword: stri
   return res.ok ? data.data : [];
 }
 
-export async function fetchSavedPlaces(): Promise<SavedPlaceResult[]> {
-  const res = await fetch("/api/saved-places");
+export async function fetchSavedPlaces(plannedOnly = false): Promise<SavedPlaceResult[]> {
+  const res = await fetch(plannedOnly ? "/api/saved-places?planned=1" : "/api/saved-places");
   if (!res.ok) return [];
   const data = await res.json();
   return data.data ?? [];
+}
+
+// date는 "YYYY-MM-DD", null이면 방문 예정 해제(저장 자체는 유지).
+export async function putPlannedVisit(placeId: string, date: string | null): Promise<boolean> {
+  const res = await fetch("/api/saved-places", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ placeId, plannedVisitAt: date }),
+  });
+  return res.ok;
 }
 
 export async function fetchPreferences(): Promise<string[]> {

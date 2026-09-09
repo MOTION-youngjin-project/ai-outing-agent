@@ -34,7 +34,7 @@ export function MyPageScreen() {
   const authed = auth.status === "authenticated";
   const savedPlacesQuery = useQuery({
     queryKey: ["saved-places"],
-    queryFn: fetchSavedPlaces,
+    queryFn: () => fetchSavedPlaces(),
     enabled: authed,
   });
   const preferencesQuery = useQuery({
@@ -55,11 +55,11 @@ export function MyPageScreen() {
     await putPreferences(next);
   }
 
-  // 알림 설정/방문 예정은 뒤에 걸 기능(알림 발송, 방문 예약) 자체가 앱에 없어서
-  // 준비 중으로 남겨둔다 — onClick 없는 항목은 비활성 처리된다.
+  // 알림 설정은 뒤에 걸 기능(알림 발송) 자체가 앱에 없어서 준비 중으로 남겨둔다 —
+  // onClick 없는 항목은 비활성 처리된다.
   const settingsMenu = [
     { label: "알림 설정", onClick: undefined },
-    { label: "방문 예정", onClick: undefined },
+    { label: "방문 예정", onClick: () => router.push("/mypage/planned") },
     { label: "앱 설정", onClick: () => router.push("/settings") },
     { label: "로그아웃", onClick: () => signOut() },
   ];
