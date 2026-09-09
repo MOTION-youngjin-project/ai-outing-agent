@@ -188,6 +188,9 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
           </div>
         )}
 
+        {/* 네 항목이 전부 비면 카드 자체를 숨긴다 — 장소 검색으로 들어온 장소는 주소조차
+            없는 경우가 있어(카카오가 road_address를 안 주는 지명 등) 빈 흰 박스만 남았다. */}
+        {(p.address || p.operatingHours || p.fee || p.suggestedRoute) && (
         <div className="flex flex-col gap-2.5 rounded-2xl bg-white px-4 py-4 text-[14px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           {p.address && (
             <div className="flex gap-2">
@@ -214,6 +217,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
             </div>
           )}
         </div>
+        )}
 
         {p.features && p.features.length > 0 && (
           <div className="flex flex-wrap gap-2">
