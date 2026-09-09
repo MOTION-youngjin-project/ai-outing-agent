@@ -7,7 +7,7 @@ import { fetchParking, type ParkingSpotWithDistance, type PlaceWithMeta } from "
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { KakaoMap } from "@/components/KakaoMap";
+import { NaverMap } from "@/components/NaverMap";
 
 // 시트가 접혔을 때(지도 위주)/펼쳐졌을 때(목록 위주) 상단이 컨테이너 높이에서 차지하는
 // 비율. 드래그하면 이 둘 사이에서 자유롭게 움직이다가 손을 떼면 가까운 쪽으로 스냅한다.
@@ -143,7 +143,7 @@ export function ParkingScreen({
 
       {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.destination && (
         <div ref={containerRef} className="relative h-[calc(100dvh-76px)] overflow-hidden">
-          <KakaoMap
+          <NaverMap
             className="absolute inset-0"
             center={parkingQuery.data.destination}
             destinationLabel={place.name}

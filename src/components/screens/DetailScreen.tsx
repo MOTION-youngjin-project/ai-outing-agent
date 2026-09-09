@@ -9,7 +9,7 @@ import { splitHeadline } from "@/lib/textFormat";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { KakaoMap } from "@/components/KakaoMap";
+import { NaverMap } from "@/components/NaverMap";
 
 // 실시간 방문자 리뷰(⭐ 평점, 리뷰 텍스트)는 이번 스코프에 없음 — 팀 자체 조사 결과
 // (docs/research/place-reviews-and-mood-data-sources.md) 무료로 실제 데이터를 받을 수
@@ -226,7 +226,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
         )}
 
         {p.latitude !== null && p.latitude !== undefined && p.longitude !== null && p.longitude !== undefined && (
-          <KakaoMap
+          <NaverMap
             center={{ latitude: p.latitude, longitude: p.longitude }}
             destinationLabel={p.name}
             spots={[]}
