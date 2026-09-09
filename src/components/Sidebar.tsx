@@ -89,7 +89,7 @@ export function Sidebar() {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[320px] max-w-[85vw] flex-col bg-white transition-transform duration-200 lg:static lg:z-auto lg:w-[280px] lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:border-r lg:border-hairline ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[320px] max-w-[85vw] flex-col overflow-y-auto bg-white transition-transform duration-200 lg:z-auto lg:w-[280px] lg:max-w-none lg:translate-x-0 lg:border-r lg:border-hairline ${
           sidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
       >
