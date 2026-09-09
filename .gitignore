@@ -43,3 +43,6 @@ next-env.d.ts
 
 # prisma
 /generated/
+
+# 외부 공공데이터 원본 파일 — 재다운로드 가능, seed 스크립트 주석에 출처 남겨둠
+/data/
