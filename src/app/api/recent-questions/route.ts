@@ -12,13 +12,17 @@ export async function GET() {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  const runs = await prisma.agentRun.findMany({
-    where: { userId: BigInt(session.user.id), userQuery: { not: null } },
-    orderBy: { startedAt: "desc" },
-    take: RECENT_LIMIT,
-    select: { id: true, userQuery: true, startedAt: true },
-  });
+  const where = { userId: BigInt(session.user.id), userQuery: { not: null } } as const;
+  const [runs, totalCount] = await Promise.all([
+    prisma.agentRun.findMany({
+      where,
+      orderBy: { startedAt: "desc" },
+      take: RECENT_LIMIT,
+      select: { id: true, userQuery: true, startedAt: true },
+    }),
+    prisma.agentRun.count({ where }),
+  ]);
 
   const data = runs.map((r) => ({ id: r.id, question: r.userQuery, askedAt: r.startedAt.toISOString() }));
-  return NextResponse.json({ data });
+  return NextResponse.json({ data, totalCount });
 }

@@ -91,11 +91,11 @@ export async function putPreferences(tags: string[]): Promise<void> {
   });
 }
 
-export async function fetchRecentQuestions(): Promise<RecentQuestion[]> {
+export async function fetchRecentQuestions(): Promise<{ questions: RecentQuestion[]; totalCount: number }> {
   const res = await fetch("/api/recent-questions");
-  if (!res.ok) return [];
+  if (!res.ok) return { questions: [], totalCount: 0 };
   const data = await res.json();
-  return data.data ?? [];
+  return { questions: data.data ?? [], totalCount: data.totalCount ?? 0 };
 }
 
 export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {

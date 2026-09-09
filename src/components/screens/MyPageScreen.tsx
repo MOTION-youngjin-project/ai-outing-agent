@@ -8,9 +8,6 @@ import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 
-// ponytail: "최근 추천"/"주차 저장" 통계는 여전히 스코프 밖이라 더미로 남겨둠.
-const MYPAGE_STATS = { recentRecommendations: 8, savedParking: 3 };
-
 // FILTER_LABELS(agent.ts의 PLACE_TAGS)와 같은 값 — 선호 조건 칩에 쓸 아이콘만 매핑.
 const PREFERENCE_ICONS: Record<(typeof FILTER_LABELS)[number], string> = {
   실내: "home",
@@ -98,8 +95,10 @@ export function MyPageScreen() {
           <div className="mt-4 flex border-t border-hairline pt-3">
             {[
               { icon: "bookmark", label: "저장한 장소", value: savedPlacesQuery.data?.length ?? 0 },
-              { icon: "clock", label: "최근 추천", value: MYPAGE_STATS.recentRecommendations },
-              { icon: "parking", label: "주차 저장", value: MYPAGE_STATS.savedParking },
+              { icon: "clock", label: "최근 추천", value: recentQuestionsQuery.data?.totalCount ?? 0 },
+              // ponytail: 주차장을 따로 "저장"하는 기능 자체가 아직 없다 — 없는 걸 있는 척
+              // 가짜 숫자로 보여주지 않고 정직하게 0. 기능 생기면 그때 실제 카운트로 교체.
+              { icon: "parking", label: "주차 저장", value: 0 },
             ].map((stat, i) => (
               <div
                 key={stat.label}
@@ -189,10 +188,10 @@ export function MyPageScreen() {
           </span>
         </div>
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-          {recentQuestionsQuery.data?.length === 0 && (
+          {recentQuestionsQuery.data?.questions.length === 0 && (
             <p className="px-4 py-4 text-[14px] text-muted">아직 질문 기록이 없어요.</p>
           )}
-          {(recentQuestionsQuery.data ?? []).map((q, i) => (
+          {(recentQuestionsQuery.data?.questions ?? []).map((q, i) => (
               <div
                 key={q.id}
                 className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
