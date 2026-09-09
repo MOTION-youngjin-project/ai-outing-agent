@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getCurrentPosition } from "@/lib/clientApi";
+
+type NaverMapInstance = InstanceType<Window["naver"]["maps"]["Map"]>;
+type NaverMarkerInstance = InstanceType<Window["naver"]["maps"]["Marker"]>;
 
 // 네이버 지도 API v3 타입은 별도 패키지 없이(설치 안 함) 필요한 만큼만 선언.
 declare global {
@@ -15,6 +19,7 @@ declare global {
             bounds: unknown,
             margin?: { top?: number; right?: number; bottom?: number; left?: number }
           ) => void;
+          panTo: (latlng: unknown) => void;
         };
         LatLng: new (lat: number, lng: number) => unknown;
         LatLngBounds: new (sw: unknown, ne: unknown) => { extend: (latlng: unknown) => unknown };
@@ -23,7 +28,7 @@ declare global {
           position: unknown;
           map: unknown;
           icon: { content: string; anchor: unknown };
-        }) => void;
+        }) => { setPosition: (latlng: unknown) => void };
       };
     };
   }
@@ -83,6 +88,45 @@ export function NaverMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<NaverMapInstance | null>(null);
+  const myLocationMarkerRef = useRef<NaverMarkerInstance | null>(null);
+  const [locating, setLocating] = useState(false);
+  // 권한 거부/미지원/타임아웃을 구분하지 않는다 — getCurrentPosition이 전부 null로
+  // 뭉뚱그리고, 사용자가 할 수 있는 조치도 "권한을 허용해달라" 하나뿐이라 같은 안내면 된다.
+  const [locateFailed, setLocateFailed] = useState(false);
+
+  // 내 위치로 이동. 실패해도 지도는 기존 중심(장소)을 그대로 유지한다 —
+  // 위치를 못 얻었다고 화면을 망가뜨릴 이유가 없다.
+  async function moveToMyLocation() {
+    const map = mapRef.current;
+    if (!map || locating) return;
+
+    setLocating(true);
+    setLocateFailed(false);
+    const position = await getCurrentPosition();
+    setLocating(false);
+
+    if (!position) {
+      setLocateFailed(true);
+      return;
+    }
+
+    const { naver } = window;
+    const latlng = new naver.maps.LatLng(position.latitude, position.longitude);
+    if (myLocationMarkerRef.current) {
+      myLocationMarkerRef.current.setPosition(latlng);
+    } else {
+      myLocationMarkerRef.current = new naver.maps.Marker({
+        position: latlng,
+        map,
+        icon: {
+          content: `<div style="width:18px;height:18px;border-radius:999px;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
+          anchor: new naver.maps.Point(9, 9),
+        },
+      });
+    }
+    map.panTo(latlng);
+  }
 
   useEffect(() => {
     const clientId = process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID;
@@ -96,6 +140,7 @@ export function NaverMap({
         const { naver } = window;
         const centerLatLng = new naver.maps.LatLng(center.latitude, center.longitude);
         const map = new naver.maps.Map(containerRef.current, { center: centerLatLng, zoom: 15 });
+        mapRef.current = map;
 
         // anchor를 (0,0)으로 두고 콘텐츠 자체를 absolute+transform으로 밀어서, 라벨
         // 너비가 가변이어도 항상 "원의 아래쪽 끝"이 좌표에 정확히 맞도록 한다(카카오
@@ -176,6 +221,35 @@ export function NaverMap({
   return (
     <div className={className ? `overflow-hidden bg-slate-100 ${className}` : "relative h-72 w-full overflow-hidden rounded-2xl bg-slate-100"}>
       <div ref={containerRef} className="h-full w-full" />
+
+      {/* 주차 화면은 지도 위에 주차장 목록 바텀시트를 띄우고, 지도 하단엔 네이버 로고·축척이
+          있다 — 우하단은 둘 다에 가리므로 버튼은 우상단에 둔다(두 화면 모두 비어 있음). */}
+      {locateFailed && (
+        <div className="pointer-events-none absolute right-3 top-14 rounded-lg bg-slate-900/85 px-3 py-1.5 text-[12px] text-white">
+          위치 권한을 허용해주세요
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={moveToMyLocation}
+        disabled={locating}
+        aria-label="현재 위치로 이동"
+        className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-700 shadow-md disabled:opacity-60"
+      >
+        {/* 조준점 아이콘 — 위치 확인 중에는 회전시켜 진행 상태를 표시 */}
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className={`h-5 w-5 ${locating ? "animate-spin" : ""}`}
+        >
+          <circle cx="12" cy="12" r="7" />
+          <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" />
+          <path d="M12 1v3M12 20v3M23 12h-3M4 12H1" strokeLinecap="round" />
+        </svg>
+      </button>
+
       <div ref={errorRef} hidden className="absolute inset-0 flex items-center justify-center bg-slate-100 text-[13px] text-muted">
         지도를 불러오지 못했습니다.
       </div>
