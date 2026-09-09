@@ -1,14 +1,20 @@
 import { create } from "zustand";
 import type { ChatTurn } from "@/lib/agent";
+import type { RecommendResult } from "@/lib/clientApi";
 
 interface AppState {
   input: string;
   history: ChatTurn[];
   regionId: string;
   sidebarOpen: boolean;
+  // 채팅 화면에 인라인으로 보여줄 마지막 추천 결과 — /recommend/[runId]로 자동 이동하는
+  // 대신 홈 화면 안에서 카드로 보여주고("코스 상세 보기" 눌러야 그 화면으로 이동), 새
+  // 질문 시작 시(Sidebar "새 질문") history와 함께 초기화된다.
+  lastRecommendation: RecommendResult | null;
   setInput: (input: string) => void;
   setHistory: (history: ChatTurn[]) => void;
   setRegionId: (regionId: string) => void;
+  setLastRecommendation: (result: RecommendResult | null) => void;
   openSidebar: () => void;
   closeSidebar: () => void;
   toggleSidebar: () => void;
@@ -23,9 +29,11 @@ export const useAppStore = create<AppState>((set) => ({
   history: [],
   regionId: "",
   sidebarOpen: false,
+  lastRecommendation: null,
   setInput: (input) => set({ input }),
   setHistory: (history) => set({ history }),
   setRegionId: (regionId) => set({ regionId }),
+  setLastRecommendation: (lastRecommendation) => set({ lastRecommendation }),
   openSidebar: () => set({ sidebarOpen: true }),
   closeSidebar: () => set({ sidebarOpen: false }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),

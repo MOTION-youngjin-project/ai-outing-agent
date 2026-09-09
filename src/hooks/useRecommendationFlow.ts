@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 import { useAppStore } from "@/lib/store";
@@ -44,10 +43,10 @@ function summarize(rec: Recommendation): string {
 // initialRegions: 홈(/) 서버 컴포넌트가 SSR로 미리 조회해둔 시/도 목록 — regions
 // useQuery의 initialData로 꽂아서 첫 로딩 깜빡임을 없앤다.
 export function useRecommendationFlow(initialRegions?: Region[]) {
-  const { history, setHistory, input, setInput, regionId } = useAppStore();
+  const { history, setHistory, input, setInput, regionId, lastRecommendation, setLastRecommendation } =
+    useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   const regionsQuery = useQuery({
     queryKey: ["regions", "sido"],
@@ -92,13 +91,9 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
         { role: "assistant", content: summarize(rec) },
       ];
       setHistory(historyWithReply);
-      // 결과가 있으면 /recommend/[runId]로 이동 — 방금 받은 응답을 캐시에 미리 채워서
-      // 결과 화면이 도착하자마자 재요청 없이 바로 렌더된다(새로고침 시엔 이 캐시가 없으니
-      // 자동으로 GET /api/recommend/[runId]를 다시 호출 — 그게 원하는 동작).
-      if (!rec.needsMoreInfo && rec.places && rec.places.length > 0) {
-        queryClient.setQueryData(["recommend", rec.agentRunId], rec);
-        router.push(`/recommend/${rec.agentRunId}`);
-      }
+      // 채팅 화면 안에 인라인 카드로 보여준다(자동으로 /recommend/[runId]로 이동하지
+      // 않음) — "코스 상세 보기"를 눌러야 그 화면으로 이동한다.
+      setLastRecommendation(rec);
       suggestMutation.mutate(historyWithReply);
       if (session) queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
     },
@@ -122,7 +117,7 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
     recommendMutation.mutate(historyWithUser);
   }
 
-  const recommendation = recommendMutation.data ?? null;
+  const recommendation = lastRecommendation;
   const promptMessage = recommendation?.needsMoreInfo ? recommendation.message : null;
   const errorMessage = recommendMutation.error instanceof Error ? recommendMutation.error.message : null;
   const displayedSuggestion =

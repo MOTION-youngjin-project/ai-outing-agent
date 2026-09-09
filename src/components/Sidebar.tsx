@@ -54,6 +54,9 @@ const DESKTOP_NAV = [
 export function Sidebar() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const closeSidebar = useAppStore((s) => s.closeSidebar);
+  const setHistory = useAppStore((s) => s.setHistory);
+  const setInput = useAppStore((s) => s.setInput);
+  const setLastRecommendation = useAppStore((s) => s.setLastRecommendation);
   const router = useRouter();
   const pathname = usePathname();
   const { status } = useSession();
@@ -75,6 +78,9 @@ export function Sidebar() {
   }
 
   function goNewQuestion() {
+    setHistory([]);
+    setInput("");
+    setLastRecommendation(null);
     router.push("/");
     closeSidebar();
   }
