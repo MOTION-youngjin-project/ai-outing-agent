@@ -65,7 +65,7 @@ export function Sidebar() {
     queryFn: fetchRecentQuestions,
     enabled: authed,
   });
-  const filtered = (recentQuestionsQuery.data ?? []).filter((q) =>
+  const filtered = (recentQuestionsQuery.data?.questions ?? []).filter((q) =>
     q.question.toLowerCase().includes(search.trim().toLowerCase())
   );
   const groups = groupByDay(filtered);
