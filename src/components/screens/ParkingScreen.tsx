@@ -9,11 +9,19 @@ import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { NaverMap } from "@/components/NaverMap";
 
-// 시트가 접혔을 때(지도 위주)/펼쳐졌을 때(목록 위주) 상단이 컨테이너 높이에서 차지하는
-// 비율. 드래그하면 이 둘 사이에서 자유롭게 움직이다가 손을 떼면 가까운 쪽으로 스냅한다.
-const SNAP_PEEK = 0.56;
-const SNAP_EXPANDED = 0.1;
-const SNAP_MID = (SNAP_PEEK + SNAP_EXPANDED) / 2;
+// 시트 상단이 컨테이너 높이에서 차지하는 비율. 드래그하면 이 범위에서 자유롭게 움직이다가
+// 손을 떼면 가장 가까운 스냅 지점으로 붙는다.
+// COLLAPSED는 손잡이만 남기고 거의 다 내려서 지도를 온전히 보는 상태다.
+const SNAP_EXPANDED = 0.1; // 목록 위주
+const SNAP_PEEK = 0.56; // 지도 + 목록 절반
+const SNAP_COLLAPSED = 0.93; // 지도만
+const SNAP_POINTS = [SNAP_EXPANDED, SNAP_PEEK, SNAP_COLLAPSED];
+
+function nearestSnap(ratio: number): number {
+  return SNAP_POINTS.reduce((best, p) =>
+    Math.abs(p - ratio) < Math.abs(best - ratio) ? p : best
+  );
+}
 
 export function ParkingScreen({
   place,
@@ -49,14 +57,14 @@ export function ParkingScreen({
     if (!dragRef.current) return;
     const { startY, startRatio, height } = dragRef.current;
     const deltaRatio = (e.clientY - startY) / height;
-    setSheetRatio(Math.min(SNAP_PEEK, Math.max(SNAP_EXPANDED, startRatio + deltaRatio)));
+    setSheetRatio(Math.min(SNAP_COLLAPSED, Math.max(SNAP_EXPANDED, startRatio + deltaRatio)));
   }
 
   function onHandlePointerUp() {
     if (!dragRef.current) return;
     dragRef.current = null;
     setDragging(false);
-    setSheetRatio((current) => (current < SNAP_MID ? SNAP_EXPANDED : SNAP_PEEK));
+    setSheetRatio(nearestSnap);
   }
 
   function openParkingDetail(spot: ParkingSpotWithDistance) {
@@ -145,6 +153,9 @@ export function ParkingScreen({
         <div ref={containerRef} className="relative h-[calc(100dvh-76px)] overflow-hidden">
           <NaverMap
             className="absolute inset-0"
+            // 현재 위치 버튼을 시트 바로 위에 띄운다 — 시트를 내리면 버튼도 같이 내려간다.
+            controlsBottom={`calc(${(1 - sheetRatio) * 100}% + 0.75rem)`}
+            controlsAnimated={!dragging}
             center={parkingQuery.data.destination}
             destinationLabel={place.name}
             spots={parkingQuery.data.spots

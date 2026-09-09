@@ -28,7 +28,11 @@ declare global {
           position: unknown;
           map: unknown;
           icon: { content: string; anchor: unknown };
-        }) => { setPosition: (latlng: unknown) => void };
+        }) => {
+          setPosition: (latlng: unknown) => void;
+          setIcon: (icon: { content: string; anchor: unknown }) => void;
+        };
+        Event: { addListener: (target: unknown, type: string, handler: () => void) => void };
       };
     };
   }
@@ -73,11 +77,43 @@ export type MapParkingSpot = {
   order: number;
 };
 
+// 마커 content는 문자열로 조립해 innerHTML처럼 삽입되므로, 외부 API에서 온 주차장
+// 이름을 그대로 넣으면 안 된다.
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+const SPOT_BADGE_STYLE =
+  "width:26px;height:26px;border-radius:999px;background:#14b8a6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;";
+
+// 기본은 번호 배지만(라벨이 항상 떠 있으면 주차장이 몰린 지역에서 서로 겹쳐 못 읽는다).
+// 마커를 탭하면 그 마커만 이름·도보시간 라벨을 위에 띄운다.
+function spotMarkerIcon(spot: MapParkingSpot, selected: boolean, naver: Window["naver"]) {
+  if (!selected) {
+    return {
+      content: `<div style="${SPOT_BADGE_STYLE}">${spot.order}</div>`,
+      anchor: new naver.maps.Point(13, 13),
+    };
+  }
+  const label = [spot.name, spot.walkMinutes !== null ? `도보 ${spot.walkMinutes}분` : null]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    content: `<div style="position:relative;">
+      <div style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);${SPOT_BADGE_STYLE}">${spot.order}</div>
+      <div style="position:absolute;left:0;top:-18px;transform:translate(-50%,-100%);background:#111827;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${escapeHtml(label)}</div>
+    </div>`,
+    anchor: new naver.maps.Point(0, 0),
+  };
+}
+
 export function NaverMap({
   center,
   destinationLabel,
   spots,
   className,
+  controlsBottom,
+  controlsAnimated = true,
 }: {
   center: { latitude: number; longitude: number };
   destinationLabel: string;
@@ -85,11 +121,17 @@ export function NaverMap({
   // 기본은 카드형(둥근 모서리, 고정 높이 18rem) — 화면 전체를 채우는 바텀시트 배경 등
   // 다른 레이아웃이 필요할 때만 넘긴다(예: "absolute inset-0").
   className?: string;
+  // 현재 위치 버튼의 bottom 값(CSS). 지도 위에 바텀시트를 얹는 화면은 시트 높이가
+  // 바뀌므로 그 위로 버튼을 밀어올려야 한다 — 시트가 없으면 넘기지 않아도 된다.
+  controlsBottom?: string;
+  // 시트를 손가락으로 끄는 중에는 버튼이 200ms씩 늦게 따라와 어긋나 보이므로 끈다.
+  controlsAnimated?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<NaverMapInstance | null>(null);
   const myLocationMarkerRef = useRef<NaverMarkerInstance | null>(null);
+  const selectedSpotIdRef = useRef<string | null>(null);
   const [locating, setLocating] = useState(false);
   // 권한 거부/미지원/타임아웃을 구분하지 않는다 — getCurrentPosition이 전부 null로
   // 뭉뚱그리고, 사용자가 할 수 있는 조치도 "권한을 허용해달라" 하나뿐이라 같은 안내면 된다.
@@ -168,17 +210,27 @@ export function NaverMap({
         // 모여있는 경우 흔함) 텍스트 라벨끼리 겹쳐서 못 읽는 문제가 있어, 항상 떠 있는
         // 텍스트 라벨 대신 작은 번호 배지만 찍는다 — 상세 정보(도보 시간 등)는 바로
         // 아래 "주차장 목록"이 같은 번호로 보여준다.
+        const markers: { marker: NaverMarkerInstance; spot: MapParkingSpot }[] = [];
+        // 탭한 마커만 라벨을 띄우고 나머지는 번호 배지로 되돌린다(한 번에 하나).
+        const selectSpot = (id: string) => {
+          selectedSpotIdRef.current = selectedSpotIdRef.current === id ? null : id;
+          for (const entry of markers) {
+            entry.marker.setIcon(
+              spotMarkerIcon(entry.spot, entry.spot.id === selectedSpotIdRef.current, naver)
+            );
+          }
+        };
+
         for (const spot of spots) {
           const position = new naver.maps.LatLng(spot.latitude, spot.longitude);
           bounds.extend(position);
-          new naver.maps.Marker({
+          const marker = new naver.maps.Marker({
             position,
             map,
-            icon: {
-              content: `<div style="width:26px;height:26px;border-radius:999px;background:#14b8a6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3);">${spot.order}</div>`,
-              anchor: new naver.maps.Point(13, 13),
-            },
+            icon: spotMarkerIcon(spot, false, naver),
           });
+          markers.push({ marker, spot });
+          naver.maps.Event.addListener(marker, "click", () => selectSpot(spot.id));
         }
 
         // 목적지 기준 고정 줌 대신, 목적지+모든 주차장이 한 화면에 들어오도록 자동 조정
@@ -222,10 +274,13 @@ export function NaverMap({
     <div className={className ? `overflow-hidden bg-slate-100 ${className}` : "relative h-72 w-full overflow-hidden rounded-2xl bg-slate-100"}>
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* 주차 화면은 지도 위에 주차장 목록 바텀시트를 띄우고, 지도 하단엔 네이버 로고·축척이
-          있다 — 우하단은 둘 다에 가리므로 버튼은 우상단에 둔다(두 화면 모두 비어 있음). */}
       {locateFailed && (
-        <div className="pointer-events-none absolute right-3 top-14 rounded-lg bg-slate-900/85 px-3 py-1.5 text-[12px] text-white">
+        <div
+          className={`pointer-events-none absolute right-3 mb-2 rounded-lg bg-slate-900/85 px-3 py-1.5 text-[12px] text-white ${
+            controlsAnimated ? "transition-[bottom] duration-200 ease-out" : ""
+          }`}
+          style={{ bottom: `calc(${controlsBottom ?? "0.75rem"} + 2.75rem)` }}
+        >
           위치 권한을 허용해주세요
         </div>
       )}
@@ -234,7 +289,10 @@ export function NaverMap({
         onClick={moveToMyLocation}
         disabled={locating}
         aria-label="현재 위치로 이동"
-        className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-700 shadow-md disabled:opacity-60"
+        style={{ bottom: controlsBottom ?? "0.75rem" }}
+        className={`absolute right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-700 shadow-md disabled:opacity-60 ${
+          controlsAnimated ? "transition-[bottom] duration-200 ease-out" : ""
+        }`}
       >
         {/* 조준점 아이콘 — 위치 확인 중에는 회전시켜 진행 상태를 표시 */}
         <svg
