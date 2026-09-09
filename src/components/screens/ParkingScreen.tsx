@@ -21,10 +21,11 @@ export function ParkingScreen({
   placeId,
 }: {
   place: PlaceWithMeta;
-  runId: string;
+  runId: string | null;
   placeId: string;
 }) {
   const router = useRouter();
+  const placeHref = runId ? `/recommend/${runId}/place/${placeId}` : `/place/${placeId}`;
 
   const parkingQuery = useQuery({
     queryKey: ["parking", place.daeguDistrict, place.name],
@@ -59,7 +60,7 @@ export function ParkingScreen({
   }
 
   function openParkingDetail(spot: ParkingSpotWithDistance) {
-    router.push(`/recommend/${runId}/place/${placeId}/parking/${spot.id}`);
+    router.push(`${placeHref}/parking/${spot.id}`);
   }
 
   // 지도 위 바텀시트(목적지 좌표 있음)와 목록만 보여주는 폴백(목적지 좌표 없음) 둘 다
@@ -103,7 +104,7 @@ export function ParkingScreen({
     <>
       <ScreenHeader
         title={`${place.name} 주차 정보`}
-        onBack={() => router.push(`/recommend/${runId}/place/${placeId}`)}
+        onBack={() => router.push(placeHref)}
         right={
           <span className="p-1 text-slate-300">
             <Icon name="heart" className="h-[22px] w-[22px]" />

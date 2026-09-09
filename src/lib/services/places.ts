@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateDataSource } from "./shared";
 import { pickBestPlaceMatch, pickRegionForAddress } from "./matching";
 import { fetchPlaceImage } from "@/lib/tools/tourApi";
+import { DAEGU_DISTRICTS } from "@/lib/tools/parking";
 import type { Place } from "../../../generated/prisma/client";
 
 // 카카오 로컬 - 키워드로 장소 검색
@@ -73,9 +74,22 @@ export interface CachedPlace {
   categorySummary: string | null;
   phone: string | null;
   websiteUrl: string | null;
+  daeguDistrict: (typeof DAEGU_DISTRICTS)[number] | null;
 }
 
-function toCachedPlace(place: Place): CachedPlace {
+// 장소 검색(카카오) 결과에도 주차 정보 조회가 되도록, 추천 결과와 같은 방식으로
+// 대구광역시 구/군 소속 여부를 region 부모 체인으로 판단한다(LLM이 채워주는
+// agent.ts의 daeguDistrict와 달리 여긴 이미 저장된 region 매칭 결과를 그대로 씀).
+async function resolveDaeguDistrict(
+  regionId: bigint | null | undefined
+): Promise<(typeof DAEGU_DISTRICTS)[number] | null> {
+  if (!regionId) return null;
+  const region = await prisma.region.findUnique({ where: { id: regionId }, include: { parent: true } });
+  if (!region || region.level !== "구군" || region.parent?.name !== "대구광역시") return null;
+  return DAEGU_DISTRICTS.find((d) => d === region.name) ?? null;
+}
+
+async function toCachedPlace(place: Place): Promise<CachedPlace> {
   return {
     id: place.publicId,
     name: place.name,
@@ -85,7 +99,13 @@ function toCachedPlace(place: Place): CachedPlace {
     categorySummary: place.categorySummary,
     phone: place.phone,
     websiteUrl: place.websiteUrl,
+    daeguDistrict: await resolveDaeguDistrict(place.regionId),
   };
+}
+
+export async function getCachedPlaceById(publicId: string): Promise<CachedPlace | null> {
+  const place = await prisma.place.findUnique({ where: { publicId } });
+  return place ? toCachedPlace(place) : null;
 }
 
 async function findRegionByAddress(address: string) {
@@ -179,7 +199,7 @@ export async function searchAndCachePlaces(query: string): Promise<CachedPlace[]
 
   const results: CachedPlace[] = [];
   for (const doc of documents) {
-    results.push(toCachedPlace(await upsertPlaceFromDoc(doc, source.id)));
+    results.push(await toCachedPlace(await upsertPlaceFromDoc(doc, source.id)));
   }
   return results;
 }
