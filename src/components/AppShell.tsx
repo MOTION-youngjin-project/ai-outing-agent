@@ -11,7 +11,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex w-full max-w-[460px] flex-1 lg:max-w-none">
       <Sidebar />
       <div className="mx-auto flex w-full max-w-[460px] flex-1 flex-col bg-page">
-        <div className="flex flex-1 flex-col pb-6">{children}</div>
+        <div className="flex flex-1 flex-col pb-24 lg:pb-6">{children}</div>
         <div className="lg:hidden">
           <BottomNav />
         </div>
