@@ -22,7 +22,7 @@ function airQualityPhrase(grade: string): string {
   return "외출을 자제하세요";
 }
 
-export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: string }) {
+export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: string | null }) {
   const { regionId } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
@@ -85,7 +85,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
     <>
       <ScreenHeader
         title="상세 보기"
-        onBack={() => router.push(`/recommend/${runId}`)}
+        onBack={() => router.push(runId ? `/recommend/${runId}` : "/")}
         right={
           <div className="flex items-center gap-3">
             {typeof navigator !== "undefined" && !!navigator.share && (
@@ -246,7 +246,11 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
           </button>
           {p.daeguDistrict && p.placeId && (
             <button
-              onClick={() => router.push(`/recommend/${runId}/place/${p.placeId}/parking`)}
+              onClick={() =>
+                router.push(
+                  runId ? `/recommend/${runId}/place/${p.placeId}/parking` : `/place/${p.placeId}/parking`
+                )
+              }
               className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white"
             >
               <Icon name="parking" className="h-4 w-4" />

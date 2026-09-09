@@ -14,6 +14,9 @@ export type PlaceResult = {
   roadAddress: string | null;
   categorySummary: string | null;
   phone: string | null;
+  daeguDistrict: string | null;
+  latitude: number;
+  longitude: number;
 };
 export type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; url: string; imageUrl: string };
 export type SavedPlaceResult = {
@@ -59,6 +62,13 @@ export async function fetchPlacesSearch(query: string): Promise<PlaceResult[]> {
   const res = await fetch(`/api/places?query=${encodeURIComponent(query)}`);
   const data = await res.json();
   return res.ok ? data.data : [];
+}
+
+export async function fetchPlace(placeId: string): Promise<PlaceResult | null> {
+  const res = await fetch(`/api/places/${encodeURIComponent(placeId)}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.data ?? null;
 }
 
 export async function fetchCulturalEvents(params: { dtype: string; keyword: string }): Promise<CulturalEvent[]> {
@@ -107,6 +117,23 @@ export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
 };
 // agentRunId: /recommend/[runId] 라우팅용 — 새로고침/직링크 복원 때 이 id로 결과를 다시 조회한다.
 export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[]; agentRunId: string };
+
+// 장소 검색(카카오) 결과는 AI 추천이 아니라서 reason/tags/oneLineDescription 같은
+// AI 전용 필드가 없다 — DetailScreen/ParkingScreen은 그 필드들을 전부 optional로 다루므로
+// 빈 값으로 채워도 그대로 재사용 가능하다(runId 없는 단독 상세 화면용).
+export function placeResultToMeta(p: PlaceResult): PlaceWithMeta {
+  return {
+    name: p.name,
+    oneLineDescription: "",
+    reason: "",
+    address: p.roadAddress ?? undefined,
+    category: p.categorySummary ?? undefined,
+    placeId: p.id,
+    latitude: p.latitude,
+    longitude: p.longitude,
+    daeguDistrict: (p.daeguDistrict ?? undefined) as PlaceWithMeta["daeguDistrict"],
+  };
+}
 export type RecommendProgressEvent = { type: string; tool?: string };
 
 // 거리(km) 배지 계산용 GPS 좌표. 권한 거부/미지원/타임아웃이면 조용히 null —

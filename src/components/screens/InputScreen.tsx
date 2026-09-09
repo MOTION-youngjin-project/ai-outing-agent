@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { fetchWeather, fetchAirQuality, fetchPlacesSearch, fetchCulturalEvents } from "@/lib/clientApi";
@@ -238,16 +239,17 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                 <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
               )}
               {placesMutation.data.map((p) => (
-                <div
+                <Link
                   key={p.id}
-                  className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+                  href={`/place/${p.id}`}
+                  className="block rounded-2xl bg-white px-4 py-3 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
                 >
                   <div className="text-[15px] font-semibold text-ink">{p.name}</div>
                   {p.roadAddress && <div className="text-[13px] text-muted">{p.roadAddress}</div>}
                   {p.categorySummary && (
                     <div className="mt-0.5 text-[12px] text-muted/80">{p.categorySummary}</div>
                   )}
-                </div>
+                </Link>
               ))}
             </div>
           )}

@@ -6,15 +6,18 @@ import { Icon } from "@/components/Icon";
 
 // 모바일 전용(데스크톱은 AppShell이 lg:hidden으로 감싼다) — 사이드바 화면(홈/채팅/마이)에서만 노출.
 const RESULTS_PATH = /^\/recommend(\/|$)/;
+// 장소 검색(홈)에서 들어가는 단독 상세/주차 화면 — /recommend/[runId]/place/... 와 같은 패턴.
+const SEARCHED_PLACE_PATH = /^\/place(\/|$)/;
 
 export function BottomNav() {
   const pathname = usePathname();
   const onRecommend = RESULTS_PATH.test(pathname);
-  const show = pathname === "/" || onRecommend || pathname === "/mypage";
+  const onSearchedPlace = SEARCHED_PLACE_PATH.test(pathname);
+  const show = pathname === "/" || onRecommend || onSearchedPlace || pathname === "/mypage";
   if (!show) return null;
 
   const tabs = [
-    { id: "home", label: "홈", icon: "home", href: "/", active: pathname === "/" },
+    { id: "home", label: "홈", icon: "home", href: "/", active: pathname === "/" || onSearchedPlace },
     { id: "recommend", label: "추천", icon: "compass", href: "/recommend", active: onRecommend },
     { id: "saved", label: "저장", icon: "heart", href: "/mypage", active: false },
     { id: "mypage", label: "마이", icon: "user", href: "/mypage", active: pathname === "/mypage" },

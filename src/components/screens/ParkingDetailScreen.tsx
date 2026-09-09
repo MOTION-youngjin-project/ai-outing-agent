@@ -12,13 +12,13 @@ export function ParkingDetailScreen({
   placeId,
 }: {
   spot: ParkingSpotWithDistance;
-  runId: string;
+  runId: string | null;
   placeId: string;
 }) {
   const router = useRouter();
   const occ = occupancyLabel(spot);
   const hasCoords = spot.latitude !== null && spot.longitude !== null;
-  const parkingListHref = `/recommend/${runId}/place/${placeId}/parking`;
+  const parkingListHref = runId ? `/recommend/${runId}/place/${placeId}/parking` : `/place/${placeId}/parking`;
 
   function share() {
     if (typeof navigator === "undefined" || !navigator.share) return;
