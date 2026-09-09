@@ -2,6 +2,7 @@
 // 여러 곳에서 같은 엔드포인트를 쓰기도 해서(예: 지역/날씨/대기질) 한 곳에 모아 재사용한다.
 import type { ChatTurn, Recommendation } from "@/lib/agent";
 import type { ParkingSpot } from "@/lib/tools/parking";
+import type { TransitItinerary } from "@/lib/services/transit";
 
 export type Region = { id: string; parentId: string | null; name: string; level: string };
 export type ParkingSpotWithDistance = ParkingSpot & { distanceMeters: number | null; walkMinutes: number | null };
@@ -44,6 +45,26 @@ export async function fetchAirQuality(regionId: string): Promise<AirQualityInfo 
   const res = await fetch(`/api/air-quality?regionId=${regionId}`);
   const data = await res.json();
   return data.data ?? null;
+}
+
+export async function fetchTransitDirections(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+): Promise<TransitItinerary[]> {
+  try {
+    const params = new URLSearchParams({
+      fromLat: String(from.latitude),
+      fromLng: String(from.longitude),
+      toLat: String(to.latitude),
+      toLng: String(to.longitude),
+    });
+    const res = await fetch(`/api/transit?${params}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchParking(district: string, placeName?: string): Promise<ParkingResult> {
@@ -138,7 +159,7 @@ export type RecommendProgressEvent = { type: string; tool?: string };
 
 // 거리(km) 배지 계산용 GPS 좌표. 권한 거부/미지원/타임아웃이면 조용히 null —
 // 배지가 안 뜰 뿐 추천 자체를 막을 이유는 아니다.
-function getCurrentPosition(): Promise<{ latitude: number; longitude: number } | null> {
+export function getCurrentPosition(): Promise<{ latitude: number; longitude: number } | null> {
   return new Promise((resolve) => {
     if (!navigator.geolocation) {
       resolve(null);

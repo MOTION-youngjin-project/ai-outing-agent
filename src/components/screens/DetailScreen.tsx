@@ -258,6 +258,18 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
             </button>
           )}
         </div>
+
+        {p.placeId && p.latitude !== null && p.latitude !== undefined && p.longitude !== null && p.longitude !== undefined && (
+          <button
+            onClick={() =>
+              router.push(runId ? `/recommend/${runId}/place/${p.placeId}/transit` : `/place/${p.placeId}/transit`)
+            }
+            className="flex items-center justify-center gap-1.5 rounded-full border border-hairline py-3 text-[14px] font-semibold text-ink-soft"
+          >
+            <Icon name="bus" className="h-4 w-4" />
+            대중교통 길찾기
+          </button>
+        )}
       </div>
     </>
   );
