@@ -5,6 +5,7 @@ import { runAgentStream, type AgentProgressEvent, type ChatTurn, type Recommenda
 import { getCachedWeather } from "./weather";
 import { getCachedAirQuality } from "./airQuality";
 import { resolvePlaceByName, resolveDaeguDistrict } from "./places";
+import { fetchDrivingRoute } from "./naverDirections";
 import { findOrCreateSidoRegion } from "./shared";
 import { inferEnvironmentMode, extractCategoryLabel, computeDistanceKm } from "./matching";
 import type { Place } from "../../../generated/prisma/client";
@@ -21,6 +22,10 @@ export type EnrichedPlace = NonNullable<Recommendation["places"]>[number] & {
   // 못 찾은 장소는 null).
   latitude: number | null;
   longitude: number | null;
+  // 코스상 바로 이전 정류지(없으면 origin)에서 이 장소까지의 네이버 Directions 자동차
+  // 경로. 실패/좌표 없음/코스 첫 장소인데 origin도 없음 — 전부 null(배지 미표시).
+  travelDistanceM: number | null;
+  travelDurationMin: number | null;
 };
 export type EnrichedRecommendation = Omit<Recommendation, "places"> & { places?: EnrichedPlace[] };
 
@@ -143,6 +148,8 @@ export async function createRecommendationRun(
         placeId: resolved?.publicId ?? null,
         latitude: resolvedPoint?.latitude ?? null,
         longitude: resolvedPoint?.longitude ?? null,
+        travelDistanceM: null,
+        travelDurationMin: null,
         // LLM은 대구 안 유명 장소인데도 daeguDistrict를 자주 비우고(주차 버튼이 통째로
         // 비활성됨) 가끔 틀린 구를 채운다 — 카카오로 실제 Place를 찾았으면 그 주소에서
         // 나온 구/군을 정답으로 덮어쓰고, 못 찾았을 때만 LLM 값을 그대로 둔다.
@@ -150,6 +157,35 @@ export async function createRecommendationRun(
       };
     })
   );
+
+  // 코스 순서(카카오로 실제 좌표를 찾은 장소만, LLM 원본 순서 유지)를 따라 이전
+  // 정류지→이 정류지 자동차 이동시간을 네이버 Directions로 채운다. origin이 있으면
+  // 첫 정류지도 "지금 위치→첫 정류지" 구간으로 채운다. 구간마다 독립 호출이라 병렬 처리
+  // — 실패한 구간은 travelByIndex에 안 들어가서 null로 남는다(카카오 매칭 실패 처리와
+  // 같은 원칙, 전체 추천을 막지 않는다).
+  const resolvedInOrder = resolvedPlaces.map((r, index) => ({ ...r, index })).filter((r) => r.place !== null);
+  const travelByIndex = new Map<number, { travelDistanceM: number; travelDurationMin: number }>();
+  await Promise.all(
+    resolvedInOrder.map(async ({ place, index }, i) => {
+      const prevPoint =
+        i === 0
+          ? origin
+          : {
+              latitude: resolvedInOrder[i - 1].place!.latitude.toNumber(),
+              longitude: resolvedInOrder[i - 1].place!.longitude.toNumber(),
+            };
+      if (!prevPoint) return;
+      const leg = await fetchDrivingRoute(prevPoint, {
+        latitude: place!.latitude.toNumber(),
+        longitude: place!.longitude.toNumber(),
+      });
+      if (leg) travelByIndex.set(index, { travelDistanceM: leg.distanceM, travelDurationMin: leg.durationMin });
+    })
+  );
+  for (const [index, leg] of travelByIndex) {
+    enrichedPlaces[index].travelDistanceM = leg.travelDistanceM;
+    enrichedPlaces[index].travelDurationMin = leg.travelDurationMin;
+  }
 
   // 이 블록 전체(agentRun/route/routePlace 기록)가 실패해도(DB 커넥션 풀 등) 이미 LLM이
   // 만들어낸 추천과 카카오 매칭 결과는 살려서 사용자에게 그대로 돌려준다 — 카카오 장소
@@ -208,6 +244,8 @@ export async function createRecommendationRun(
         stopType: "visit",
         selectionReason: reason.slice(0, 1000),
         verificationRequired: false,
+        travelDistanceM: enrichedPlaces[index].travelDistanceM,
+        travelDurationMin: enrichedPlaces[index].travelDurationMin,
         enrichedSnapshot: enrichedPlaces[index],
       }));
     if (routePlacesData.length > 0) {
