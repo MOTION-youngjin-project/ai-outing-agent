@@ -8,6 +8,12 @@ const CULTURE_URL = "https://api.kcisa.kr/openapi/CNV_060/request";
 
 export const DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
+// dtype 없이 들어온 텍스트에서 분야를 추정한다 — 못 찾으면 시스템 프롬프트가 이미 쓰는
+// 기본값과 맞춰 "전시"로 둔다(agent.ts: "아이 동반이나 체험 활동을 물어보면 '전시'로").
+export function inferDtype(text: string): (typeof DTYPES)[number] {
+  return DTYPES.find((d) => text.includes(d)) ?? "전시";
+}
+
 function decodeEntities(text: string): string {
   return text
     .replace(/&lt;/g, "<")
@@ -99,11 +105,17 @@ export async function fetchCulturePortal(dtype: string, keyword: string): Promis
 }
 
 export const culturePortalTool = tool(
-  async ({ dtype, keyword }) => {
+  async ({ dtype, keyword, query, region }) => {
+    // ponytail: get_air_quality 등과 같은 원인의 같은 방어 — airQuality.ts의 동일 패턴
+    // 주석 참고. dtype은 필수 enum이라 빠져 있으면 텍스트에서 추정한다(inferDtype).
+    const fallbackText = keyword ?? query ?? region;
+    const effectiveDtype = dtype ?? inferDtype(fallbackText ?? "");
+    const effectiveKeyword = keyword ?? query ?? "";
+
     try {
-      const items = await fetchCulturePortal(dtype, keyword ?? "");
+      const items = await fetchCulturePortal(effectiveDtype, effectiveKeyword);
       if (items.length === 0) {
-        return `"${dtype}" 분야로 검색된 공연/전시가 없습니다.`;
+        return `"${effectiveDtype}" 분야로 검색된 공연/전시가 없습니다.`;
       }
 
       // 이 API는 지역(시/도) 파라미터가 없어 전국 결과를 그대로 반환한다.
@@ -113,7 +125,7 @@ export const culturePortalTool = tool(
             `- ${i.title} (${i.eventPeriod}, ${i.eventSite})${i.url ? ` 링크:${i.url}` : ""}${i.imageUrl ? ` 이미지:${i.imageUrl}` : ""}`
         )
         .join("\n");
-      return `"${dtype}" 분야 전국 공연/전시 검색 결과입니다 (지역별 필터링은 지원하지 않아 전국 결과 중 일부):\n${list}`;
+      return `"${effectiveDtype}" 분야 전국 공연/전시 검색 결과입니다 (지역별 필터링은 지원하지 않아 전국 결과 중 일부):\n${list}`;
     } catch (err) {
       return `문화행사 조회에 실패했습니다: ${err instanceof Error ? err.message : String(err)}`;
     }
@@ -124,8 +136,10 @@ export const culturePortalTool = tool(
       "공연/전시 행사를 분야별로 검색한다. 지역 필터링은 지원하지 않으므로 전국 결과 중에서 추천해야 한다. " +
       "아이 동반이나 체험 활동을 물어보면 '전시'로, 공연을 물어보면 관련 분야로 검색한다.",
     schema: z.object({
-      dtype: z.enum(DTYPES).describe("검색할 문화행사 분야"),
+      dtype: z.enum(DTYPES).optional().describe("검색할 문화행사 분야"),
       keyword: z.string().optional().describe("제목에 포함될 검색어 (없으면 빈 문자열로 전체 검색)"),
+      query: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — keyword와 동일하게 처리)"),
+      region: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — keyword와 동일하게 처리)"),
     }),
   }
 );

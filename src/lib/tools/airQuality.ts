@@ -75,10 +75,17 @@ export async function fetchAirQuality(sidoName: string) {
 }
 
 export const airQualityTool = tool(
-  async ({ region }) => {
-    const sidoName = normalizeSido(region);
+  async ({ region, query }) => {
+    // ponytail: 약한 폴백 모델(gemini-3.1/3.5-flash-lite)이 복잡한 다중조건 질문에서 이
+    // 도구 이름을 부르면서 query 인자(다른 도구 스키마)를 채우는 오배선이 실측 확인됨
+    // (2026-09-10, LangSmith 트레이스 — region이 Zod 검증에서 undefined로 막혀 같은 에러를
+    // 못 고치고 25스텝 recursion limit까지 반복 재시도함). region 없으면 query라도 받는다.
+    const input = region ?? query;
+    if (!input) return "지역 정보가 없어 대기질을 조회할 수 없습니다.";
+
+    const sidoName = normalizeSido(input);
     if (!sidoName) {
-      return `"${region}"은(는) 대기질 조회가 가능한 시/도 단위 지역명이 아닙니다. 서울, 부산, 대구 같은 시/도 이름으로 다시 물어봐 주세요.`;
+      return `"${input}"은(는) 대기질 조회가 가능한 시/도 단위 지역명이 아닙니다. 서울, 부산, 대구 같은 시/도 이름으로 다시 물어봐 주세요.`;
     }
 
     try {
@@ -93,7 +100,8 @@ export const airQualityTool = tool(
     description:
       "특정 지역(시/도 단위)의 실시간 미세먼지(대기질) 정보를 조회한다. 날씨나 컨디션이 애매하게 언급될 때도 먼저 확인해서 실내/야외 활동 판단에 활용한다.",
     schema: z.object({
-      region: z.string().describe("대기질을 조회할 지역명 (예: 대구, 서울)"),
+      region: z.string().optional().describe("대기질을 조회할 지역명 (예: 대구, 서울)"),
+      query: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — region과 동일하게 처리)"),
     }),
   }
 );

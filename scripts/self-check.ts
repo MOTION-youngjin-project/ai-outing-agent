@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { formatPlannedDate, todayIso } from "../src/lib/textFormat.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
-import { stripTags, isEventEnded } from "../src/lib/tools/culturePortal.ts";
+import { stripTags, isEventEnded, inferDtype } from "../src/lib/tools/culturePortal.ts";
 import { isInCooldown, markCooldown } from "../src/lib/agent.ts";
 import {
   formatFee,
@@ -55,6 +55,12 @@ check("gradeFromPm10 매우나쁨 시작(151)", gradeFromPm10(151), "매우나�
 // stripTags — 실제 HTML 태그는 지우되, 제목의 장식용 꺾쇠괄호는 보존
 check("stripTags 실제 태그 제거", stripTags("<p>hello</p>"), "hello");
 check("stripTags 한글 꺾쇠괄호 보존", stripTags("<공간드림 1472> 개인전"), "<공간드림 1472> 개인전");
+
+// inferDtype — 약한 폴백 모델이 dtype 없이 부를 때(2026-09-10 recursion limit 루프 원인)
+// 쓰는 추정 로직. 찾으면 그 분야, 못 찾으면 시스템 프롬프트 기본값(전시)로 떨어져야 한다.
+check("inferDtype 텍스트에 분야명 포함", inferDtype("대구 콘서트 보러 가고 싶어"), "콘서트");
+check("inferDtype 매칭 안 되면 기본값(전시)", inferDtype("대구 아이랑 유모차 무료 반나절"), "전시");
+check("inferDtype 빈 문자열도 기본값(전시)", inferDtype(""), "전시");
 
 // isEventEnded — 2026-09-08 사용자 피드백("끝난 행사가 보임") 재발 방지.
 // now를 주입해서 실제 시계와 무관하게 검증한다.

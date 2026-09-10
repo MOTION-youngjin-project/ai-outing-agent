@@ -98,10 +98,14 @@ export async function fetchWeather(nx: number, ny: number) {
 }
 
 export const weatherTool = tool(
-  async ({ region }) => {
-    const sidoName = normalizeSido(region);
+  async ({ region, query }) => {
+    // ponytail: get_air_quality와 같은 원인의 같은 방어 — airQuality.ts의 동일 패턴 주석 참고.
+    const input = region ?? query;
+    if (!input) return "지역 정보가 없어 날씨를 조회할 수 없습니다.";
+
+    const sidoName = normalizeSido(input);
     if (!sidoName) {
-      return `"${region}"은(는) 날씨 조회가 가능한 시/도 단위 지역명이 아닙니다. 서울, 부산, 대구 같은 시/도 이름으로 다시 물어봐 주세요.`;
+      return `"${input}"은(는) 날씨 조회가 가능한 시/도 단위 지역명이 아닙니다. 서울, 부산, 대구 같은 시/도 이름으로 다시 물어봐 주세요.`;
     }
 
     try {
@@ -119,7 +123,8 @@ export const weatherTool = tool(
     description:
       "특정 지역(시/도 단위)의 단기 날씨 예보(하늘상태, 강수, 기온)를 조회한다. 날씨나 컨디션이 애매하게 언급될 때 대기질과 함께 확인해서 실내/야외 활동 판단에 활용한다.",
     schema: z.object({
-      region: z.string().describe("날씨를 조회할 지역명 (예: 대구, 서울)"),
+      region: z.string().optional().describe("날씨를 조회할 지역명 (예: 대구, 서울)"),
+      query: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — region과 동일하게 처리)"),
     }),
   }
 );

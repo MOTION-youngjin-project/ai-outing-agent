@@ -19,7 +19,15 @@ function cosineSimilarity(a: number[], b: number[]): number {
 const TOP_K = 3;
 
 export const facilityInfoTool = tool(
-  async ({ query }) => {
+  async ({ query, region, dtype, keyword }) => {
+    // ponytail: get_air_quality/get_weather와 같은 원인의 같은 방어 — airQuality.ts의 동일
+    // 패턴 주석 참고. 여긴 임베딩 검색이라 아무 문자열이 들어와도 에러 없이 동작한다.
+    // search_culture_events(dtype+keyword)와 헷갈리는 경우가 실측으로 가장 잦아서
+    // (2026-09-10 LangSmith 트레이스) 그 둘도 합쳐서 검색어로 쓴다.
+    const derivedQuery = [keyword, dtype].filter(Boolean).join(" ") || undefined;
+    const effectiveQuery = query ?? region ?? derivedQuery;
+    if (!effectiveQuery) return "검색 조건이 없어 편의시설 정보를 조회할 수 없습니다.";
+
     if (docs.length === 0 || docs[0].embedding.length === 0) {
       return "실내/가족동반 시설 안내 문서 인덱스가 아직 준비되지 않았습니다.";
     }
@@ -28,7 +36,7 @@ export const facilityInfoTool = tool(
       model: "gemini-embedding-001",
       apiKey: process.env.GEMINI_API_KEY,
     });
-    const queryVector = await embeddings.embedQuery(query);
+    const queryVector = await embeddings.embedQuery(effectiveQuery);
 
     const ranked = docs
       .map((doc) => ({ doc, score: cosineSimilarity(queryVector, doc.embedding) }))
@@ -45,7 +53,10 @@ export const facilityInfoTool = tool(
       "제약이 있을 때도 사용한다. 연인/친구 동반자 유형 자체를 판단하는 용도로는 사용하지 마라 — 이 문서는 " +
       "가족 편의시설 중심 정보다.",
     schema: z.object({
-      query: z.string().describe("검색할 조건이나 상황 (예: '아이랑 갈만한 유모차 이용 가능한 곳')"),
+      query: z.string().optional().describe("검색할 조건이나 상황 (예: '아이랑 갈만한 유모차 이용 가능한 곳')"),
+      region: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — query와 동일하게 처리)"),
+      dtype: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — keyword와 합쳐 검색어로 처리)"),
+      keyword: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — dtype과 합쳐 검색어로 처리)"),
     }),
   }
 );
