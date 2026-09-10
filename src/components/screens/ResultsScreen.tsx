@@ -192,8 +192,8 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             </div>
           </div>
         </div>
-        {/* ponytail: 코스 합산 시간/비용/도보 이동 시간 정보 없음(API 미제공), 백엔드에
-            필드 추가되면 스크린샷처럼 타임라인 UI로 확장 */}
+        {/* ponytail: 정류지 간 이동시간(자동차)은 네이버 Directions로 채워서 카드 사이에
+            표시함. 코스 합산 시간/비용은 여전히 API 미제공이라 비워둠. */}
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button
@@ -227,9 +227,10 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           {filteredPlaces.length === 0 && (
             <div className="py-6 text-center text-[13px] text-muted">해당 조건에 맞는 장소가 없어요.</div>
           )}
-          {filteredPlaces.map(({ p, i }) => (
+          {filteredPlaces.map(({ p, i }, idx) => (
+            // display:contents로 레이아웃엔 안 끼고, 카드+이동시간 줄 두 형제를 한 key 아래 묶기만 한다.
+            <div key={i} className="contents">
             <div
-              key={i}
               className="flex overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.06)]"
             >
               <button onClick={() => openDetail(p)} className="relative w-[132px] shrink-0">
@@ -302,6 +303,16 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                   </button>
                 </div>
               </div>
+            </div>
+            {/* 필터링 중엔 화면상 인접 카드가 실제 코스 순서상 인접이 아닐 수 있어 — 전체
+                보기(activeFilter === null)일 때만 이동시간을 보여준다. */}
+            {activeFilter === null &&
+              idx < filteredPlaces.length - 1 &&
+              filteredPlaces[idx + 1].p.travelDurationMin != null && (
+                <div className="px-1 text-[12px] font-medium text-muted">
+                  차로 {filteredPlaces[idx + 1].p.travelDurationMin}분 이동
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -3,10 +3,10 @@ import { Icon } from "@/components/Icon";
 import type { RecommendResult, WeatherInfo, AirQualityInfo } from "@/lib/clientApi";
 
 // 디자인팀 목업(디자인/채팅.png)의 "오늘의 추천 코스" 카드. 목업은 장소별 정확한 방문
-// 시각/이동수단·시간/코스 총 소요시간·총비용까지 보여주지만, 지금 agent.ts가 실제로
-// 만들어주는 데이터엔 그런 필드가 없다(순서·시간·이동정보를 엮는 "경로" 개념 자체가 없음).
-// 지어내지 않는다는 이 프로젝트 원칙(agent.ts 시스템 프롬프트 "모르면 비워라")에 따라,
-// 지금 있는 데이터(장소 목록·한줄설명·방문시간·요금·태그)만으로 구성했다.
+// 시각/코스 총 소요시간·총비용까지 보여주지만, 지금 agent.ts가 실제로 만들어주는
+// 데이터엔 그런 필드가 없다. 이동수단·시간은 네이버 Directions로 구간별(자동차)
+// travelDurationMin을 채워 연결선에 표시한다 — 지어내지 않는다는 이 프로젝트 원칙
+// (agent.ts 시스템 프롬프트 "모르면 비워라")에 따라 값이 없는 구간은 표시하지 않는다.
 export function CourseCard({
   recommendation,
   regionName,
@@ -80,7 +80,17 @@ export function CourseCard({
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[11px] font-bold text-mint-mid">
                   {i + 1}
                 </span>
-                {i < places.length - 1 && <span className="w-px flex-1 border-l border-dashed border-hairline" />}
+                {i < places.length - 1 && (
+                  <div className="flex flex-1 flex-col items-center gap-1">
+                    <span className="w-px flex-1 border-l border-dashed border-hairline" />
+                    {places[i + 1].travelDurationMin != null && (
+                      <span className="whitespace-nowrap text-[10px] font-medium text-muted">
+                        차로 {places[i + 1].travelDurationMin}분
+                      </span>
+                    )}
+                    <span className="w-px flex-1 border-l border-dashed border-hairline" />
+                  </div>
+                )}
               </div>
               {p.placeId ? (
                 <Link

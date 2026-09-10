@@ -147,6 +147,10 @@ export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
   placeId?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  // 코스상 이전 정류지(없으면 사용자 현재 위치)에서 이 장소까지 네이버 Directions로 구한
+  // 자동차 이동거리/시간. 실패/미계산이면 없음 — 배지 미표시로 처리한다.
+  travelDistanceM?: number | null;
+  travelDurationMin?: number | null;
 };
 // agentRunId: /recommend/[runId] 라우팅용 — 새로고침/직링크 복원 때 이 id로 결과를 다시 조회한다.
 export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[]; agentRunId: string };

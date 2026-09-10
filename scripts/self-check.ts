@@ -25,6 +25,7 @@ import {
   extractCategoryLabel,
   computeDistanceKm,
 } from "../src/lib/services/matching.ts";
+import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMapLinks.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -216,5 +217,35 @@ check("formatPlannedDate 자정 경계에서 안 밀림", formatPlannedDate("202
 // 이 검사는 실행 머신 타임존과 무관하게 결정적이다.
 check("todayIso 로컬 자정 직전", todayIso(new Date(2026, 8, 9, 23, 30)), "2026-09-09");
 check("todayIso 로컬 자정 직후", todayIso(new Date(2026, 8, 10, 0, 30)), "2026-09-10");
+
+// detectPlatform / buildNaverNavigationPlan — 네이버 지도는 길찾기 웹 URL이 없어서
+// (NCP 포럼 공식 확인) 플랫폼별로 다른 전략을 타는데, 분기가 틀리면 안드로이드에서
+// iOS용 스킴을 쏘는 등 조용히 아예 안 열리는 버그가 난다.
+check("detectPlatform iOS", detectPlatform("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), "ios");
+check("detectPlatform Android", detectPlatform("Mozilla/5.0 (Linux; Android 14; SM-S911N)"), "android");
+check("detectPlatform 데스크톱", detectPlatform("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), "other");
+
+const naverIos = buildNaverNavigationPlan("ios", 35.8281, 128.5779, "수성못");
+check("buildNaverNavigationPlan iOS는 app-with-fallback", naverIos.kind, "app-with-fallback");
+check(
+  "buildNaverNavigationPlan iOS nmap:// 파라미터",
+  naverIos.kind === "app-with-fallback" ? naverIos.appUrl : null,
+  "nmap://route/car?dlat=35.8281&dlng=128.5779&dname=%EC%88%98%EC%84%B1%EB%AA%BB&appname=com.aioutingagent.web"
+);
+
+const naverAndroid = buildNaverNavigationPlan("android", 35.8281, 128.5779, "수성못");
+check("buildNaverNavigationPlan Android는 intent", naverAndroid.kind, "intent");
+check(
+  "buildNaverNavigationPlan Android intent에 Play스토어 폴백 포함",
+  naverAndroid.kind === "intent" ? naverAndroid.url.includes("play.google.com") : false,
+  true
+);
+
+const naverDesktop = buildNaverNavigationPlan("other", 35.8281, 128.5779, "수성못");
+check(
+  "buildNaverNavigationPlan 데스크톱은 위치표시 웹 URL",
+  naverDesktop.kind === "web" ? naverDesktop.url : null,
+  "https://map.naver.com/?lng=128.5779&lat=35.8281&title=%EC%88%98%EC%84%B1%EB%AA%BB"
+);
 
 console.log(`✓ self-check 통과 (${passed}건)`);
