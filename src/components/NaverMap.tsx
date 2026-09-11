@@ -32,6 +32,13 @@ declare global {
           setPosition: (latlng: unknown) => void;
           setIcon: (icon: { content: string; anchor: unknown }) => void;
         };
+        Polyline: new (options: {
+          map: unknown;
+          path: unknown[];
+          strokeColor: string;
+          strokeWeight: number;
+          strokeOpacity?: number;
+        }) => unknown;
         Event: { addListener: (target: unknown, type: string, handler: () => void) => void };
       };
     };
@@ -111,13 +118,24 @@ export function NaverMap({
   center,
   destinationLabel,
   spots,
+  origin,
+  routePath,
   className,
   controlsBottom,
   controlsAnimated = true,
+  selectedId,
+  onSelect,
 }: {
   center: { latitude: number; longitude: number };
-  destinationLabel: string;
+  // MapScreen(코스 지도)처럼 정류지 전부를 spots 번호 배지로만 보여줄 땐 별도 목적지
+  // 마커가 필요 없다 — 그럴 때만 생략(undefined)한다.
+  destinationLabel?: string;
   spots: MapParkingSpot[];
+  // 길찾기 화면(DirectionsScreen)용 — 출발지 마커. "내 위치로 이동" 버튼이 찍는 파란
+  // 점(moveToMyLocation)과 같은 스타일을 그냥 재사용한다(둘 다 "여기서 출발" 의미).
+  origin?: { latitude: number; longitude: number };
+  // 길찾기 경로 폴리라인. 있으면 지도 범위(fitBounds)에도 포함시켜 경로 전체가 보이게 한다.
+  routePath?: { latitude: number; longitude: number }[];
   // 기본은 카드형(둥근 모서리, 고정 높이 18rem) — 화면 전체를 채우는 바텀시트 배경 등
   // 다른 레이아웃이 필요할 때만 넘긴다(예: "absolute inset-0").
   className?: string;
@@ -126,12 +144,25 @@ export function NaverMap({
   controlsBottom?: string;
   // 시트를 손가락으로 끄는 중에는 버튼이 200ms씩 늦게 따라와 어긋나 보이므로 끈다.
   controlsAnimated?: boolean;
+  // 주차장 목록과 선택을 맞출 때만 넘긴다(제어형). 안 넘기면 지도가 자체 상태로 토글한다.
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<NaverMapInstance | null>(null);
   const myLocationMarkerRef = useRef<NaverMarkerInstance | null>(null);
   const selectedSpotIdRef = useRef<string | null>(null);
+  // 지도를 다시 만들지 않고 선택만 바꾸기 위해, 마커 아이콘 갱신 함수를 effect 밖으로 꺼내둔다.
+  const applySelectionRef = useRef<((id: string | null) => void) | null>(null);
+  const onSelectRef = useRef(onSelect);
+  const selectedIdRef = useRef(selectedId);
+  // 렌더 중 ref를 건드리면 안 되므로(react-hooks/refs) 커밋 후에 최신 값으로 맞춘다. 지도 초기화
+  // effect보다 위에 둬서 마운트 때 SDK 로드가 끝나기 전에 먼저 채워지게 한다.
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+    selectedIdRef.current = selectedId;
+  });
   const [locating, setLocating] = useState(false);
   // 권한 거부/미지원/타임아웃을 구분하지 않는다 — getCurrentPosition이 전부 null로
   // 뭉뚱그리고, 사용자가 할 수 있는 조치도 "권한을 허용해달라" 하나뿐이라 같은 안내면 된다.
@@ -188,23 +219,47 @@ export function NaverMap({
         // 너비가 가변이어도 항상 "원의 아래쪽 끝"이 좌표에 정확히 맞도록 한다(카카오
         // CustomOverlay의 비율 기반 yAnchor와 달리 네이버는 픽셀 앵커라 폭을 몰라도
         // 되는 이 방식이 더 안전하다).
-        new naver.maps.Marker({
-          position: centerLatLng,
-          map,
-          icon: {
-            content: `<div style="position:relative;">
-              <div style="position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;">
-                <div style="background:#111827;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${destinationLabel}</div>
-                <div style="width:28px;height:28px;border-radius:999px;background:#f5a623;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);">
-                  <div style="width:10px;height:10px;border-radius:999px;background:#fff;"></div>
+        if (destinationLabel) {
+          new naver.maps.Marker({
+            position: centerLatLng,
+            map,
+            icon: {
+              content: `<div style="position:relative;">
+                <div style="position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;">
+                  <div style="background:#111827;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${destinationLabel}</div>
+                  <div style="width:28px;height:28px;border-radius:999px;background:#f5a623;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+                    <div style="width:10px;height:10px;border-radius:999px;background:#fff;"></div>
+                  </div>
                 </div>
-              </div>
-            </div>`,
-            anchor: new naver.maps.Point(0, 0),
-          },
-        });
+              </div>`,
+              anchor: new naver.maps.Point(0, 0),
+            },
+          });
+        }
 
         const bounds = new naver.maps.LatLngBounds(centerLatLng, centerLatLng);
+
+        if (origin) {
+          const originLatLng = new naver.maps.LatLng(origin.latitude, origin.longitude);
+          bounds.extend(originLatLng);
+          new naver.maps.Marker({
+            position: originLatLng,
+            map,
+            icon: {
+              content: `<div style="width:18px;height:18px;border-radius:999px;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
+              anchor: new naver.maps.Point(9, 9),
+            },
+          });
+        }
+
+        if (routePath && routePath.length > 1) {
+          const path = routePath.map((p) => {
+            const latlng = new naver.maps.LatLng(p.latitude, p.longitude);
+            bounds.extend(latlng);
+            return latlng;
+          });
+          new naver.maps.Polyline({ map, path, strokeColor: "#14b8a6", strokeWeight: 5, strokeOpacity: 0.85 });
+        }
 
         // 주차장이 서로 가까이 몰려 있으면(목적지에서 5km+ 떨어진 동네에 여러 곳이
         // 모여있는 경우 흔함) 텍스트 라벨끼리 겹쳐서 못 읽는 문제가 있어, 항상 떠 있는
@@ -212,13 +267,17 @@ export function NaverMap({
         // 아래 "주차장 목록"이 같은 번호로 보여준다.
         const markers: { marker: NaverMarkerInstance; spot: MapParkingSpot }[] = [];
         // 탭한 마커만 라벨을 띄우고 나머지는 번호 배지로 되돌린다(한 번에 하나).
-        const selectSpot = (id: string) => {
-          selectedSpotIdRef.current = selectedSpotIdRef.current === id ? null : id;
+        const applySelection = (id: string | null) => {
+          selectedSpotIdRef.current = id;
           for (const entry of markers) {
-            entry.marker.setIcon(
-              spotMarkerIcon(entry.spot, entry.spot.id === selectedSpotIdRef.current, naver)
-            );
+            entry.marker.setIcon(spotMarkerIcon(entry.spot, entry.spot.id === id, naver));
           }
+        };
+        // 목록 화면과 선택을 맞춰야 하는 화면(주차장 목록)은 selectedId/onSelect로 제어한다.
+        applySelectionRef.current = applySelection;
+        const selectSpot = (id: string) => {
+          applySelection(selectedSpotIdRef.current === id ? null : id);
+          onSelectRef.current?.(id);
         };
 
         for (const spot of spots) {
@@ -236,7 +295,12 @@ export function NaverMap({
         // 목적지 기준 고정 줌 대신, 목적지+모든 주차장이 한 화면에 들어오도록 자동 조정
         // (주차장이 5km+ 떨어져 있어 마커가 화면 밖으로 벗어나는 문제 방지). 위쪽
         // 여백(40px)은 목적지 마커 라벨 pill이 뷰포트 경계에서 잘리는 문제 방지용.
-        if (spots.length > 0) map.fitBounds(bounds, { top: 40, right: 20, bottom: 20, left: 20 });
+        if (spots.length > 0 || origin || (routePath && routePath.length > 1)) {
+          map.fitBounds(bounds, { top: 40, right: 20, bottom: 20, left: 20 });
+        }
+
+        // SDK 로드 전에 이미 선택된 주차장이 있었으면(목록에서 들어온 경우) 여기서 반영한다.
+        if (selectedIdRef.current) applySelection(selectedIdRef.current);
       })
       .catch(() => {
         if (!cancelled && errorRef.current) {
@@ -249,6 +313,11 @@ export function NaverMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- spots/center는 화면 진입 시 한 번만 초기화하면 됨
   }, []);
+
+  // 제어형으로 쓸 때(목록에서 고른 주차장) 지도를 다시 만들지 않고 마커 라벨만 옮긴다.
+  useEffect(() => {
+    if (selectedId !== undefined) applySelectionRef.current?.(selectedId);
+  }, [selectedId]);
 
   if (!process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID) {
     return (

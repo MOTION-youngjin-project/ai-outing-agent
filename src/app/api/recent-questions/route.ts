@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  const where = { userId: BigInt(session.user.id), userQuery: { not: null } } as const;
+  const where = { userId: BigInt(session.user.id), userQuery: { not: null }, expiresAt: { gt: new Date() } } as const;
   const [runs, totalCount] = await Promise.all([
     prisma.agentRun.findMany({
       where,

@@ -33,7 +33,8 @@ function randomSuggestion() {
 }
 
 // 대화 히스토리(다음 요청의 맥락)와 다음 질문 제안 생성에 쓰는 텍스트 요약.
-function summarize(rec: Recommendation): string {
+// ResultsScreen의 "다른 곳 추천"(인라인 재요청)도 이 요약으로 history를 이어붙인다.
+export function summarize(rec: Recommendation): string {
   if (rec.needsMoreInfo || !rec.places) return rec.message;
   const list = rec.places.map((p) => `- ${p.name}: ${p.oneLineDescription}`).join("\n");
   return `${rec.message}\n${list}`;
@@ -95,7 +96,10 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
       // 않음) — "코스 상세 보기"를 눌러야 그 화면으로 이동한다.
       setLastRecommendation(rec);
       suggestMutation.mutate(historyWithReply);
-      if (session) queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
+      if (session) {
+        queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
+        queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+      }
     },
   });
 

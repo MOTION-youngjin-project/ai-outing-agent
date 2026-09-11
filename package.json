@@ -13,6 +13,10 @@
     "start": "next start",
     "lint": "eslint",
     "self-check": "tsx scripts/self-check.ts",
+    "integration-check": "node --import tsx --experimental-test-module-mocks scripts/backend-integration-check.ts",
+    "rag:download": "tsx scripts/download-rag-pdfs.ts",
+    "rag:extract": "tsx scripts/extract-pdf-rag.ts",
+    "rag:ingest": "tsx scripts/ingest-pdf-rag.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
@@ -37,6 +41,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
@@ -48,6 +53,7 @@
     "prisma": "^7.10.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "unpdf": "^1.8.1"
   }
 }

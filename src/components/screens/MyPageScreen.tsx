@@ -7,6 +7,7 @@ import { fetchSavedPlaces, fetchPreferences, putPreferences, fetchRecentQuestion
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { RecommendationHistory } from "@/components/RecommendationHistory";
 
 // FILTER_LABELS(agent.ts의 PLACE_TAGS)와 같은 값 — 선호 조건 칩에 쓸 아이콘만 매핑.
 const PREFERENCE_ICONS: Record<(typeof FILTER_LABELS)[number], string> = {
@@ -79,6 +80,7 @@ export function MyPageScreen() {
         }
       />
       <div className="flex flex-col gap-3 px-5">
+        <RecommendationHistory userId={session.user.id} />
         <div className="rounded-2xl bg-white px-4 py-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <div className="flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-mint-soft">
@@ -116,13 +118,13 @@ export function MyPageScreen() {
 
         <div className="flex items-center justify-between px-1 pt-1">
           <h2 className="text-[15px] font-bold text-ink">저장한 장소</h2>
-          <span
-            title="준비 중인 기능입니다"
-            className="flex cursor-not-allowed items-center gap-0.5 text-[13px] text-muted/70"
+          <button
+            onClick={() => router.push("/saved")}
+            className="flex items-center gap-0.5 text-[13px] text-muted"
           >
             전체 보기
             <Icon name="next" className="h-3.5 w-3.5" />
-          </span>
+          </button>
         </div>
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           {savedPlacesQuery.data?.length === 0 && (

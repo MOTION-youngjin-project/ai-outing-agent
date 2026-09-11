@@ -11,6 +11,7 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
       </>
     ),
     heart: <path d="M20.8 8.6c0 5-8.8 10-8.8 10s-8.8-5-8.8-10a5 5 0 018.8-3.2A5 5 0 0120.8 8.6z" />,
+    check: <path d="M5 12.5l4.5 4.5L19 7" />,
     sparkle: <path d="M12 3l2.1 5.4L19.5 10l-5.4 1.6L12 17l-2.1-5.4L4.5 10l5.4-1.6L12 3z" />,
     pin: (
       <>
@@ -86,6 +87,13 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
     ),
     triangleAlert: <path d="M12 4.2L21.5 20H2.5L12 4.2z" strokeLinejoin="round" />,
     menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+    more: (
+      <>
+        <circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none" />
+      </>
+    ),
     close: <path d="M5 5l14 14M19 5L5 19" />,
     plus: <path d="M12 5v14M5 12h14" />,
     search: (
@@ -101,12 +109,27 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
         <circle cx="8" cy="8.5" r="0.6" fill="currentColor" />
       </>
     ),
+    arrowUpRight: <path d="M7 17L17 7M9 7h8v8" />,
     train: (
       <>
         <rect x="6" y="3" width="12" height="14" rx="4" />
         <path d="M6 11h12M9 20l-2 2M15 20l2 2" />
         <circle cx="9.5" cy="7" r="0.6" fill="currentColor" />
         <circle cx="14.5" cy="7" r="0.6" fill="currentColor" />
+      </>
+    ),
+    walk: (
+      <>
+        <circle cx="13.5" cy="4.5" r="1.6" fill="currentColor" stroke="none" />
+        <path d="M11 8l-1.5 4.5L7 14.5M11 8l3 1.5.5 4M8.5 22l2.5-6 2-2 2.5 1.5L17 22" />
+      </>
+    ),
+    car: (
+      <>
+        <path d="M4.5 16.5V12l2-5h11l2 5v4.5" />
+        <path d="M3 16.5h18M6 16.5v2.3M18 16.5v2.3" />
+        <circle cx="7.5" cy="16.5" r="1.3" fill="currentColor" stroke="none" />
+        <circle cx="16.5" cy="16.5" r="1.3" fill="currentColor" stroke="none" />
       </>
     ),
   };

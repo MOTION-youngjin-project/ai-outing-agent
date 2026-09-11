@@ -69,16 +69,41 @@ export async function fetchTransitDirections(
   }
 }
 
-export async function fetchParking(district: string, placeName?: string): Promise<ParkingResult> {
+export type DrivingRouteOption = {
+  option: string;
+  distanceM: number;
+  durationMin: number;
+  path: { latitude: number; longitude: number }[];
+};
+
+export async function fetchDrivingDirections(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+): Promise<DrivingRouteOption[]> {
   try {
+    const params = new URLSearchParams({
+      fromLat: String(from.latitude),
+      fromLng: String(from.longitude),
+      toLat: String(to.latitude),
+      toLng: String(to.longitude),
+    });
+    const res = await fetch(`/api/directions?${params}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchParking(district: string, placeName?: string, origin?: { latitude?: number | null; longitude?: number | null }): Promise<ParkingResult> {
     const params = new URLSearchParams({ district });
     if (placeName) params.set("placeName", placeName);
+    if (origin?.latitude != null && origin.longitude != null) { params.set("latitude", String(origin.latitude)); params.set("longitude", String(origin.longitude)); }
     const res = await fetch(`/api/parking?${params}`);
     const data = await res.json();
-    return res.ok ? { spots: data.spots, destination: data.destination } : { spots: [], destination: null };
-  } catch {
-    return { spots: [], destination: null };
-  }
+    if (!res.ok || !Array.isArray(data.spots)) throw new Error("주차장 정보를 불러오지 못했습니다.");
+    return { spots: data.spots, destination: data.destination };
 }
 
 export async function fetchPlacesSearch(query: string): Promise<PlaceResult[]> {
@@ -119,6 +144,45 @@ export async function putPlannedVisit(placeId: string, date: string | null): Pro
   return res.ok;
 }
 
+// 저장한 코스. course는 저장 시점 스냅샷이라 추천 런이 정리된 뒤에도 그대로 열린다.
+export type SavedCourseResult = {
+  publicId: string;
+  title: string;
+  savedAt: string;
+  course: RecommendResult;
+};
+
+export async function fetchSavedCourses(): Promise<SavedCourseResult[]> {
+  const res = await fetch("/api/saved-courses");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function fetchSavedCourse(publicId: string): Promise<SavedCourseResult | null> {
+  const res = await fetch(`/api/saved-courses/${encodeURIComponent(publicId)}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.data ?? null;
+}
+
+// 코스 내용은 서버가 runId로 DB에서 직접 만든다 — 여기선 어떤 추천이었는지만 넘긴다.
+export async function postSavedCourse(runId: string): Promise<boolean> {
+  const res = await fetch("/api/saved-courses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId }),
+  });
+  return res.ok;
+}
+
+export async function deleteSavedCourse(publicId: string): Promise<boolean> {
+  const res = await fetch(`/api/saved-courses?publicId=${encodeURIComponent(publicId)}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+}
+
 export async function fetchPreferences(): Promise<string[]> {
   const res = await fetch("/api/preferences");
   if (!res.ok) return [];
@@ -153,7 +217,9 @@ export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
   travelDurationMin?: number | null;
 };
 // agentRunId: /recommend/[runId] 라우팅용 — 새로고침/직링크 복원 때 이 id로 결과를 다시 조회한다.
-export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[]; agentRunId: string };
+// isOwner: 새로고침/직링크 복원(GET /api/recommend/[runId])에서만 채워진다. false면 남의 링크를
+// 열어본 읽기 전용 — 저장·삭제·재요청 같은 소유자 전용 동작을 숨긴다.
+export type RecommendResult = Omit<Recommendation, "places"> & { places?: PlaceWithMeta[]; agentRunId: string; isOwner?: boolean };
 
 // 장소 검색(카카오) 결과는 AI 추천이 아니라서 reason/tags/oneLineDescription 같은
 // AI 전용 필드가 없다 — DetailScreen/ParkingScreen은 그 필드들을 전부 optional로 다루므로
@@ -248,12 +314,15 @@ export async function fetchRecommendation(runId: string): Promise<RecommendResul
 export async function fetchParkingSpotById(
   pkltId: string,
   district: string,
-  placeName?: string
+  placeName?: string,
+  origin?: { latitude?: number | null; longitude?: number | null }
 ): Promise<ParkingSpotWithDistance | null> {
   const params = new URLSearchParams({ district });
   if (placeName) params.set("placeName", placeName);
-  const res = await fetch(`/api/parking/${pkltId}?${params}`);
-  if (!res.ok) return null;
+  if (origin?.latitude != null && origin.longitude != null) { params.set("latitude", String(origin.latitude)); params.set("longitude", String(origin.longitude)); }
+  const res = await fetch(`/api/parking/${encodeURIComponent(pkltId)}?${params}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("주차장 조회에 실패했습니다.");
   const data = await res.json();
   return data.data ?? null;
 }

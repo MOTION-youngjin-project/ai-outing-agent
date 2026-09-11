@@ -2,9 +2,9 @@
 // ParkingScreen(목록)과 ParkingDetailScreen(상세) 둘 다에서 써서 여기 따로 둠.
 export function occupancyLabel(spot: {
   remainingSpaces: number | null;
-  capacity: number;
+  capacity: number | null;
 }): { label: string; className: string } | null {
-  if (spot.remainingSpaces === null || spot.capacity === 0) return null;
+  if (spot.remainingSpaces == null || spot.capacity == null || !Number.isInteger(spot.capacity) || spot.capacity <= 0 || !Number.isInteger(spot.remainingSpaces) || spot.remainingSpaces < 0 || spot.remainingSpaces > spot.capacity) return null;
   const ratio = spot.remainingSpaces / spot.capacity;
   if (ratio >= 0.3) return { label: "여유", className: "text-emerald-600" };
   if (ratio >= 0.1) return { label: "보통", className: "text-amber-500" };

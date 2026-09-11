@@ -1,6 +1,13 @@
-import Link from "next/link";
+"use client";
+
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter, usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Icon } from "@/components/Icon";
-import type { RecommendResult, WeatherInfo, AirQualityInfo } from "@/lib/clientApi";
+import { ExternalMapMenu } from "@/components/ExternalMapMenu";
+import { CourseStopList } from "@/components/CourseStopList";
+import { postSavedCourse, type RecommendResult, type WeatherInfo, type AirQualityInfo } from "@/lib/clientApi";
 
 // 디자인팀 목업(디자인/채팅.png)의 "오늘의 추천 코스" 카드. 목업은 장소별 정확한 방문
 // 시각/코스 총 소요시간·총비용까지 보여주지만, 지금 agent.ts가 실제로 만들어주는
@@ -20,8 +27,34 @@ export function CourseCard({
   airQuality?: AirQualityInfo | null;
   onOpenDetail: () => void;
 }) {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+  const queryClient = useQueryClient();
   const places = recommendation.places ?? [];
   const allTags = Array.from(new Set(places.flatMap((p) => p.tags ?? [])));
+  const [saved, setSaved] = useState(false);
+
+  // 저장한 코스(saved_courses)로 담는다 — 서버가 runId로 코스 내용을 스냅샷해서 넣으므로
+  // 여기선 어떤 추천인지만 넘긴다. 같은 코스를 두 번 눌러도 행이 하나만 생긴다(upsert).
+  const saveCourseMutation = useMutation({
+    mutationFn: () => postSavedCourse(recommendation.agentRunId),
+    onSuccess: () => {
+      setSaved(true);
+      queryClient.invalidateQueries({ queryKey: ["saved-courses"] });
+    },
+  });
+
+  function saveCourse() {
+    if (!session) {
+      router.push(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
+    }
+    saveCourseMutation.mutate();
+  }
+
+  const firstPlace = places[0];
+  const hasStartCoords = firstPlace?.latitude != null && firstPlace?.longitude != null;
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(17,24,39,0.06)]">
@@ -49,62 +82,8 @@ export function CourseCard({
 
       <p className="mt-2 text-[12px] text-muted">{places.length}곳을 둘러보는 코스예요.</p>
 
-      <div className="mt-3 flex flex-col">
-        {places.map((p, i) => {
-          const content = (
-            <>
-              {p.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                <img src={p.imageUrl} alt={p.name} className="h-16 w-16 shrink-0 rounded-xl object-cover" />
-              ) : (
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
-                  <Icon name="pin" className="h-6 w-6 text-mint-mid" />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-bold text-ink">{p.name}</div>
-                <div className="mt-0.5 line-clamp-1 text-[12px] text-muted">{p.oneLineDescription}</div>
-                {(p.visitDuration || p.fee) && (
-                  <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted/80">
-                    {p.visitDuration && <span>{p.visitDuration}</span>}
-                    {p.fee && <span>{p.fee}</span>}
-                  </div>
-                )}
-              </div>
-            </>
-          );
-
-          return (
-            <div key={i} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[11px] font-bold text-mint-mid">
-                  {i + 1}
-                </span>
-                {i < places.length - 1 && (
-                  <div className="flex flex-1 flex-col items-center gap-1">
-                    <span className="w-px flex-1 border-l border-dashed border-hairline" />
-                    {places[i + 1].travelDurationMin != null && (
-                      <span className="whitespace-nowrap text-[10px] font-medium text-muted">
-                        차로 {places[i + 1].travelDurationMin}분
-                      </span>
-                    )}
-                    <span className="w-px flex-1 border-l border-dashed border-hairline" />
-                  </div>
-                )}
-              </div>
-              {p.placeId ? (
-                <Link
-                  href={`/recommend/${recommendation.agentRunId}/place/${p.placeId}`}
-                  className="flex flex-1 gap-3 pb-4"
-                >
-                  {content}
-                </Link>
-              ) : (
-                <div className="flex flex-1 gap-3 pb-4">{content}</div>
-              )}
-            </div>
-          );
-        })}
+      <div className="mt-3">
+        <CourseStopList places={places} runId={recommendation.agentRunId} />
       </div>
 
       {allTags.length > 0 && (
@@ -117,13 +96,42 @@ export function CourseCard({
         </div>
       )}
 
-      <button
-        onClick={onOpenDetail}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white"
-      >
-        <Icon name="compass" className="h-4 w-4" />
-        코스 상세 보기
-      </button>
+      <div className="mt-3 flex items-stretch gap-1.5">
+        <button
+          onClick={onOpenDetail}
+          className="flex flex-1 items-center justify-center gap-1 rounded-full border border-hairline py-2.5 text-[12px] font-medium text-ink-soft"
+        >
+          <Icon name="compass" className="h-3.5 w-3.5" />
+          코스 상세 보기
+        </button>
+        <button
+          onClick={saveCourse}
+          disabled={places.length === 0 || saveCourseMutation.isPending || saved}
+          className="flex flex-1 items-center justify-center gap-1 rounded-full bg-mint-bg py-2.5 text-[12px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
+        >
+          <Icon name={saved ? "check" : "bookmark"} className="h-3.5 w-3.5" />
+          {saved ? "저장됨" : "코스 저장"}
+        </button>
+        {hasStartCoords ? (
+          <ExternalMapMenu
+            latitude={firstPlace.latitude!}
+            longitude={firstPlace.longitude!}
+            name={firstPlace.name}
+            label="이 코스로 가기"
+            popupAbove
+            className="flex-1"
+            summaryClassName="flex list-none items-center justify-center gap-1 rounded-full bg-accent py-2.5 text-[12px] font-semibold text-white marker:content-none"
+          />
+        ) : (
+          <button
+            disabled
+            className="flex flex-1 items-center justify-center gap-1 rounded-full bg-slate-100 py-2.5 text-[12px] font-semibold text-slate-400"
+          >
+            <Icon name="send" className="h-3.5 w-3.5" />
+            이 코스로 가기
+          </button>
+        )}
+      </div>
     </div>
   );
 }

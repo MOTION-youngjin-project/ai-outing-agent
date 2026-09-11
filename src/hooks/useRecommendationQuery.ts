@@ -15,6 +15,7 @@ export function useRecommendationQuery(runId: string) {
     // setQueryData로 채워둔 완전한 결과를 결과 화면이 마운트되자마자 다시 GET으로 덮어써서,
     // 카카오 매칭 실패한 장소(DB route_places엔 없음)가 방금 받은 응답에 있었는데도
     // 화면에서 사라지는 문제가 있었다(2026-09-08 실측).
-    staleTime: Infinity,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 }
