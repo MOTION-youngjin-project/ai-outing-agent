@@ -41,11 +41,18 @@ const SYSTEM_PROMPT =
 // "gemini-3" 문자열이 포함된 경우에만 thought signature 더미값을 채워주는데, 별칭이라
 // 이 문자열이 없어서 실제로는 gemini-3 계열이어도 멀티턴 도구 호출 시
 // "Function call is missing a thought_signature" 400 에러로 항상 실패함.
+// 순서는 실측으로 정했다(2026-09-12, scripts/bench-models.ts — 같은 질문 3개를 모델별로
+// 돌려 소요시간과 "추천한 장소가 카카오에 실제로 있는 비율"을 함께 측정). 정확도 우선,
+// 같으면 빠른 쪽:
+//   gemini-3.5-flash-lite  실재율 90% / 평균 13.8초
+//   gemini-3.5-flash       실재율 73% / 평균 21.3초
+//   gemini-3.1-flash-lite  실재율 67% / 평균 14.9초
+// gemini-3.6-flash는 뺐다: 실재율 57%로 가장 낮은 데다 평균 78.7초라 시도별 타임아웃
+// 25초를 항상 넘긴다 — 체인에 두면 차례가 올 때마다 그만큼 버리기만 한다.
 const MODEL_FALLBACK_CHAIN = [
-  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
   "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
-  "gemini-3.5-flash-lite",
 ];
 
 function isRetryableModelError(err: unknown): boolean {
