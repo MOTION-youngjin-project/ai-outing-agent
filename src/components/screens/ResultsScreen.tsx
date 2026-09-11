@@ -21,6 +21,8 @@ import { summarize } from "@/hooks/useRecommendationFlow";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
+import { PlanShareButton } from "@/components/PlanShareButton";
+import { RecommendationSources } from "@/components/RecommendationSources";
 
 // 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
 // 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
@@ -48,6 +50,10 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
+
+  // 남이 공유한 링크로 열면(isOwner=false) 결과만 읽기 전용으로 보여준다 — 재요청은 남의
+  // 추천 이력에 덧붙이는 셈이라 막는다. 방금 만든 추천(isOwner 없음)은 그대로 전부 가능.
+  const readOnly = recommendation.isOwner === false;
 
   // 새로고침/직링크로 들어오면 history가 비어있다 — 그럴 땐 지어내지 말고 사용자 버블을 생략한다.
   const lastUserMessage = [...history].reverse().find((t) => t.role === "user")?.content ?? null;
@@ -170,6 +176,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
         </button>
       </div>
       <div className="flex flex-col gap-3 px-5 pt-3">
+        <PlanShareButton recommendation={recommendation} />
         <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3.5 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <span className="flex items-center gap-1.5">
             <Icon name="pin" className="h-[18px] w-[18px] text-muted" />
@@ -316,6 +323,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                     </button>
                   </div>
                 </div>
+                <RecommendationSources sources={p.sources} verification={p.verification} closedDays={p.closedDays} />
                 <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-[11px] text-muted">
                   {(p.daeguDistrict || (p.distanceKm !== null && p.distanceKm !== undefined)) && (
                     <span className="flex items-center gap-1">
@@ -358,6 +366,11 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           ))}
         </div>
 
+        {readOnly ? (
+          <p className="mt-2 rounded-full bg-white px-4 py-2.5 text-center text-[13px] text-muted shadow-[0_1px_4px_rgba(17,24,39,0.07)]">
+            공유받은 추천이라 다시 추천은 할 수 없어요. 홈에서 직접 추천받아보세요.
+          </p>
+        ) : (
         <div className="mt-2 flex items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 shadow-[0_1px_4px_rgba(17,24,39,0.07)]">
           <Icon name="sparkle" className="h-4 w-4 shrink-0 text-accent" />
           <span className="flex-1 truncate text-[13px] text-ink-soft">다른 분위기로 다시 추천해보세요</span>
@@ -369,6 +382,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             {regenerateMutation.isPending ? "추천 중..." : "다른 곳 추천"}
           </button>
         </div>
+        )}
         {regenerateMutation.isError && (
           <p className="px-1 text-[12px] text-red-500">다시 추천하지 못했어요. 잠시 후 다시 시도해주세요.</p>
         )}

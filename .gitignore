@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+/data/rag/
+/test-results/
+/playwright-report/
 /.pnp
 .pnp.*
 .yarn/*

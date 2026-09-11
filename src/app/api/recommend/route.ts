@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRecommendationRun, type GeoPoint, type RecommendationProgressEvent } from "@/lib/services/recommendations";
 import type { ChatTurn } from "@/lib/agent";
 import { auth } from "@/lib/auth";
+import { GUEST_COOKIE, guestHash, guestToken } from "@/lib/recommendation-owner";
 
 export const runtime = "nodejs";
 
@@ -31,14 +32,17 @@ function toLine(event: RecommendationProgressEvent | { type: "result"; result: u
 }
 
 export async function POST(req: NextRequest) {
-  const { history, origin } = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "올바른 JSON이 필요합니다." }, { status: 400 });
+  const { history, origin } = body;
 
-  if (!Array.isArray(history) || history.length === 0) {
+  if (!Array.isArray(history) || history.length === 0 || history.length > 50 || history.some(h => !h || !["user", "assistant"].includes(h.role) || typeof h.content !== "string" || h.content.length > 10000)) {
     return NextResponse.json({ error: "history가 필요합니다." }, { status: 400 });
   }
   const validOrigin = parseOrigin(origin);
   const session = await auth();
   const userId = session?.user?.id ?? null;
+  const token = userId ? undefined : guestToken(req.cookies.get(GUEST_COOKIE)?.value);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
         }
       };
       try {
-        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId);
+        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, guestHash(token));
         emit({ type: "result", result });
       } catch (err) {
         console.error(err);
@@ -68,5 +72,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson" } });
+  const response = new NextResponse(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "private, no-store" } });
+  if (token) response.cookies.set(GUEST_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 86400 });
+  return response;
 }

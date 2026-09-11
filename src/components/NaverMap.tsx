@@ -123,6 +123,8 @@ export function NaverMap({
   className,
   controlsBottom,
   controlsAnimated = true,
+  selectedId,
+  onSelect,
 }: {
   center: { latitude: number; longitude: number };
   // MapScreen(코스 지도)처럼 정류지 전부를 spots 번호 배지로만 보여줄 땐 별도 목적지
@@ -142,12 +144,25 @@ export function NaverMap({
   controlsBottom?: string;
   // 시트를 손가락으로 끄는 중에는 버튼이 200ms씩 늦게 따라와 어긋나 보이므로 끈다.
   controlsAnimated?: boolean;
+  // 주차장 목록과 선택을 맞출 때만 넘긴다(제어형). 안 넘기면 지도가 자체 상태로 토글한다.
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<NaverMapInstance | null>(null);
   const myLocationMarkerRef = useRef<NaverMarkerInstance | null>(null);
   const selectedSpotIdRef = useRef<string | null>(null);
+  // 지도를 다시 만들지 않고 선택만 바꾸기 위해, 마커 아이콘 갱신 함수를 effect 밖으로 꺼내둔다.
+  const applySelectionRef = useRef<((id: string | null) => void) | null>(null);
+  const onSelectRef = useRef(onSelect);
+  const selectedIdRef = useRef(selectedId);
+  // 렌더 중 ref를 건드리면 안 되므로(react-hooks/refs) 커밋 후에 최신 값으로 맞춘다. 지도 초기화
+  // effect보다 위에 둬서 마운트 때 SDK 로드가 끝나기 전에 먼저 채워지게 한다.
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+    selectedIdRef.current = selectedId;
+  });
   const [locating, setLocating] = useState(false);
   // 권한 거부/미지원/타임아웃을 구분하지 않는다 — getCurrentPosition이 전부 null로
   // 뭉뚱그리고, 사용자가 할 수 있는 조치도 "권한을 허용해달라" 하나뿐이라 같은 안내면 된다.
@@ -252,13 +267,17 @@ export function NaverMap({
         // 아래 "주차장 목록"이 같은 번호로 보여준다.
         const markers: { marker: NaverMarkerInstance; spot: MapParkingSpot }[] = [];
         // 탭한 마커만 라벨을 띄우고 나머지는 번호 배지로 되돌린다(한 번에 하나).
-        const selectSpot = (id: string) => {
-          selectedSpotIdRef.current = selectedSpotIdRef.current === id ? null : id;
+        const applySelection = (id: string | null) => {
+          selectedSpotIdRef.current = id;
           for (const entry of markers) {
-            entry.marker.setIcon(
-              spotMarkerIcon(entry.spot, entry.spot.id === selectedSpotIdRef.current, naver)
-            );
+            entry.marker.setIcon(spotMarkerIcon(entry.spot, entry.spot.id === id, naver));
           }
+        };
+        // 목록 화면과 선택을 맞춰야 하는 화면(주차장 목록)은 selectedId/onSelect로 제어한다.
+        applySelectionRef.current = applySelection;
+        const selectSpot = (id: string) => {
+          applySelection(selectedSpotIdRef.current === id ? null : id);
+          onSelectRef.current?.(id);
         };
 
         for (const spot of spots) {
@@ -279,6 +298,9 @@ export function NaverMap({
         if (spots.length > 0 || origin || (routePath && routePath.length > 1)) {
           map.fitBounds(bounds, { top: 40, right: 20, bottom: 20, left: 20 });
         }
+
+        // SDK 로드 전에 이미 선택된 주차장이 있었으면(목록에서 들어온 경우) 여기서 반영한다.
+        if (selectedIdRef.current) applySelection(selectedIdRef.current);
       })
       .catch(() => {
         if (!cancelled && errorRef.current) {
@@ -291,6 +313,11 @@ export function NaverMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- spots/center는 화면 진입 시 한 번만 초기화하면 됨
   }, []);
+
+  // 제어형으로 쓸 때(목록에서 고른 주차장) 지도를 다시 만들지 않고 마커 라벨만 옮긴다.
+  useEffect(() => {
+    if (selectedId !== undefined) applySelectionRef.current?.(selectedId);
+  }, [selectedId]);
 
   if (!process.env.NEXT_PUBLIC_NAVER_MAP_CLIENT_ID) {
     return (
