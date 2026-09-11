@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { embedQueryCached } from "@/lib/embeddings";
 import facilityIndex from "@/lib/rag/index.json";
 
 type IndexedDoc = { id: string; text: string; embedding: number[] };
@@ -32,11 +32,8 @@ export const facilityInfoTool = tool(
       return "실내/가족동반 시설 안내 문서 인덱스가 아직 준비되지 않았습니다.";
     }
 
-    const embeddings = new GoogleGenerativeAIEmbeddings({
-      model: "gemini-embedding-001",
-      apiKey: process.env.GEMINI_API_KEY,
-    });
-    const queryVector = await embeddings.embedQuery(effectiveQuery);
+    const queryVector = await embedQueryCached(effectiveQuery);
+    if (!queryVector) return "편의시설 정보를 조회하지 못했습니다. 다른 도구 결과로 판단해라.";
 
     const ranked = docs
       .map((doc) => ({ doc, score: cosineSimilarity(queryVector, doc.embedding) }))

@@ -1,6 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { embedQueryCached } from "@/lib/embeddings";
 import type { RecommendationSource } from "@/lib/recommendation-sources";
 
 function cosine(a: number[], b: number[]) {
@@ -24,7 +24,7 @@ function lexicalScore(query: string, content: string) {
 
 export async function searchPdfGuides(query: string, limit = 5) {
   const { prisma } = await import("@/lib/prisma");
-  const queryVector = process.env.GEMINI_API_KEY ? await new GoogleGenerativeAIEmbeddings({ model: "gemini-embedding-001", apiKey: process.env.GEMINI_API_KEY }).embedQuery(query).catch(() => null) : null;
+  const queryVector = await embedQueryCached(query);
   const chunks = await prisma.ragChunk.findMany({
     where: { document: { isActive: true, source: { code: "RAG_PDF" } } },
     include: { document: { select: { title: true, sourceUrl: true } } },
