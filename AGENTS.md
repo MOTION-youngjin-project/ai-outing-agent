@@ -28,3 +28,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **테스트는 한 번 실패시켜보고 가져온다.** 수정을 임시로 되돌렸을 때 그 테스트가 실제로 실패하는 것까지 확인하고 보고한다. `withTimeout` 오진을 이 방법으로 걸렀다 — 가드를 빼도 테스트가 통과하길래 가설이 틀린 걸 알았다.
 
 에이전트 실행 트레이스는 LangSmith에 남는다(`LANGSMITH_*` 환경변수). 모델에 실제로 무슨 메시지·도구 인자가 갔는지는 API로 읽는다: `POST https://api.smith.langchain.com/api/v1/runs/query`에 `{"session":[프로젝트 id],"is_root":true}`로 실행 목록, `{"trace":"<id>"}`로 그 실행의 단계들.
+
+에이전트 응답시간과 Gemini 쿼터(분당 5회·하루 20회, 프로젝트 단위)는 [docs/agent-latency-and-quota.md](./docs/agent-latency-and-quota.md)에 정리해뒀다. 추천이 느리거나 429가 나면 모델·프롬프트를 고치기 전에 여기부터 읽을 것.
