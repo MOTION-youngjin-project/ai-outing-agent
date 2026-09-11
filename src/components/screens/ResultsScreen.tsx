@@ -1,20 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { fetchRegions, fetchWeather, fetchAirQuality, fetchParking, type RecommendResult, type PlaceWithMeta } from "@/lib/clientApi";
+import type { ChatTurn } from "@/lib/agent";
+import {
+  fetchRegions,
+  fetchWeather,
+  fetchAirQuality,
+  fetchParking,
+  postRecommend,
+  type RecommendResult,
+  type PlaceWithMeta,
+} from "@/lib/clientApi";
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { splitHeadline } from "@/lib/textFormat";
 import { FILTER_LABELS } from "@/lib/placeTags";
+import { summarize } from "@/hooks/useRecommendationFlow";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
-
-// 결과 화면에서 조건을 더 추가하고 싶을 때 누르는 정적 문구 칩 — 실시간 재요청 없이
-// 홈으로 이동해 그 문구를 입력창에 채워준다(아래 QUICK_REFINEMENTS 참고).
-const QUICK_REFINEMENTS = ["주차 포함", "더 저렴하게", "실내 위주로"] as const;
 
 // 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
 // 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
@@ -37,7 +43,7 @@ function ParkingCongestionBadge({ district, placeName }: { district: string; pla
 }
 
 export function ResultsScreen({ recommendation, runId }: { recommendation: RecommendResult; runId: string }) {
-  const { regionId, history, setInput } = useAppStore();
+  const { regionId, history, setHistory, setLastRecommendation } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -46,13 +52,23 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   // 새로고침/직링크로 들어오면 history가 비어있다 — 그럴 땐 지어내지 말고 사용자 버블을 생략한다.
   const lastUserMessage = [...history].reverse().find((t) => t.role === "user")?.content ?? null;
 
-  // 조건 추가/퀵필터는 결과 화면 안에서 바로 재요청하지 않고 홈으로 이동해 입력창에 문구를
-  // 채워준다. ponytail: 결과 화면 내 인라인 재요청 대신 홈으로 이동, 실시간 갱신은 다음 스코프.
-  const [refineInput, setRefineInput] = useState("");
-  function goRefine(text: string) {
-    setInput(text);
-    router.push("/");
-  }
+  // "다른 곳 추천": 홈으로 이동하지 않고 이 화면에서 바로 재요청한다(디자인/추천 결과.png).
+  // 새로고침 등으로 history가 비어있으면 지금 보고 있는 추천 결과를 요약해 맥락으로 삼는다.
+  const regenerateMutation = useMutation({
+    mutationFn: async () => {
+      const baseHistory: ChatTurn[] =
+        history.length > 0 ? history : [{ role: "assistant", content: summarize(recommendation) }];
+      const historyWithUser: ChatTurn[] = [...baseHistory, { role: "user", content: "다른 곳으로 추천해줘" }];
+      const rec = await postRecommend(historyWithUser);
+      return { rec, historyWithUser };
+    },
+    onSuccess: ({ rec, historyWithUser }) => {
+      setHistory([...historyWithUser, { role: "assistant", content: summarize(rec) }]);
+      setLastRecommendation(rec);
+      queryClient.setQueryData(["recommend", rec.agentRunId], rec);
+      router.replace(`/recommend/${rec.agentRunId}`);
+    },
+  });
 
   const weatherQuery = useQuery({
     queryKey: ["weather", regionId],
@@ -71,7 +87,12 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   // 로그인 화면으로 유도).
   const [favoriteIndexes, setFavoriteIndexes] = useState<Set<number>>(new Set());
   // null = "전체" 선택 상태. 결과 카드의 tags 필드와 매칭해서 필터링한다.
-  const [activeFilter, setActiveFilter] = useState<(typeof FILTER_LABELS)[number] | null>(null);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  // 카카오 category_name에서 뽑은 실제 소분류(예: "전시관", "카페") — 지어낸 카테고리가
+  // 아니라 place.category(추천 결과에 이미 채워져 있는 값)만 드롭다운 옵션으로 쓴다.
+  const categoryTags = Array.from(
+    new Set((recommendation.places ?? []).map((p) => p.category).filter((t): t is string => !!t))
+  );
   // 새 추천 결과가 들어오면(다른 곳 추천 등) 이전 필터 선택은 초기화한다. useEffect 대신
   // 렌더 중 비교(React 공식 권장 "prop 변경에 맞춰 state 조정" 패턴)로 처리 —
   // 리렌더 캐스케이드 없이 같은 렌더에서 바로 반영된다.
@@ -85,7 +106,9 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   // 카드를 가리킨다.
   const filteredPlaces = (recommendation.places ?? [])
     .map((p, i) => ({ p, i }))
-    .filter(({ p }) => !activeFilter || p.tags?.includes(activeFilter));
+    .filter(
+      ({ p }) => !activeFilter || (p.tags as readonly string[] | undefined)?.includes(activeFilter) || p.category === activeFilter
+    );
 
   function openDetail(place: PlaceWithMeta) {
     if (!place.placeId) return;
@@ -196,6 +219,19 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             표시함. 코스 합산 시간/비용은 여전히 API 미제공이라 비워둠. */}
 
         <div className="flex gap-2 overflow-x-auto pb-1">
+          {categoryTags.length > 0 && (
+            <select
+              value={categoryTags.includes(activeFilter ?? "") ? (activeFilter as string) : categoryTags[0]}
+              onChange={(e) => setActiveFilter(e.target.value)}
+              className="shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] font-medium text-ink-soft outline-none"
+            >
+              {categoryTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setActiveFilter(null)}
             className={
@@ -256,24 +292,29 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                       {p.oneLineDescription}
                     </div>
                   </button>
-                  <button
-                    onClick={() => toggleFavorite(p, i)}
-                    disabled={!!session && !p.placeId}
-                    title={session && !p.placeId ? "저장할 수 없는 장소입니다" : undefined}
-                    aria-label="찜하기"
-                    className={
-                      favoriteIndexes.has(i)
-                        ? "text-rose-500"
-                        : session && !p.placeId
-                          ? "text-slate-200"
-                          : "text-slate-300"
-                    }
-                  >
-                    <Icon
-                      name="heart"
-                      className={`h-5 w-5 ${favoriteIndexes.has(i) ? "fill-rose-500" : ""}`}
-                    />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      onClick={() => openDetail(p)}
+                      disabled={!p.placeId}
+                      aria-label="상세 보기"
+                      className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-ink-soft disabled:opacity-40"
+                    >
+                      <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => toggleFavorite(p, i)}
+                      disabled={!!session && !p.placeId}
+                      title={session && !p.placeId ? "저장할 수 없는 장소입니다" : undefined}
+                      aria-label="찜하기"
+                      className={
+                        favoriteIndexes.has(i)
+                          ? "flex h-6 w-6 items-center justify-center rounded-full bg-accent text-white"
+                          : "flex h-6 w-6 items-center justify-center rounded-full border border-hairline text-slate-300"
+                      }
+                    >
+                      <Icon name="check" className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-[11px] text-muted">
                   {(p.daeguDistrict || (p.distanceKm !== null && p.distanceKm !== undefined)) && (
@@ -317,41 +358,20 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           ))}
         </div>
 
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-          {QUICK_REFINEMENTS.map((label) => (
-            <button
-              key={label}
-              onClick={() => goRefine(label)}
-              className="shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const text = refineInput.trim();
-            if (text) goRefine(text);
-          }}
-          className="flex items-center gap-2 rounded-full bg-white p-1.5 pl-4 shadow-[0_1px_4px_rgba(17,24,39,0.07)]"
-        >
-          <input
-            value={refineInput}
-            onChange={(e) => setRefineInput(e.target.value)}
-            placeholder="조건을 추가하거나 다른 코스를 물어보세요"
-            className="flex-1 bg-transparent py-2 text-[14px] text-ink outline-none placeholder:text-muted/60"
-          />
+        <div className="mt-2 flex items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 shadow-[0_1px_4px_rgba(17,24,39,0.07)]">
+          <Icon name="sparkle" className="h-4 w-4 shrink-0 text-accent" />
+          <span className="flex-1 truncate text-[13px] text-ink-soft">다른 분위기로 다시 추천해보세요</span>
           <button
-            type="submit"
-            disabled={!refineInput.trim()}
-            aria-label="보내기"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white disabled:bg-slate-200 disabled:text-slate-400"
+            onClick={() => regenerateMutation.mutate()}
+            disabled={regenerateMutation.isPending}
+            className="shrink-0 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
           >
-            <Icon name="send" className="h-[18px] w-[18px]" />
+            {regenerateMutation.isPending ? "추천 중..." : "다른 곳 추천"}
           </button>
-        </form>
+        </div>
+        {regenerateMutation.isError && (
+          <p className="px-1 text-[12px] text-red-500">다시 추천하지 못했어요. 잠시 후 다시 시도해주세요.</p>
+        )}
       </div>
     </>
   );
