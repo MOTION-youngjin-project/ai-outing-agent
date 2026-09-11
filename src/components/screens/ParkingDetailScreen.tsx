@@ -5,13 +5,7 @@ import { occupancyLabel } from "@/lib/parkingDisplay";
 import type { ParkingSpotWithDistance } from "@/lib/clientApi";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import {
-  detectPlatform,
-  kakaoDirectionsUrl,
-  googleDirectionsUrl,
-  buildNaverNavigationPlan,
-  openNaverNavigation,
-} from "@/lib/externalMapLinks";
+import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 
 export function ParkingDetailScreen({
   spot,
@@ -32,17 +26,6 @@ export function ParkingDetailScreen({
     navigator.share({ title: spot.name, text: spot.address, url: window.location.href }).catch(() => {
       // 사용자가 공유 시트를 취소한 경우 등 — 조용히 무시
     });
-  }
-
-  function openKakao() {
-    window.open(kakaoDirectionsUrl(spot.latitude!, spot.longitude!, spot.name), "_blank", "noopener,noreferrer");
-  }
-  function openGoogle() {
-    window.open(googleDirectionsUrl(spot.latitude!, spot.longitude!), "_blank", "noopener,noreferrer");
-  }
-  function openNaver() {
-    const platform = detectPlatform(navigator.userAgent);
-    openNaverNavigation(buildNaverNavigationPlan(platform, spot.latitude!, spot.longitude!, spot.name));
   }
 
   return (
@@ -149,25 +132,9 @@ export function ParkingDetailScreen({
         </div>
 
         {hasCoords ? (
-          <details className="group mb-4 [&_summary::-webkit-details-marker]:hidden">
-            <summary
-              className="flex list-none items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white marker:content-none"
-            >
-              <Icon name="send" className="h-4 w-4" />
-              지도에서 보기
-            </summary>
-            <div className="mt-2 flex flex-col gap-1.5 rounded-2xl bg-white p-2 shadow-[0_1px_3px_rgba(17,24,39,0.08)]">
-              <button onClick={openNaver} className="rounded-xl py-2.5 text-[14px] font-medium text-ink-soft hover:bg-page">
-                네이버 지도
-              </button>
-              <button onClick={openKakao} className="rounded-xl py-2.5 text-[14px] font-medium text-ink-soft hover:bg-page">
-                카카오맵
-              </button>
-              <button onClick={openGoogle} className="rounded-xl py-2.5 text-[14px] font-medium text-ink-soft hover:bg-page">
-                구글 지도
-              </button>
-            </div>
-          </details>
+          <div className="mb-4">
+            <ExternalMapMenu latitude={spot.latitude!} longitude={spot.longitude!} name={spot.name} />
+          </div>
         ) : (
           <button
             onClick={() => router.push(parkingListHref)}
