@@ -213,6 +213,33 @@ export async function runAgent(history: ChatTurn[]): Promise<Recommendation> {
 
 export type AgentProgressEvent = { type: "tool_start" | "tool_end"; tool: string };
 
+// 도구 호출 스트림 소비. 최종 응답(run.output)과 별개로 흘러오므로 fire-and-forget으로 돌린다.
+// 두 가지를 반드시 지켜야 해서 함수로 빼뒀다(self-check가 이 함수를 직접 검사한다):
+//  1) call.output에 핸들러를 붙인다 — 실행이 실패하면 langchain이 fail()에서 진행 중이던
+//     tool call의 output promise를 전부 거부하는데(node_modules/langchain/dist/agents/
+//     transformers/tool-call.js), 우리는 status만 쓰기 때문에 핸들러가 없으면
+//     unhandledRejection으로 새서 프로세스가 죽는다 — 2026-09-11 프로덕션 로그에서 실측.
+//  2) 다음 모델로 넘어간 뒤(isCurrent() false)에도 break하지 않고 끝까지 비운다 —
+//     중간에 멈추면 그 뒤 도착하는 call의 output 거부가 다시 새어나간다. 진행 표시만 건너뛴다
+//     (이전 시도의 tool call이 늦게 끝나며 UI에 완료로 잘못 표시되는 문제 방지, 2026-09-07 리뷰).
+export async function consumeToolCalls(
+  toolCalls: AsyncIterable<{ name: string; output: Promise<unknown>; status: Promise<unknown> }>,
+  isCurrent: () => boolean,
+  onProgress?: (event: AgentProgressEvent) => void
+): Promise<void> {
+  try {
+    for await (const call of toolCalls) {
+      call.output.catch(() => {});
+      if (!isCurrent() || !onProgress) continue;
+      onProgress({ type: "tool_start", tool: call.name });
+      const done = () => isCurrent() && onProgress({ type: "tool_end", tool: call.name });
+      call.status.then(done, done);
+    }
+  } catch {
+    // ignore — 최종 결과 처리는 run.output 대기 쪽에서 계속된다.
+  }
+}
+
 // runAgent와 로직은 같지만(모델 폴백 체인, 타임아웃), agent.invoke() 대신
 // agent.streamEvents(v3)로 도구 호출 시작/종료를 onProgress로 실시간 통지한다.
 // 응답 자체가 느린 게 아니라 "화면에 아무 진행 상황도 안 보여서" 체감 속도가 느렸던
@@ -223,28 +250,8 @@ export async function runAgentStream(
 ): Promise<Recommendation> {
   return withModelFallback(async (agent, isCurrent, sources) => {
     const run = await agent.streamEvents({ messages: history }, { version: "v3" });
-
-    if (onProgress) {
-      // 도구 호출 스트림은 최종 응답(run.output)과 별개로 흘러오므로 fire-and-forget으로
-      // 소비한다 — 여기서 나는 에러는 아래 run.output 대기 쪽에서 어차피 걸러진다.
-      // isCurrent()로 가드: 재귀 제한 등으로 다음 모델로 넘어간 뒤에도 이전 시도의
-      // tool call이 나중에 끝나면서 onProgress를 부르면, 새 시도가 같은 도구를 아직
-      // 호출 중인데 UI에 완료로 잘못 표시되는 문제(2026-09-07 리뷰 지적)를 막는다.
-      (async () => {
-        try {
-          for await (const call of run.toolCalls) {
-            if (!isCurrent()) break;
-            onProgress({ type: "tool_start", tool: call.name });
-            call.status.then(
-              () => isCurrent() && onProgress({ type: "tool_end", tool: call.name }),
-              () => isCurrent() && onProgress({ type: "tool_end", tool: call.name })
-            );
-          }
-        } catch {
-          // ignore — 최종 결과 처리는 아래에서 계속됨
-        }
-      })();
-    }
+    // onProgress가 없어도 항상 소비한다 — 아래 consumeToolCalls 주석 참고.
+    void consumeToolCalls(run.toolCalls, isCurrent, onProgress);
 
     const finalState = await withTimeout(run.output, 25000);
     return completeRecommendation(finalState.structuredResponse, sources);

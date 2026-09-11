@@ -8,7 +8,7 @@ import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { formatPlannedDate, todayIso } from "../src/lib/textFormat.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
 import { stripTags, isEventEnded, inferDtype } from "../src/lib/tools/culturePortal.ts";
-import { isInCooldown, markCooldown } from "../src/lib/agent.ts";
+import { isInCooldown, markCooldown, consumeToolCalls } from "../src/lib/agent.ts";
 import {
   formatFee,
   formatOperatingHours,
@@ -253,5 +253,31 @@ check(
   naverDesktop.kind === "web" ? naverDesktop.url : null,
   "https://map.naver.com/?lng=128.5779&lat=35.8281&title=%EC%88%98%EC%84%B1%EB%AA%BB"
 );
+
+// consumeToolCalls — 실행 실패 시 langchain이 거부하는 call.output을 삼키는지.
+// 핸들러가 없으면 unhandledRejection으로 프로세스가 죽는다(2026-09-11 프로덕션 실측).
+let leaked: unknown = null;
+process.on("unhandledRejection", (reason) => { leaked = reason; });
+const rejectPending: ((e: Error) => void)[] = [];
+const fakeCalls = ["get_weather", "get_air_quality"].map((name) => ({
+  name,
+  output: new Promise((_resolve, reject) => { rejectPending.push(reject); }),
+  status: Promise.resolve("finished"),
+}));
+const emitted: string[] = [];
+await consumeToolCalls(
+  (async function* () { for (const call of fakeCalls) yield call; })(),
+  () => true,
+  (event) => emitted.push(event.type + ":" + event.tool)
+);
+// 스트림이 끝난 뒤 langchain fail()이 하는 일: 남은 output을 전부 거부한다.
+rejectPending.forEach((reject) => reject(new Error("Recursion limit of 25 reached")));
+await new Promise((resolve) => setTimeout(resolve, 120));
+check(
+  "consumeToolCalls 도구 시작·종료 통지",
+  emitted.sort(),
+  ["tool_end:get_air_quality", "tool_end:get_weather", "tool_start:get_air_quality", "tool_start:get_weather"]
+);
+check("consumeToolCalls 실패한 output 거부를 삼킴", leaked, null);
 
 console.log(`✓ self-check 통과 (${passed}건)`);
