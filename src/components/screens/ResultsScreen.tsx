@@ -11,6 +11,8 @@ import { FILTER_LABELS } from "@/lib/placeTags";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
+import { PlanShareButton } from "@/components/PlanShareButton";
+import { RecommendationSources } from "@/components/RecommendationSources";
 
 // 결과 화면에서 조건을 더 추가하고 싶을 때 누르는 정적 문구 칩 — 실시간 재요청 없이
 // 홈으로 이동해 그 문구를 입력창에 채워준다(아래 QUICK_REFINEMENTS 참고).
@@ -147,6 +149,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
         </button>
       </div>
       <div className="flex flex-col gap-3 px-5 pt-3">
+        <PlanShareButton recommendation={recommendation} />
         <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3.5 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <span className="flex items-center gap-1.5">
             <Icon name="pin" className="h-[18px] w-[18px] text-muted" />
@@ -275,6 +278,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                     />
                   </button>
                 </div>
+                <RecommendationSources sources={p.sources} verification={p.verification} closedDays={p.closedDays} />
                 <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-[11px] text-muted">
                   {(p.daeguDistrict || (p.distanceKm !== null && p.distanceKm !== undefined)) && (
                     <span className="flex items-center gap-1">

@@ -421,6 +421,7 @@ model RagChunk {
 }
 
 model AgentRun {
+  recommendationJson   Json?                 @map("recommendation_json")
   id                   String                @id @default(uuid()) @db.Char(36)
   sessionKeyHash       String?               @map("session_key_hash") @db.VarChar(64)
   userId               BigInt?               @map("user_id") @db.UnsignedBigInt
@@ -600,6 +601,19 @@ model PopularRouteTemplate {
 
   @@index([regionId, isActive, popularityScore])
   @@map("popular_route_templates")
+}
+
+model TourApiQueryCache {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  cacheKey    String   @unique @map("cache_key") @db.Char(64)
+  keyword     String   @db.VarChar(200)
+  resultLimit Int      @map("result_limit") @db.SmallInt
+  payloadJson Json     @map("payload_json")
+  fetchedAt   DateTime @default(now()) @map("fetched_at") @db.Timestamp(0)
+  expiresAt   DateTime @map("expires_at") @db.Timestamp(0)
+
+  @@index([expiresAt])
+  @@map("tour_api_query_caches")
 }
 
 model PopularRouteTemplatePlace {

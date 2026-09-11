@@ -7,6 +7,7 @@ import { fetchSavedPlaces, fetchPreferences, putPreferences, fetchRecentQuestion
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { RecommendationHistory } from "@/components/RecommendationHistory";
 
 // FILTER_LABELS(agent.ts의 PLACE_TAGS)와 같은 값 — 선호 조건 칩에 쓸 아이콘만 매핑.
 const PREFERENCE_ICONS: Record<(typeof FILTER_LABELS)[number], string> = {
@@ -79,6 +80,7 @@ export function MyPageScreen() {
         }
       />
       <div className="flex flex-col gap-3 px-5">
+        <RecommendationHistory userId={session.user.id} />
         <div className="rounded-2xl bg-white px-4 py-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <div className="flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-mint-soft">

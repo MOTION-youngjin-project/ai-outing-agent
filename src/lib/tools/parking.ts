@@ -1,5 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { coordinate } from "../coordinates";
 
 // 대구광역시 통합주차정보시스템 - 민간주차장 API(주차장정보 조회)
 // https://pis.daegu.go.kr/api/mingan/prkInfo
@@ -15,6 +16,12 @@ const REALTIME_URL = "https://pis.daegu.go.kr/api/serviceApply/rltmPrkInfo";
 export const DAEGU_DISTRICTS = [
   "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
 ] as const;
+
+export function parkingNumber(value: unknown): number | null {
+  if (value == null || (typeof value === "string" && !value.trim()) || !["string", "number"].includes(typeof value)) return null;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
+}
 
 const DISTRICT_CODES: Record<string, string> = {
   중구: "150",
@@ -67,7 +74,16 @@ async function fetchOnce(sggCd: string, apiKey: string) {
   if (data?.resultCode !== "200") {
     throw new Error(`대구 주차정보 API 오류: ${data?.message ?? "알 수 없는 오류"}`);
   }
-  return (data?.data ?? []) as ParkingItem[];
+  if (!res.ok || !Array.isArray(data?.data)) throw new Error("주차 API 응답 형식 오류");
+  const seen = new Set<string>();
+  return (data.data as ParkingItem[]).filter(i => {
+    const id = i?.prkInfo?.pkltId;
+    if (!id || !i.prkInfo.pkltNm || (i.prkInfo as { useYn?: string }).useYn === "N" || seen.has(id) || !i.prkFcltInfo || !i.prkOperInfo) return false;
+    seen.add(id); return true;
+  }).map(i => {
+    const p = coordinate(i.prkFcltInfo.lat, i.prkFcltInfo.lot);
+    return { ...i, prkFcltInfo: { ...i.prkFcltInfo, lat: p?.latitude ?? null, lot: p?.longitude ?? null } };
+  });
 }
 
 async function fetchRealtimeOnce(pkltId: string, apiKey: string): Promise<number | null> {
@@ -77,9 +93,9 @@ async function fetchRealtimeOnce(pkltId: string, apiKey: string): Promise<number
     signal: AbortSignal.timeout(8000),
   });
   const data = await res.json();
-  if (data?.resultCode !== "200") return null;
+  if (!res.ok || data?.resultCode !== "200") return null;
   const rmnd = data?.data?.[0]?.rltmPrkInfo?.totRmndPrkNocmprt;
-  return typeof rmnd === "number" ? rmnd : null;
+  return parkingNumber(rmnd);
 }
 
 // 전체 344곳 중 실시간 연동된 곳은 일부(109곳)뿐이라, 없으면 null(실시간 정보 없음)로
@@ -94,7 +110,8 @@ async function fetchRealtimeParking(pkltId: string, apiKey: string): Promise<num
 
 export function formatFee(crgLevySeNm: string | null, gnrlOneHrCrg: number | null): string {
   if (crgLevySeNm === "무료") return "무료";
-  if (gnrlOneHrCrg !== null) return `시간당 ${gnrlOneHrCrg}원`;
+  const fee = parkingNumber(gnrlOneHrCrg);
+  if (fee !== null) return `시간당 ${fee}원`;
   return crgLevySeNm ?? "요금정보 없음";
 }
 
@@ -118,11 +135,12 @@ export function formatFeeLines(op: ParkingItem["prkOperInfo"]): string[] | null 
   if (op.crgLevySeNm === "무료") return ["무료"];
 
   const lines: string[] = [];
-  if (op.gnrlFrstCrgLevyHr) lines.push(`최초 ${op.gnrlFrstCrgLevyHr}분 ${op.gnrlFrstCrg ? `${op.gnrlFrstCrg.toLocaleString()}원` : "무료"}`);
-  if (op.gnrlAddCrgLevyHr && op.gnrlMntbyAddCrg !== null) {
-    lines.push(`이후 ${op.gnrlAddCrgLevyHr}분당 ${op.gnrlMntbyAddCrg.toLocaleString()}원`);
+  const first = parkingNumber(op.gnrlFrstCrg), additional = parkingNumber(op.gnrlMntbyAddCrg), daily = parkingNumber(op.gnrlOneDayCrg);
+  if (op.gnrlFrstCrgLevyHr && first !== null) lines.push(`최초 ${op.gnrlFrstCrgLevyHr}분 ${first ? `${first.toLocaleString()}원` : "무료"}`);
+  if (op.gnrlAddCrgLevyHr && additional !== null) {
+    lines.push(`이후 ${op.gnrlAddCrgLevyHr}분당 ${additional.toLocaleString()}원`);
   }
-  if (op.gnrlOneDayCrg !== null) lines.push(`1일 최대 ${op.gnrlOneDayCrg.toLocaleString()}원`);
+  if (daily !== null) lines.push(`1일 최대 ${daily.toLocaleString()}원`);
   if (lines.length > 0) return lines;
 
   const fallback = formatFee(op.crgLevySeNm, op.gnrlOneHrCrg);
@@ -178,7 +196,8 @@ export type ParkingSpot = {
   id: string;
   name: string;
   address: string;
-  capacity: number;
+  capacity: number | null;
+  realtimeFetchedAt?: string | null;
   remainingSpaces: number | null;
   fee: string;
   feeLines: string[] | null;
@@ -206,8 +225,9 @@ async function enrichWithRealtime(items: ParkingItem[]): Promise<ParkingSpot[]> 
     id: i.prkInfo.pkltId,
     name: i.prkInfo.pkltNm,
     address: i.prkFcltInfo.lotnoAddr,
-    capacity: i.prkFcltInfo.prkNocmprt,
-    remainingSpaces: remainingSpacesList[idx],
+    capacity: parkingNumber(i.prkFcltInfo.prkNocmprt),
+    remainingSpaces: parkingNumber(i.prkFcltInfo.prkNocmprt) !== null && remainingSpacesList[idx] !== null && remainingSpacesList[idx]! > parkingNumber(i.prkFcltInfo.prkNocmprt)! ? null : remainingSpacesList[idx],
+    realtimeFetchedAt: remainingSpacesList[idx] === null ? null : new Date().toISOString(),
     fee: formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg),
     feeLines: formatFeeLines(i.prkOperInfo),
     latitude: i.prkFcltInfo.lat,

@@ -15,7 +15,9 @@ import { splitHeadline } from "@/lib/textFormat";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
-import { NaverMap } from "@/components/NaverMap";
+import { KakaoMap } from "@/components/KakaoMap";
+import { RecommendationSources } from "@/components/RecommendationSources";
+import { buildSharePlanText } from "@/lib/share-plan";
 
 // 실시간 방문자 리뷰(⭐ 평점, 리뷰 텍스트)는 이번 스코프에 없음 — 팀 자체 조사 결과
 // (docs/research/place-reviews-and-mood-data-sources.md) 무료로 실제 데이터를 받을 수
@@ -35,6 +37,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
   const router = useRouter();
   const pathname = usePathname();
   const [savePending, setSavePending] = useState(false);
+  const [shareNotice, setShareNotice] = useState("");
 
   // 저장 여부를 로컬 state로만 들고 있으면 이미 저장한 장소를 다시 열었을 때 항상
   // "저장 안 됨"으로 보인다 — 서버 목록에서 파생시킨다. 방문 예정일도 여기서 같이 온다.
@@ -99,21 +102,25 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
     }
   }
 
-  function share() {
-    if (typeof navigator === "undefined" || !navigator.share) return;
-    navigator.share({ title: p.name, text: p.oneLineDescription, url: window.location.href }).catch(() => {
-      // 사용자가 공유 시트를 취소한 경우 등 — 조용히 무시
-    });
+  async function share() {
+    const text = buildSharePlanText({ needsMoreInfo: false, message: p.oneLineDescription, places: [p] }, p.name);
+    try {
+      if (navigator.share) await navigator.share({ title: p.name, text });
+      else { await navigator.clipboard.writeText(text); setShareNotice("장소 정보를 복사했습니다."); }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) setShareNotice("공유하지 못했습니다. 다시 시도해 주세요.");
+    }
   }
 
   return (
     <>
+      {shareNotice && <p role="status" className="px-5 pt-2 text-sm text-muted">{shareNotice}</p>}
       <ScreenHeader
         title="상세 보기"
         onBack={() => router.push(runId ? `/recommend/${runId}` : "/")}
         right={
           <div className="flex items-center gap-3">
-            {typeof navigator !== "undefined" && !!navigator.share && (
+            {(
               <button onClick={share} aria-label="공유하기" className="text-ink-soft">
                 <Icon name="share" className="h-5 w-5" />
               </button>
@@ -167,6 +174,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
           </div>
         ) : null}
 
+        <RecommendationSources sources={p.sources} verification={p.verification} closedDays={p.closedDays} />
         {p.reason && (
           <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
             <div className="flex gap-2">
@@ -255,7 +263,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
         )}
 
         {p.latitude !== null && p.latitude !== undefined && p.longitude !== null && p.longitude !== undefined && (
-          <NaverMap
+          <KakaoMap
             center={{ latitude: p.latitude, longitude: p.longitude }}
             destinationLabel={p.name}
             spots={[]}

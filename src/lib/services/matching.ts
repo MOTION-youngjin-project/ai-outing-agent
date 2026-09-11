@@ -7,17 +7,14 @@ import { haversineMeters } from "../tools/parking.ts";
 // 다른 순수 함수 파일을 상대 경로로 값 import하는 건 괜찮음, tools/parking.ts도 마찬가지).
 
 // 카카오가 준 검색 결과 중 LLM이 말한 이름과 가장 잘 맞는 것을 고른다.
-// 이름이 정확히 일치하는 결과를 최우선으로 하고(동명이인 오매칭 완화), 없으면 부분 일치,
-// 그것도 없으면 첫 결과.
+// 이름이 일치하는 후보가 하나일 때만 연결한다. 없거나 동명이인이면 미매칭으로 남긴다.
 export function pickBestPlaceMatch<T extends { place_name: string }>(
   name: string,
   documents: T[]
 ): T | undefined {
-  return (
-    documents.find((d) => d.place_name === name) ??
-    documents.find((d) => d.place_name.includes(name) || name.includes(d.place_name)) ??
-    documents[0]
-  );
+  const normalize = (value: string) => value.replace(/\s+/g, "").toLowerCase();
+  const matches = documents.filter(d => normalize(d.place_name) === normalize(name));
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 // 주소 문자열과 후보 Region 목록으로 가장 적절한 Region을 고른다.

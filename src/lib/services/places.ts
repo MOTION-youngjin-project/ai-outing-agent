@@ -5,6 +5,8 @@ import { pickBestPlaceMatch, pickRegionForAddress } from "./matching";
 import { fetchPlaceImage } from "@/lib/tools/tourApi";
 import { DAEGU_DISTRICTS } from "@/lib/tools/parking";
 import type { Place } from "../../../generated/prisma/client";
+import { coordinate } from "../coordinates";
+import { normalizeSido } from "../region";
 
 // 카카오 로컬 - 키워드로 장소 검색
 // https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword
@@ -35,7 +37,8 @@ async function fetchOnce(query: string, apiKey: string): Promise<KakaoDocument[]
   }
 
   const data = await res.json();
-  return data?.documents ?? [];
+  if (!Array.isArray(data?.documents)) throw new Error("장소 검색 응답 형식 오류");
+  return data.documents.filter((d: KakaoDocument) => d?.id && typeof d.place_name === "string" && coordinate(d.y, d.x));
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -216,7 +219,12 @@ export async function resolvePlaceByName(name: string, regionName?: string | nul
   const documents = await fetchPlaces(query);
   if (documents.length === 0) return null;
 
-  const best = pickBestPlaceMatch(name, documents);
+  const candidates = regionName ? documents.filter(d => {
+    const address = `${d.road_address_name} ${d.address_name}`;
+    const sido = normalizeSido(regionName);
+    return sido ? normalizeSido(address) === sido : address.includes(regionName);
+  }) : documents;
+  const best = pickBestPlaceMatch(name, candidates);
   if (!best) return null;
 
   const source = await getOrCreateDataSource("PLACE_SEARCH", "장소 검색 API (Kakao Local)", "search_api");

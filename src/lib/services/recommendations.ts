@@ -9,6 +9,8 @@ import { fetchDrivingRoute } from "./naverDirections";
 import { findOrCreateSidoRegion } from "./shared";
 import { inferEnvironmentMode, extractCategoryLabel, computeDistanceKm } from "./matching";
 import type { Place } from "../../../generated/prisma/client";
+import { searchDaeguTourismCached } from "../external/tour-api";
+import { verifyPlace } from "../place-verification";
 
 export type GeoPoint = { latitude: number; longitude: number };
 
@@ -48,13 +50,14 @@ export async function createRecommendationRun(
   history: ChatTurn[],
   onProgress?: (event: RecommendationProgressEvent) => void,
   origin?: GeoPoint | null,
-  userId?: string | null
+  userId?: string | null,
+  sessionKeyHash?: string | null
 ): Promise<RecommendationRunResult> {
   const regionName = normalizeSido(history.map((h) => h.content).join(" "));
   const region = regionName ? await findOrCreateSidoRegion(regionName) : null;
   // 마이페이지 "최근 질문"에 그대로 보여줄 사용자 원문 — history의 마지막 turn이
   // 이번 요청에서 사용자가 실제로 입력한 문장이다(이전 turn은 이미 지난 질문).
-  const userQuery = history.at(-1)?.content?.slice(0, 1000);
+  const userQuery = userId ? [...history].reverse().find(h => h.role === "user")?.content.slice(0, 1000) : undefined;
   const userIdBigInt = userId ? BigInt(userId) : undefined;
 
   let recommendation: Recommendation;
@@ -64,6 +67,7 @@ export async function createRecommendationRun(
     await prisma.agentRun.create({
       data: {
         userId: userIdBigInt,
+        sessionKeyHash: userId ? null : sessionKeyHash,
         userQuery,
         requestMode: "question",
         currentRegionId: region?.id,
@@ -84,11 +88,13 @@ export async function createRecommendationRun(
       const agentRun = await prisma.agentRun.create({
         data: {
           userId: userIdBigInt,
+        sessionKeyHash: userId ? null : sessionKeyHash,
           userQuery,
           requestMode: "question",
           currentRegionId: region?.id,
           status: "completed",
           routeCount: 0,
+          recommendationJson: JSON.parse(JSON.stringify({ ...recommendation, places: undefined })),
           expiresAt: new Date(Date.now() + AGENT_RUN_TTL_MS),
           completedAt: new Date(),
         },
@@ -141,8 +147,16 @@ export async function createRecommendationRun(
       const resolvedPoint = resolved
         ? { latitude: resolved.latitude.toNumber(), longitude: resolved.longitude.toNumber() }
         : null;
+      let evidence: Parameters<typeof verifyPlace>[1] = [];
+      if (resolved && (resolved.roadAddress ?? resolved.jibunAddress ?? "").startsWith("대구") && (process.env.DATA_GO_KR_API_KEY || process.env.TOUR_API_KEY)) {
+        try {
+          const tourism = await searchDaeguTourismCached(resolved.name, 5);
+          evidence = tourism.data.map(item => ({ ...item, cachedAt: tourism.cachedAt, expiresAt: tourism.expiresAt, cache: tourism.cache }));
+        } catch { /* 정보 미조회 시 변동 정보는 숨기고 추천을 유지한다. */ }
+      }
+      const verified = verifyPlace({ ...p, address: resolved?.roadAddress ?? p.address }, evidence);
       return {
-        ...p,
+        ...verified,
         category: extractCategoryLabel(resolved?.categorySummary ?? null),
         distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
         placeId: resolved?.publicId ?? null,
@@ -195,22 +209,23 @@ export async function createRecommendationRun(
   let agentRunId: string = randomUUID();
   let recommendationRouteId: string | null = null;
   try {
-    const agentRun = await prisma.agentRun.create({
+    const saved = await prisma.$transaction(async tx => {
+    const agentRun = await tx.agentRun.create({
       data: {
         userId: userIdBigInt,
+        sessionKeyHash: userId ? null : sessionKeyHash,
         userQuery,
         requestMode: "question",
         currentRegionId: region?.id,
         status: unresolvedCount > 0 ? "partial" : "completed",
         routeCount: 1,
+        recommendationJson: JSON.parse(JSON.stringify({ ...recommendation, places: enrichedPlaces })),
         dataUpdatedAt: new Date(),
         expiresAt: new Date(Date.now() + AGENT_RUN_TTL_MS),
         completedAt: new Date(),
       },
     });
-    agentRunId = agentRun.id;
-
-    const route = await prisma.recommendationRoute.create({
+    const route = await tx.recommendationRoute.create({
       data: {
         agentRunId: agentRun.id,
         rankNo: 1,
@@ -224,7 +239,6 @@ export async function createRecommendationRun(
         weatherSnapshotId: weather ? BigInt(weather.id) : undefined,
       },
     });
-    recommendationRouteId = route.id.toString();
 
     // 장소마다 독립적인 insert라 순차로 기다릴 이유가 없다 — 한 번에 배치로 처리.
     // 카카오 매칭 실패한 곳(placeId FK 없음)은 여기서 제외되므로, "partial" 런을
@@ -249,8 +263,12 @@ export async function createRecommendationRun(
         enrichedSnapshot: enrichedPlaces[index],
       }));
     if (routePlacesData.length > 0) {
-      await prisma.routePlace.createMany({ data: routePlacesData });
+      await tx.routePlace.createMany({ data: routePlacesData });
     }
+    return { agentRunId: agentRun.id, recommendationRouteId: route.id.toString() };
+    });
+    agentRunId = saved.agentRunId;
+    recommendationRouteId = saved.recommendationRouteId;
   } catch (err) {
     console.error("추천 기록 저장 실패(추천 결과는 정상 반환):", err);
   }

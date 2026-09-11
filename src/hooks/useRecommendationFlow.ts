@@ -95,7 +95,10 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
       // 않음) — "코스 상세 보기"를 눌러야 그 화면으로 이동한다.
       setLastRecommendation(rec);
       suggestMutation.mutate(historyWithReply);
-      if (session) queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
+      if (session) {
+        queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
+        queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+      }
     },
   });
 

@@ -25,7 +25,7 @@ export function ParkingDetailScreen({
   const router = useRouter();
   const occ = occupancyLabel(spot);
   const hasCoords = spot.latitude !== null && spot.longitude !== null;
-  const parkingListHref = runId ? `/recommend/${runId}/place/${placeId}/parking` : `/place/${placeId}/parking`;
+  const parkingListHref = (runId ? `/recommend/${runId}/place/${placeId}/parking` : `/place/${placeId}/parking`) + `?selected=${encodeURIComponent(spot.id)}`;
 
   function share() {
     if (typeof navigator === "undefined" || !navigator.share) return;
@@ -82,7 +82,7 @@ export function ParkingDetailScreen({
           </div>
           <div className="mt-2 text-[13px] text-muted">
             {[
-              spot.walkMinutes !== null ? `도보 ${spot.walkMinutes}분 (${spot.distanceMeters}m)` : null,
+              spot.walkMinutes !== null ? `도보 추정 ${spot.walkMinutes}분 (직선 ${spot.distanceMeters}m)` : null,
               spot.address,
             ]
               .filter(Boolean)
@@ -99,7 +99,8 @@ export function ParkingDetailScreen({
               <span className="text-[14px] text-slate-400">정보 없음</span>
             )}
             <span className="text-[20px] font-bold text-ink">
-              {spot.remainingSpaces ?? "-"} / {spot.capacity}면
+              {spot.remainingSpaces ?? "-"} / {spot.capacity ?? "-"}면
+              {spot.realtimeFetchedAt && <span className="block text-xs font-normal text-muted">조회 {new Date(spot.realtimeFetchedAt).toLocaleTimeString("ko-KR")} · 현장 상황은 달라질 수 있어요</span>}
             </span>
           </div>
         </div>

@@ -107,9 +107,9 @@ check(
   { place_name: "대구미술관" }
 );
 check(
-  "pickBestPlaceMatch 정확 일치 없으면 첫 결과",
+  "pickBestPlaceMatch 정확 일치 없으면 미매칭",
   pickBestPlaceMatch("전혀다른이름", [{ place_name: "이디야커피" }, { place_name: "스타벅스" }]),
-  { place_name: "이디야커피" }
+  undefined
 );
 check("pickBestPlaceMatch 결과 없음", pickBestPlaceMatch("아무거나", []), undefined);
 

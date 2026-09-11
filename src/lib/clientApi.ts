@@ -69,16 +69,14 @@ export async function fetchTransitDirections(
   }
 }
 
-export async function fetchParking(district: string, placeName?: string): Promise<ParkingResult> {
-  try {
+export async function fetchParking(district: string, placeName?: string, origin?: { latitude?: number | null; longitude?: number | null }): Promise<ParkingResult> {
     const params = new URLSearchParams({ district });
     if (placeName) params.set("placeName", placeName);
+    if (origin?.latitude != null && origin.longitude != null) { params.set("latitude", String(origin.latitude)); params.set("longitude", String(origin.longitude)); }
     const res = await fetch(`/api/parking?${params}`);
     const data = await res.json();
-    return res.ok ? { spots: data.spots, destination: data.destination } : { spots: [], destination: null };
-  } catch {
-    return { spots: [], destination: null };
-  }
+    if (!res.ok || !Array.isArray(data.spots)) throw new Error("주차장 정보를 불러오지 못했습니다.");
+    return { spots: data.spots, destination: data.destination };
 }
 
 export async function fetchPlacesSearch(query: string): Promise<PlaceResult[]> {
@@ -248,12 +246,15 @@ export async function fetchRecommendation(runId: string): Promise<RecommendResul
 export async function fetchParkingSpotById(
   pkltId: string,
   district: string,
-  placeName?: string
+  placeName?: string,
+  origin?: { latitude?: number | null; longitude?: number | null }
 ): Promise<ParkingSpotWithDistance | null> {
   const params = new URLSearchParams({ district });
   if (placeName) params.set("placeName", placeName);
-  const res = await fetch(`/api/parking/${pkltId}?${params}`);
-  if (!res.ok) return null;
+  if (origin?.latitude != null && origin.longitude != null) { params.set("latitude", String(origin.latitude)); params.set("longitude", String(origin.longitude)); }
+  const res = await fetch(`/api/parking/${encodeURIComponent(pkltId)}?${params}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("주차장 조회에 실패했습니다.");
   const data = await res.json();
   return data.data ?? null;
 }
