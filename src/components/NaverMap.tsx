@@ -125,7 +125,9 @@ export function NaverMap({
   controlsAnimated = true,
 }: {
   center: { latitude: number; longitude: number };
-  destinationLabel: string;
+  // MapScreen(코스 지도)처럼 정류지 전부를 spots 번호 배지로만 보여줄 땐 별도 목적지
+  // 마커가 필요 없다 — 그럴 때만 생략(undefined)한다.
+  destinationLabel?: string;
   spots: MapParkingSpot[];
   // 길찾기 화면(DirectionsScreen)용 — 출발지 마커. "내 위치로 이동" 버튼이 찍는 파란
   // 점(moveToMyLocation)과 같은 스타일을 그냥 재사용한다(둘 다 "여기서 출발" 의미).
@@ -202,21 +204,23 @@ export function NaverMap({
         // 너비가 가변이어도 항상 "원의 아래쪽 끝"이 좌표에 정확히 맞도록 한다(카카오
         // CustomOverlay의 비율 기반 yAnchor와 달리 네이버는 픽셀 앵커라 폭을 몰라도
         // 되는 이 방식이 더 안전하다).
-        new naver.maps.Marker({
-          position: centerLatLng,
-          map,
-          icon: {
-            content: `<div style="position:relative;">
-              <div style="position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;">
-                <div style="background:#111827;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${destinationLabel}</div>
-                <div style="width:28px;height:28px;border-radius:999px;background:#f5a623;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);">
-                  <div style="width:10px;height:10px;border-radius:999px;background:#fff;"></div>
+        if (destinationLabel) {
+          new naver.maps.Marker({
+            position: centerLatLng,
+            map,
+            icon: {
+              content: `<div style="position:relative;">
+                <div style="position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;">
+                  <div style="background:#111827;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${destinationLabel}</div>
+                  <div style="width:28px;height:28px;border-radius:999px;background:#f5a623;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);">
+                    <div style="width:10px;height:10px;border-radius:999px;background:#fff;"></div>
+                  </div>
                 </div>
-              </div>
-            </div>`,
-            anchor: new naver.maps.Point(0, 0),
-          },
-        });
+              </div>`,
+              anchor: new naver.maps.Point(0, 0),
+            },
+          });
+        }
 
         const bounds = new naver.maps.LatLngBounds(centerLatLng, centerLatLng);
 
