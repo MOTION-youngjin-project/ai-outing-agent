@@ -101,6 +101,8 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
         <circle cx="8" cy="8.5" r="0.6" fill="currentColor" />
       </>
     ),
+    check: <path d="M5 12.5l4.5 4.5L19 7" />,
+    arrowUpRight: <path d="M7 17L17 7M9 7h8v8" />,
     train: (
       <>
         <rect x="6" y="3" width="12" height="14" rx="4" />
