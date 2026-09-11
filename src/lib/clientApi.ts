@@ -69,6 +69,33 @@ export async function fetchTransitDirections(
   }
 }
 
+export type DrivingRouteOption = {
+  option: string;
+  distanceM: number;
+  durationMin: number;
+  path: { latitude: number; longitude: number }[];
+};
+
+export async function fetchDrivingDirections(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+): Promise<DrivingRouteOption[]> {
+  try {
+    const params = new URLSearchParams({
+      fromLat: String(from.latitude),
+      fromLng: String(from.longitude),
+      toLat: String(to.latitude),
+      toLng: String(to.longitude),
+    });
+    const res = await fetch(`/api/directions?${params}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchParking(district: string, placeName?: string): Promise<ParkingResult> {
   try {
     const params = new URLSearchParams({ district });

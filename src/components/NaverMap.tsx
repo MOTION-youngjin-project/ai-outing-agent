@@ -32,6 +32,13 @@ declare global {
           setPosition: (latlng: unknown) => void;
           setIcon: (icon: { content: string; anchor: unknown }) => void;
         };
+        Polyline: new (options: {
+          map: unknown;
+          path: unknown[];
+          strokeColor: string;
+          strokeWeight: number;
+          strokeOpacity?: number;
+        }) => unknown;
         Event: { addListener: (target: unknown, type: string, handler: () => void) => void };
       };
     };
@@ -111,6 +118,8 @@ export function NaverMap({
   center,
   destinationLabel,
   spots,
+  origin,
+  routePath,
   className,
   controlsBottom,
   controlsAnimated = true,
@@ -118,6 +127,11 @@ export function NaverMap({
   center: { latitude: number; longitude: number };
   destinationLabel: string;
   spots: MapParkingSpot[];
+  // 길찾기 화면(DirectionsScreen)용 — 출발지 마커. "내 위치로 이동" 버튼이 찍는 파란
+  // 점(moveToMyLocation)과 같은 스타일을 그냥 재사용한다(둘 다 "여기서 출발" 의미).
+  origin?: { latitude: number; longitude: number };
+  // 길찾기 경로 폴리라인. 있으면 지도 범위(fitBounds)에도 포함시켜 경로 전체가 보이게 한다.
+  routePath?: { latitude: number; longitude: number }[];
   // 기본은 카드형(둥근 모서리, 고정 높이 18rem) — 화면 전체를 채우는 바텀시트 배경 등
   // 다른 레이아웃이 필요할 때만 넘긴다(예: "absolute inset-0").
   className?: string;
@@ -206,6 +220,28 @@ export function NaverMap({
 
         const bounds = new naver.maps.LatLngBounds(centerLatLng, centerLatLng);
 
+        if (origin) {
+          const originLatLng = new naver.maps.LatLng(origin.latitude, origin.longitude);
+          bounds.extend(originLatLng);
+          new naver.maps.Marker({
+            position: originLatLng,
+            map,
+            icon: {
+              content: `<div style="width:18px;height:18px;border-radius:999px;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
+              anchor: new naver.maps.Point(9, 9),
+            },
+          });
+        }
+
+        if (routePath && routePath.length > 1) {
+          const path = routePath.map((p) => {
+            const latlng = new naver.maps.LatLng(p.latitude, p.longitude);
+            bounds.extend(latlng);
+            return latlng;
+          });
+          new naver.maps.Polyline({ map, path, strokeColor: "#14b8a6", strokeWeight: 5, strokeOpacity: 0.85 });
+        }
+
         // 주차장이 서로 가까이 몰려 있으면(목적지에서 5km+ 떨어진 동네에 여러 곳이
         // 모여있는 경우 흔함) 텍스트 라벨끼리 겹쳐서 못 읽는 문제가 있어, 항상 떠 있는
         // 텍스트 라벨 대신 작은 번호 배지만 찍는다 — 상세 정보(도보 시간 등)는 바로
@@ -236,7 +272,9 @@ export function NaverMap({
         // 목적지 기준 고정 줌 대신, 목적지+모든 주차장이 한 화면에 들어오도록 자동 조정
         // (주차장이 5km+ 떨어져 있어 마커가 화면 밖으로 벗어나는 문제 방지). 위쪽
         // 여백(40px)은 목적지 마커 라벨 pill이 뷰포트 경계에서 잘리는 문제 방지용.
-        if (spots.length > 0) map.fitBounds(bounds, { top: 40, right: 20, bottom: 20, left: 20 });
+        if (spots.length > 0 || origin || (routePath && routePath.length > 1)) {
+          map.fitBounds(bounds, { top: 40, right: 20, bottom: 20, left: 20 });
+        }
       })
       .catch(() => {
         if (!cancelled && errorRef.current) {
