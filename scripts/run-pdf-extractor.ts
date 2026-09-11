@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "../load-env";
 import { spawnSync } from "node:child_process";
 
 type PythonCommand = { command: string; args: string[] };
