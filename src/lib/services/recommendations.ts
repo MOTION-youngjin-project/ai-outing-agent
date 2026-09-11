@@ -60,9 +60,14 @@ export async function createRecommendationRun(
   const userQuery = userId ? [...history].reverse().find(h => h.role === "user")?.content.slice(0, 1000) : undefined;
   const userIdBigInt = userId ? BigInt(userId) : undefined;
 
+  // 날씨·대기질은 에이전트가 도구로 물어보던 값인데, 여기서 미리(그리고 병렬로) 조회해
+  // 프롬프트에 넣어주면 모델 왕복이 2회 줄어든다 — 왕복 1회가 2.5~5초다(2026-09-12 실측).
+  // 캐시 서비스라 대부분 DB 조회로 끝나고, 실패하면 넣지 않는다(그때는 도구가 남아 있다).
+  const situation = regionName ? await describeSituation(regionName) : undefined;
+
   let recommendation: Recommendation;
   try {
-    recommendation = await runAgentStream(history, onProgress);
+    recommendation = await runAgentStream(history, onProgress, situation);
   } catch (err) {
     await prisma.agentRun.create({
       data: {
@@ -278,4 +283,27 @@ export async function createRecommendationRun(
     agentRunId,
     recommendationRouteId,
   };
+}
+
+// "대구 지역 예보(29도, 구름많음, 강수확률 30%), 미세먼지 좋음(PM10 25)" 형태의 한 줄.
+// 조회가 실패하면 undefined를 돌려주고, 그때는 에이전트가 기존처럼 도구로 직접 확인한다.
+async function describeSituation(regionName: string): Promise<string | undefined> {
+  const [weather, air] = await Promise.all([
+    getCachedWeather(regionName).catch(() => null),
+    getCachedAirQuality(regionName).catch(() => null),
+  ]);
+
+  const parts: string[] = [];
+  if (weather) {
+    const detail = [
+      weather.temperatureC !== null ? `${weather.temperatureC}도` : null,
+      weather.summary,
+      weather.precipitationProbability !== null ? `강수확률 ${weather.precipitationProbability}%` : null,
+    ].filter(Boolean).join(", ");
+    parts.push(`${regionName} 날씨 예보(${detail})`);
+  }
+  if (air) {
+    parts.push(`미세먼지 ${air.overallGrade}${air.pm10Value !== null ? `(PM10 ${air.pm10Value})` : ""}`);
+  }
+  return parts.length ? parts.join(", ") + "." : undefined;
 }

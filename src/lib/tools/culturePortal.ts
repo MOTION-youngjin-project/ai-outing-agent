@@ -62,7 +62,9 @@ async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
   });
 
   const res = await fetch(`${CULTURE_URL}?${params}`, {
-    signal: AbortSignal.timeout(8000),
+    // 5초. 실측(2026-09-12)에서 성공 응답은 0.4~4.0초였고, 그보다 느리면 대개 끝까지 응답이
+    // 안 온다 — 8초씩 세 번 기다리다 25초를 버리는 게 실제로 관측됐다.
+    signal: AbortSignal.timeout(5000),
   });
   const xml = await res.text();
 
@@ -86,21 +88,45 @@ async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ponytail: 에어코리아/기상청과 동일하게 최대 3회 재시도 (공공데이터 API 공통 불안정성 대응).
+// 성공 결과만 1시간 캐시한다. 행사 목록은 하루 단위로 바뀌는데 이 API는 같은 질의에도
+// 25초 타임아웃과 0.4초 응답을 오가서, 한 번 받아둔 결과를 재사용하는 편이 훨씬 안정적이다.
+// (프로세스 메모리 — 인스턴스가 하나뿐이라 테이블을 새로 만들 이유가 없다.)
+const CACHE_TTL_MS = 60 * 60 * 1000;
+// 실패도 5분 기억한다. 이 API는 한 번 응답이 끊기면 한동안 계속 끊겨서, 매 요청마다
+// 10.5초(5초 타임아웃 x 2회)를 다시 버리는 것이 실측됐다. 5분 뒤에는 다시 시도한다.
+const FAILURE_TTL_MS = 5 * 60 * 1000;
+const cache = new Map<string, { at: number; items: PerformanceItem[] }>();
+const failures = new Map<string, number>();
+
+// ponytail: 공공데이터 API 공통 불안정성 대응 재시도. 3회에서 2회로 줄였다 —
+// 실측상 첫 시도가 타임아웃이면 재시도도 대개 타임아웃이라, 최악이 25초에서 10.5초가 된다.
 export async function fetchCulturePortal(dtype: string, keyword: string): Promise<PerformanceItem[]> {
   const apiKey = process.env.CULTURE_PORTAL_API_KEY;
   if (!apiKey) throw new Error("CULTURE_PORTAL_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
+  const cacheKey = dtype + "::" + keyword;
+  const hit = cache.get(cacheKey);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.items;
+
+  const failedAt = failures.get(cacheKey);
+  if (failedAt && Date.now() - failedAt < FAILURE_TTL_MS) {
+    throw new Error("문화포털 API가 응답하지 않습니다(최근 실패, 잠시 후 다시 시도).");
+  }
+
+  const MAX_ATTEMPTS = 2;
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      return await fetchOnce(dtype, keyword, apiKey);
+      const items = await fetchOnce(dtype, keyword, apiKey);
+      cache.set(cacheKey, { at: Date.now(), items });
+      failures.delete(cacheKey);
+      return items;
     } catch (err) {
       lastError = err;
       if (attempt < MAX_ATTEMPTS) await sleep(500);
     }
   }
+  failures.set(cacheKey, Date.now());
   throw lastError;
 }
 
