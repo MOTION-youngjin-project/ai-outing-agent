@@ -1,21 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Icon } from "@/components/Icon";
 import { ExternalMapMenu } from "@/components/ExternalMapMenu";
+import { CourseStopList } from "@/components/CourseStopList";
 import type { RecommendResult, WeatherInfo, AirQualityInfo } from "@/lib/clientApi";
-
-// 네이버 Directions가 주는 건 자동차 경로뿐이라, 구간이 도보로 다닐 만큼 가까운지는
-// src/lib/tools/parking.ts의 estimateWalkMinutes와 같은 공식(평균 도보 4km/h)으로 이
-// 화면에서 직접 어림잡는다 — 그 파일은 langchain 서버 도구라 클라이언트 번들에 못 끌어옴.
-const WALK_DISTANCE_THRESHOLD_M = 1200;
-function estimateWalkMinutes(meters: number): number {
-  return Math.max(1, Math.round(meters / 67));
-}
 
 // 디자인팀 목업(디자인/채팅.png)의 "오늘의 추천 코스" 카드. 목업은 장소별 정확한 방문
 // 시각/코스 총 소요시간·총비용까지 보여주지만, 지금 agent.ts가 실제로 만들어주는
@@ -98,72 +90,8 @@ export function CourseCard({
 
       <p className="mt-2 text-[12px] text-muted">{places.length}곳을 둘러보는 코스예요.</p>
 
-      <div className="mt-3 flex flex-col">
-        {places.map((p, i) => {
-          const content = (
-            <>
-              {p.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                <img src={p.imageUrl} alt={p.name} className="h-16 w-16 shrink-0 rounded-xl object-cover" />
-              ) : (
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
-                  <Icon name="pin" className="h-6 w-6 text-mint-mid" />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[14px] font-bold text-ink">{p.name}</div>
-                <div className="mt-0.5 line-clamp-1 text-[12px] text-muted">{p.oneLineDescription}</div>
-                {(p.visitDuration || p.fee) && (
-                  <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted/80">
-                    {p.visitDuration && <span>{p.visitDuration}</span>}
-                    {p.fee && <span>{p.fee}</span>}
-                  </div>
-                )}
-              </div>
-            </>
-          );
-
-          return (
-            <div key={i} className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[11px] font-bold text-mint-mid">
-                  {i + 1}
-                </span>
-                {i < places.length - 1 && (
-                  <div className="flex flex-1 flex-col items-center gap-1">
-                    <span className="w-px flex-1 border-l border-dashed border-hairline" />
-                    {places[i + 1].travelDurationMin != null && places[i + 1].travelDistanceM != null && (
-                      <span className="flex items-center gap-1 whitespace-nowrap text-[10px] font-medium text-muted">
-                        {places[i + 1].travelDistanceM! < WALK_DISTANCE_THRESHOLD_M ? (
-                          <>
-                            <Icon name="walk" className="h-3 w-3" />
-                            도보 {estimateWalkMinutes(places[i + 1].travelDistanceM!)}분
-                          </>
-                        ) : (
-                          <>
-                            <Icon name="car" className="h-3 w-3" />
-                            차량 {places[i + 1].travelDurationMin}분
-                          </>
-                        )}
-                      </span>
-                    )}
-                    <span className="w-px flex-1 border-l border-dashed border-hairline" />
-                  </div>
-                )}
-              </div>
-              {p.placeId ? (
-                <Link
-                  href={`/recommend/${recommendation.agentRunId}/place/${p.placeId}`}
-                  className="flex flex-1 gap-3 pb-4"
-                >
-                  {content}
-                </Link>
-              ) : (
-                <div className="flex flex-1 gap-3 pb-4">{content}</div>
-              )}
-            </div>
-          );
-        })}
+      <div className="mt-3">
+        <CourseStopList places={places} runId={recommendation.agentRunId} />
       </div>
 
       {allTags.length > 0 && (
