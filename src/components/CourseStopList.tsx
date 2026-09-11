@@ -3,9 +3,11 @@ import { Icon } from "@/components/Icon";
 import type { PlaceWithMeta } from "@/lib/clientApi";
 import { WALK_DISTANCE_THRESHOLD_M, estimateWalkMinutes } from "@/lib/travelMode";
 
-// 코스 정류지를 번호+점선 타임라인으로 보여주는 목록 — CourseCard(채팅 인라인 카드)와
-// MapScreen(지도 탭) 둘 다 같은 구성을 쓴다(디자인/채팅.png, 디자인/지도.png).
-export function CourseStopList({ places, runId }: { places: PlaceWithMeta[]; runId: string }) {
+// 코스 정류지를 번호+점선 타임라인으로 보여주는 목록 — CourseCard(채팅 인라인 카드),
+// MapScreen(지도 탭), 저장한 코스 다시 보기가 같은 구성을 쓴다(디자인/채팅.png, 지도.png, 저장.png).
+// runId가 null이면(저장한 코스: 추천 런이 이미 정리됐을 수 있음) 런에 매이지 않는
+// 단독 장소 상세(/place/[placeId])로 보낸다.
+export function CourseStopList({ places, runId }: { places: PlaceWithMeta[]; runId: string | null }) {
   return (
     <div className="flex flex-col">
       {places.map((p, i) => {
@@ -61,7 +63,10 @@ export function CourseStopList({ places, runId }: { places: PlaceWithMeta[]; run
               )}
             </div>
             {p.placeId ? (
-              <Link href={`/recommend/${runId}/place/${p.placeId}`} className="flex flex-1 gap-3 pb-4">
+              <Link
+                href={runId ? `/recommend/${runId}/place/${p.placeId}` : `/place/${p.placeId}`}
+                className="flex flex-1 gap-3 pb-4"
+              >
                 {content}
               </Link>
             ) : (

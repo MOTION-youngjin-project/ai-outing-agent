@@ -87,6 +87,13 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
     ),
     triangleAlert: <path d="M12 4.2L21.5 20H2.5L12 4.2z" strokeLinejoin="round" />,
     menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+    more: (
+      <>
+        <circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none" />
+      </>
+    ),
     close: <path d="M5 5l14 14M19 5L5 19" />,
     plus: <path d="M12 5v14M5 12h14" />,
     search: (
