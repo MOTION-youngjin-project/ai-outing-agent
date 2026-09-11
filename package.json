@@ -15,7 +15,7 @@
     "self-check": "tsx scripts/self-check.ts",
     "integration-check": "node --import tsx --experimental-test-module-mocks scripts/backend-integration-check.ts",
     "rag:download": "tsx scripts/download-rag-pdfs.ts",
-    "rag:extract": "tsx scripts/run-pdf-extractor.ts",
+    "rag:extract": "tsx scripts/extract-pdf-rag.ts",
     "rag:ingest": "tsx scripts/ingest-pdf-rag.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
@@ -53,6 +53,7 @@
     "prisma": "^7.10.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "unpdf": "^1.8.1"
   }
 }
