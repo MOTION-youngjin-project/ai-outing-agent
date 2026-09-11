@@ -146,6 +146,45 @@ export async function putPlannedVisit(placeId: string, date: string | null): Pro
   return res.ok;
 }
 
+// 저장한 코스. course는 저장 시점 스냅샷이라 추천 런이 정리된 뒤에도 그대로 열린다.
+export type SavedCourseResult = {
+  publicId: string;
+  title: string;
+  savedAt: string;
+  course: RecommendResult;
+};
+
+export async function fetchSavedCourses(): Promise<SavedCourseResult[]> {
+  const res = await fetch("/api/saved-courses");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function fetchSavedCourse(publicId: string): Promise<SavedCourseResult | null> {
+  const res = await fetch(`/api/saved-courses/${encodeURIComponent(publicId)}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.data ?? null;
+}
+
+// 코스 내용은 서버가 runId로 DB에서 직접 만든다 — 여기선 어떤 추천이었는지만 넘긴다.
+export async function postSavedCourse(runId: string): Promise<boolean> {
+  const res = await fetch("/api/saved-courses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId }),
+  });
+  return res.ok;
+}
+
+export async function deleteSavedCourse(publicId: string): Promise<boolean> {
+  const res = await fetch(`/api/saved-courses?publicId=${encodeURIComponent(publicId)}`, {
+    method: "DELETE",
+  });
+  return res.ok;
+}
+
 export async function fetchPreferences(): Promise<string[]> {
   const res = await fetch("/api/preferences");
   if (!res.ok) return [];

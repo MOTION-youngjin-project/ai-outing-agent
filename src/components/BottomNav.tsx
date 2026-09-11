@@ -11,6 +11,7 @@ import { useAppStore } from "@/lib/store";
 // 여전히 "코스 상세 보기"로 드릴다운하는 화면이라 이제 홈 활성 상태로 묶는다.
 const RESULTS_PATH = /^\/recommend(\/|$)/;
 const MAP_PATH = /^\/map(\/|$)/;
+const SAVED_PATH = /^\/saved(\/|$)/;
 // 장소 검색(홈)에서 들어가는 단독 상세/주차 화면 — /recommend/[runId]/place/... 와 같은 패턴.
 const SEARCHED_PLACE_PATH = /^\/place(\/|$)/;
 
@@ -21,8 +22,9 @@ export function BottomNav() {
   const lastRecommendation = useAppStore((s) => s.lastRecommendation);
   const onRecommend = RESULTS_PATH.test(pathname);
   const onMap = MAP_PATH.test(pathname);
+  const onSaved = SAVED_PATH.test(pathname);
   const onSearchedPlace = SEARCHED_PLACE_PATH.test(pathname);
-  const show = pathname === "/" || onRecommend || onMap || onSearchedPlace || pathname === "/mypage";
+  const show = pathname === "/" || onRecommend || onMap || onSaved || onSearchedPlace || pathname === "/mypage";
   if (!show) return null;
 
   // 방금 받은 추천이 있으면(store, 새로고침하면 사라짐) 그 코스로, 없으면 빈 상태로.
@@ -39,7 +41,7 @@ export function BottomNav() {
   const tabs = [
     { id: "home", label: "홈", icon: "home", href: "/", active: pathname === "/" || onSearchedPlace || onRecommend },
     { id: "map", label: "지도", icon: "pin", onClick: goToMap, active: onMap },
-    { id: "saved", label: "저장", icon: "heart", href: "/mypage", active: false },
+    { id: "saved", label: "저장", icon: "bookmark", href: "/saved", active: onSaved },
     { id: "mypage", label: "마이", icon: "user", href: "/mypage", active: pathname === "/mypage" },
   ] as const;
 

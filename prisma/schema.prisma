@@ -162,11 +162,41 @@ model User {
   // agent.ts의 PLACE_TAGS(실내/야외/데이트/저비용)와 같은 값만 담는다. 값이 4개뿐이라
   // 별도 테이블 없이 JSON 배열 하나로 충분하다고 판단.
   preferredTags Json?        @map("preferred_tags")
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamp(0)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamp(0)
   savedPlaces   SavedPlace[]
+  savedCourses  SavedCourse[]
   agentRuns     AgentRun[]
 
   @@map("users")
+}
+
+// 사용자가 "코스 저장"으로 담아둔 추천 코스.
+//
+// recommendation_routes를 가리키는 FK가 아니라 코스 내용을 JSON으로 통째 스냅샷해서
+// 들고 있다 — agent_runs는 TTL이 24시간이고(AGENT_RUN_TTL_MS) 만료분을 하드 삭제하는
+// 정리 작업이 예정돼 있어서, 포인터로 두면 저장한 코스가 하루 뒤 빈 껍데기가 된다.
+// "저장"은 그 시점에 본 코스를 그대로 남기는 기능이므로 스냅샷 쪽이 의미상으로도 맞고,
+// route_places.enriched_snapshot이 같은 이유로 이미 쓰는 방식이다.
+// snapshot 형태는 클라이언트가 그대로 받는 RecommendResult(places 포함) 그대로라
+// 저장한 코스 화면이 추천 결과 화면 컴포넌트를 그대로 재사용한다.
+model SavedCourse {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  publicId   String   @unique @default(uuid()) @map("public_id") @db.Char(36)
+  userId     BigInt   @map("user_id") @db.UnsignedBigInt
+  // 어떤 추천 런에서 저장한 코스인지. 같은 코스를 두 번 저장하지 않으려고 유니크를 걸
+  // 뿐이라 agent_runs FK는 일부러 걸지 않는다 — 만료 정리로 런이 지워져도 저장본은
+  // 남아야 한다(그게 이 테이블이 스냅샷을 들고 있는 이유다).
+  agentRunId String?  @map("agent_run_id") @db.Char(36)
+  // 목록 카드 제목. 기본값은 그 코스를 만든 사용자 질문 원문(agent_runs.user_query) —
+  // 요약 문구를 새로 지어내지 않는다.
+  title      String   @db.VarChar(250)
+  snapshot   Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentRunId])
+  @@index([userId, createdAt])
+  @@map("saved_courses")
 }
 
 model SavedPlace {

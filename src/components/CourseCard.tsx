@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Icon } from "@/components/Icon";
 import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 import { CourseStopList } from "@/components/CourseStopList";
-import type { RecommendResult, WeatherInfo, AirQualityInfo } from "@/lib/clientApi";
+import { postSavedCourse, type RecommendResult, type WeatherInfo, type AirQualityInfo } from "@/lib/clientApi";
 
 // 디자인팀 목업(디자인/채팅.png)의 "오늘의 추천 코스" 카드. 목업은 장소별 정확한 방문
 // 시각/코스 총 소요시간·총비용까지 보여주지만, 지금 agent.ts가 실제로 만들어주는
@@ -30,27 +30,19 @@ export function CourseCard({
   const { data: session } = useSession();
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const places = recommendation.places ?? [];
   const allTags = Array.from(new Set(places.flatMap((p) => p.tags ?? [])));
-  const savablePlaceIds = places.map((p) => p.placeId).filter((id): id is string => !!id);
   const [saved, setSaved] = useState(false);
 
-  // ponytail: "코스" 자체를 저장하는 스키마가 아직 없다 — 코스에 속한 장소들을 기존
-  // SavedPlace로 한 번에 저장한다(각 POST는 upsert라 중복 호출해도 안전). 별도
-  // RecommendationRoute 저장 개념이 필요해지면 그때 스키마부터 새로 설계.
+  // 저장한 코스(saved_courses)로 담는다 — 서버가 runId로 코스 내용을 스냅샷해서 넣으므로
+  // 여기선 어떤 추천인지만 넘긴다. 같은 코스를 두 번 눌러도 행이 하나만 생긴다(upsert).
   const saveCourseMutation = useMutation({
-    mutationFn: async () => {
-      await Promise.all(
-        savablePlaceIds.map((placeId) =>
-          fetch("/api/saved-places", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ placeId }),
-          })
-        )
-      );
+    mutationFn: () => postSavedCourse(recommendation.agentRunId),
+    onSuccess: () => {
+      setSaved(true);
+      queryClient.invalidateQueries({ queryKey: ["saved-courses"] });
     },
-    onSuccess: () => setSaved(true),
   });
 
   function saveCourse() {
@@ -114,7 +106,7 @@ export function CourseCard({
         </button>
         <button
           onClick={saveCourse}
-          disabled={savablePlaceIds.length === 0 || saveCourseMutation.isPending || saved}
+          disabled={places.length === 0 || saveCourseMutation.isPending || saved}
           className="flex flex-1 items-center justify-center gap-1 rounded-full bg-mint-bg py-2.5 text-[12px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
         >
           <Icon name={saved ? "check" : "bookmark"} className="h-3.5 w-3.5" />

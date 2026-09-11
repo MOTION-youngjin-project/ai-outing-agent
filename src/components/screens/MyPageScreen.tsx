@@ -116,13 +116,13 @@ export function MyPageScreen() {
 
         <div className="flex items-center justify-between px-1 pt-1">
           <h2 className="text-[15px] font-bold text-ink">저장한 장소</h2>
-          <span
-            title="준비 중인 기능입니다"
-            className="flex cursor-not-allowed items-center gap-0.5 text-[13px] text-muted/70"
+          <button
+            onClick={() => router.push("/saved")}
+            className="flex items-center gap-0.5 text-[13px] text-muted"
           >
             전체 보기
             <Icon name="next" className="h-3.5 w-3.5" />
-          </span>
+          </button>
         </div>
         <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           {savedPlacesQuery.data?.length === 0 && (

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import type { RecommendResult, PlaceWithMeta } from "@/lib/clientApi";
+import { loadRouteSnapshot } from "@/lib/services/routeSnapshot";
 
 export const runtime = "nodejs";
 
@@ -14,24 +13,10 @@ export async function GET(
   const { runId } = await params;
 
   try {
-    const route = await prisma.recommendationRoute.findFirst({
-      where: { agentRunId: runId, rankNo: 1 },
-      include: { routePlaces: { orderBy: { sequenceNo: "asc" } } },
-    });
-
-    if (!route) {
+    const result = await loadRouteSnapshot(runId);
+    if (!result) {
       return NextResponse.json({ error: "추천 결과를 찾을 수 없습니다." }, { status: 404 });
     }
-
-    const result: RecommendResult = {
-      needsMoreInfo: false,
-      message: route.recommendationReason,
-      agentRunId: runId,
-      places: route.routePlaces
-        .map((rp) => rp.enrichedSnapshot as PlaceWithMeta | null)
-        .filter((p): p is PlaceWithMeta => p !== null),
-    };
-
     return NextResponse.json({ data: result });
   } catch (error) {
     console.error("추천 결과 재조회 실패", error);
