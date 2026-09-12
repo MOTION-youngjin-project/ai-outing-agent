@@ -55,8 +55,8 @@ for (const model of MODELS) {
     } catch (err) {
       const sec = (Date.now() - started) / 1000;
       const message = err instanceof Error ? err.message : String(err);
-      rows.push({ model, case: testCase.name, sec, places: 0, real: 0, district: 0, error: message.slice(0, 80) });
-      console.log(`${model} / ${testCase.name}: ${sec.toFixed(1)}s 실패 — ${message.slice(0, 80)}`);
+      rows.push({ model, case: testCase.name, sec, places: 0, real: 0, district: 0, error: message.slice(0, 200) });
+      console.log(`${model} / ${testCase.name}: ${sec.toFixed(1)}s 실패 — ${message.slice(0, 200)}`);
     }
     await sleep(15000); // 분당 5회 제한 회피
   }

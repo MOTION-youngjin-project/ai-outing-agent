@@ -65,8 +65,19 @@ LangSmith 트레이스와 API 응답 원문으로 확인했다. 관련 커밋: `
 | `gemini-2.5-flash` | 31~52초로 너무 느림 |
 | `gemini-2.5-flash-lite` | 구조화 출력(JSON 스키마)을 못 지킴 |
 | `gemini-3.1-pro-preview` | 분당 입력토큰 한도 초과로 무료 티어에서 사용 불가 |
-| `gemini-3.8-flash`, `gemini-3.7-flash` | 503 "high demand" — 구글 쪽 혼잡, 나중에 재시도할 가치 있음 |
+| `gemini-3.8-flash`, `gemini-3.7-flash` | 503 "high demand" — 2026-09-12 재확인, 아래 참고 |
 | `gemini-flash-latest` 류 별칭 | 이름에 "gemini-3"이 없어 thought signature 400 에러 |
+
+### 3.8/3.7-flash 재평가 (2026-09-12)
+
+하루 뒤 다시 쟀지만 **여전히 못 쓴다**. 벤치 4케이스씩 = 8회 전부 실패, 에러 원문은 둘 다
+`[503 Service Unavailable] This model is currently experiencing high demand.`
+
+단서 하나: `gemini-3.8-flash`는 도구·구조화 출력 없는 짧은 단발 호출은 **성공했다**.
+같은 모델이 에이전트 경로(프롬프트 2.6k 토큰 + 도구 6개 + toolStrategy)에서는 5회 연속 503.
+혼잡할 때 큰 요청부터 거절되는 것으로 보인다 — "이제 되나" 확인할 땐 반드시 에이전트 경로로
+재봐야 하고, 단발 호출이 성공했다는 이유로 폴백 체인에 넣으면 안 된다.
+`gemini-3.7-flash`는 단발 호출도 503이다.
 
 ## 추천 장소 실재율 (진행 중)
 
