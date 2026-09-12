@@ -259,6 +259,13 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             </button>
           </form>
 
+          {/* 지역을 안 고르면 보내기 버튼이 비활성이라 클릭도 Enter도 아무 일이 안 일어난다
+              (비활성 submit 버튼은 Enter 암묵 제출까지 막는다) — 이유를 안 알려주면 앱이
+              먹통인 걸로 보인다. 지역을 고르면 저절로 사라지는 파생 렌더링. */}
+          {!regionId && input.trim() && (
+            <p className="px-4 text-[13px] text-red-600">위에서 지역을 먼저 선택해주세요.</p>
+          )}
+
           <div className="flex gap-2 overflow-x-auto pb-1">
             {inConversation
               ? QUICK_REFINEMENTS.map((text) => (
