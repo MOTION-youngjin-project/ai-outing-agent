@@ -40,7 +40,16 @@ export const facilityInfoTool = tool(
       .sort((a, b) => b.score - a.score)
       .slice(0, TOP_K);
 
-    return ranked.map((r) => `- ${r.doc.text}`).join("\n");
+    // 2026-09-13 LangSmith 트레이스: 모델이 원하는 장소가 안 나오자 질의만 바꿔가며
+    // 이 도구를 11번 부르다 recursion limit 25에 걸려 요청 하나가 통째로 실패했다.
+    // 코퍼스가 9건짜리 요약본이라 질의를 바꿔도 결과가 거의 같은데(실측: 관련·무관 질의
+    // 유사도가 0.58~0.77로 겹쳐 임계값으로도 못 거른다) 모델은 그걸 알 방법이 없다 —
+    // 그래서 결과에 직접 적어준다.
+    return (
+      ranked.map((r) => `- ${r.doc.text}`).join("\n") +
+      "\n(이 자료는 전국 주요 시설 9건짜리 요약본이다. 질의를 바꿔도 결과가 거의 같으니 " +
+      "다시 호출하지 말고, 찾는 장소가 없으면 없는 것으로 보고 네가 아는 정보로 판단해라.)"
+    );
   },
   {
     name: "search_family_facility_info",
