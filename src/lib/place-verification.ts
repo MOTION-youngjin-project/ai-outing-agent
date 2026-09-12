@@ -9,10 +9,22 @@ export type PlaceVerification = {
   fields: { operatingHours: boolean; fee: boolean; closedDays: boolean };
 };
 
+// 두 출처의 주소 표기가 다르다 — 관광 API는 "대구광역시 수성구 미술관로 40 대구미술관",
+// 카카오는 "대구 수성구 미술관로 40"처럼 시/도 정식명칭과 뒤에 붙는 상호·법정동이 다르다.
+// 완전일치를 요구하면 같은 장소인데도 전부 미검증으로 떨어져서 운영시간·요금이 영영
+// 안 나온다(2026-09-13 실측: 저장된 장소 30개 중 fee 0개). 공백과 "광역시/특별시" 표기를
+// 지운 뒤 한쪽이 다른 쪽으로 시작하면 같은 주소로 본다 — 이름은 여전히 완전일치를 요구하므로
+// 엉뚱한 장소의 영업정보가 붙을 위험은 낮다.
+function sameAddress(a: string, b: string): boolean {
+  const normalize = (text: string) => text.replace(/\s+/g, "").replace(/(광역시|특별시|특별자치시|특별자치도)/g, "").toLowerCase();
+  const [x, y] = [normalize(a), normalize(b)];
+  return !!x && !!y && (x.startsWith(y) || y.startsWith(x));
+}
+
 export function verifyPlace<T extends { name: string; address?: string; operatingHours?: string; fee?: string; sources?: unknown[] }>(place: T, evidence: TourismEvidence[]) {
   const normalize = (text: string) => text.replace(/\s+/g, "").toLowerCase();
   const candidates = evidence.filter((entry) => normalize(entry.name) === normalize(place.name));
-  const matches = place.address ? candidates.filter((entry) => normalize(entry.address) === normalize(place.address!)) : candidates;
+  const matches = place.address ? candidates.filter((entry) => sameAddress(entry.address, place.address!)) : candidates;
   const match = matches.length === 1 ? matches[0] : undefined;
   const verification: PlaceVerification = {
     source: match ? "tour_api" : place.sources?.length ? "pdf" : "unverified",
