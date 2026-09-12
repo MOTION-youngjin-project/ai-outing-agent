@@ -7,14 +7,22 @@ import { haversineMeters } from "../tools/parking.ts";
 // 다른 순수 함수 파일을 상대 경로로 값 import하는 건 괜찮음, tools/parking.ts도 마찬가지).
 
 // 카카오가 준 검색 결과 중 LLM이 말한 이름과 가장 잘 맞는 것을 고른다.
-// 이름이 일치하는 후보가 하나일 때만 연결한다. 없거나 동명이인이면 미매칭으로 남긴다.
+// 1순위는 완전일치 1건. 같은 이름이 여러 개면(진짜 동명이인) 미매칭으로 남긴다.
+// 완전일치가 없으면 이름을 통째로 품은 후보 중 가장 짧은 것 — 카카오 공식 명칭은 앞뒤에
+// 수식이 붙는 경우가 많아서(약령시한의약박물관 → "대구약령시한의약박물관",
+// 의료선교박물관 → "계명대학교 동산의료원 의료선교박물관") 완전일치만 받으면 실제로
+// 존재하는 장소를 통째로 버렸다 — 2026-09-12 실측, 실재율 0/2. 가장 짧은 것을 고르는 건
+// 군더더기가 가장 적은 후보를 뜻한다("무인민원발급창구 약령시한의약박물관" 같은 부속 시설 배제).
 export function pickBestPlaceMatch<T extends { place_name: string }>(
   name: string,
   documents: T[]
 ): T | undefined {
   const normalize = (value: string) => value.replace(/\s+/g, "").toLowerCase();
-  const matches = documents.filter(d => normalize(d.place_name) === normalize(name));
-  return matches.length === 1 ? matches[0] : undefined;
+  const target = normalize(name);
+  const exact = documents.filter(d => normalize(d.place_name) === target);
+  if (exact.length > 0) return exact.length === 1 ? exact[0] : undefined;
+  const contains = documents.filter(d => normalize(d.place_name).includes(target));
+  return contains.sort((a, b) => normalize(a.place_name).length - normalize(b.place_name).length)[0];
 }
 
 // 주소 문자열과 후보 Region 목록으로 가장 적절한 Region을 고른다.

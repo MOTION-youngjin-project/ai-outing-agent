@@ -114,6 +114,27 @@ check(
 );
 check("pickBestPlaceMatch 결과 없음", pickBestPlaceMatch("아무거나", []), undefined);
 
+// 완전일치가 없을 때의 포함관계 폴백 — 2026-09-12 실측으로 확인한 실제 실패 사례.
+// 카카오 공식 명칭에 수식이 붙어 있어서 완전일치만 받던 시절엔 둘 다 미매칭이었다.
+check(
+  "pickBestPlaceMatch 접두어 붙은 공식명 매칭",
+  pickBestPlaceMatch("약령시한의약박물관", [
+    { place_name: "대구약령시한의약박물관" },
+    { place_name: "무인민원발급창구 약령시한의약박물관" },
+  ]),
+  { place_name: "대구약령시한의약박물관" }
+);
+check(
+  "pickBestPlaceMatch 긴 공식명 매칭",
+  pickBestPlaceMatch("의료선교박물관", [{ place_name: "계명대학교 동산의료원 의료선교박물관" }]),
+  { place_name: "계명대학교 동산의료원 의료선교박물관" }
+);
+check(
+  "pickBestPlaceMatch 동명이인은 여전히 미매칭",
+  pickBestPlaceMatch("대구미술관", [{ place_name: "대구미술관" }, { place_name: "대구미술관" }]),
+  undefined
+);
+
 // pickRegionForAddress — 오늘 실제로 났던 버그(정확히 일치 검색이라 "대구"가 "대구광역시" 시드
 // 행을 못 찾고 매번 중복 생성하던 것)의 재발 방지 + 구/군 우선 매칭까지 함께 검증.
 const DAEGU = { id: 1n, name: "대구광역시", level: "시도", parentId: null };
