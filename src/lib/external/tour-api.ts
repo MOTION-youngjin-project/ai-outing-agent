@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { normalizeTourismKeyword, tourismCacheKey } from "@/lib/external/tour-api-cache";
+import { normalizeTourismKeyword, tourismCacheKey, tourismRegionParams } from "@/lib/external/tour-api-cache";
 import { coordinate } from "@/lib/coordinates";
 
 const BASE_URL = "https://apis.data.go.kr/B551011/KorService2";
@@ -156,7 +156,7 @@ async function storeTourismPlace(data: Awaited<ReturnType<typeof enrich>>) {
 async function fetchAndStoreDaeguTourism(keyword = "", limit = 5) {
   const size = Math.min(Math.max(limit, 1), 10);
   const operation = keyword.trim() ? "searchKeyword2" : "areaBasedList2";
-  const body = await request(operation, { areaCode: "4", numOfRows: String(size), pageNo: "1", arrange: "A", ...(keyword.trim() ? { keyword: keyword.trim() } : {}) });
+  const body = await request(operation, { ...tourismRegionParams(operation), numOfRows: String(size), pageNo: "1", arrange: "A", ...(keyword.trim() ? { keyword: keyword.trim() } : {}) });
   const detailed = await Promise.all(items(body).filter(item => item.contentid && item.title && coordinate(item.mapy, item.mapx)).slice(0, size).map(enrich));
   return Promise.all(detailed.filter(item => coordinate(item.result.latitude, item.result.longitude)).map(storeTourismPlace));
 }
@@ -221,6 +221,6 @@ export async function syncDaeguFestivals(limit = 10) {
 
 export async function fetchDaeguFestivals(limit = 10) {
   const today = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  const body = await request("searchFestival2", { areaCode: "4", eventStartDate: today, numOfRows: String(Math.min(Math.max(limit, 1), 20)), pageNo: "1", arrange: "A" });
+  const body = await request("searchFestival2", { ...tourismRegionParams("searchFestival2"), eventStartDate: today, numOfRows: String(Math.min(Math.max(limit, 1), 20)), pageNo: "1", arrange: "A" });
   return items(body);
 }

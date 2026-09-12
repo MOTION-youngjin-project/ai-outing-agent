@@ -26,6 +26,8 @@ import {
   computeDistanceKm,
 } from "../src/lib/services/matching.ts";
 import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMapLinks.ts";
+import { verifyPlace } from "../src/lib/place-verification.ts";
+import { tourismRegionParams } from "../src/lib/external/tour-api-cache.ts";
 import { summarize } from "./place-hit-rate.ts";
 
 let passed = 0;
@@ -323,5 +325,31 @@ check("place-hit-rate 날짜별 실재율", hitRate.days, [
   { 날짜: "2026-09-13", 추천건수: 1, 장소수: 1, 실재: 1, 실재율: "100%" },
 ]);
 check("place-hit-rate 실패한 이름만 수집", hitRate.misses.map((m) => m.name), ["동성로 카페거리 및 실내 체험 공간"]);
+
+
+// TourAPI 지역 파라미터 — 오퍼레이션마다 다르다(2026-09-13 실측). 이걸 틀리면 조회가
+// 조용히 0건이 되고 운영시간·요금이 영영 안 나온다.
+check("tourismRegionParams 목록조회는 areaCode", tourismRegionParams("areaBasedList2"), { areaCode: "4" });
+check("tourismRegionParams 키워드검색은 lDongRegnCd", tourismRegionParams("searchKeyword2"), { lDongRegnCd: "27" });
+check("tourismRegionParams 축제검색은 lDongRegnCd", tourismRegionParams("searchFestival2"), { lDongRegnCd: "27" });
+
+// verifyPlace — 두 출처의 주소 표기 차이(관광 API "대구광역시 …" + 상호, 카카오 "대구 …")
+// 때문에 완전일치로는 절대 매칭이 안 됐다. 이름은 여전히 완전일치를 요구한다.
+const tourEvidence = [
+  {
+    name: "대구미술관",
+    address: "대구광역시 수성구 미술관로 40 대구미술관",
+    operatingHours: "10:00~19:00",
+    fee: "성인 1,000원",
+    cachedAt: "2026-09-13T00:00:00.000Z",
+    expiresAt: "2026-09-14T00:00:00.000Z",
+    cache: "hit" as const,
+  },
+];
+const verified = verifyPlace({ name: "대구미술관", address: "대구 수성구 미술관로 40" }, tourEvidence);
+check("verifyPlace 표기 다른 같은 주소를 매칭", [verified.operatingHours, verified.fee], ["10:00~19:00", "성인 1,000원"]);
+check("verifyPlace 출처 표시", verified.verification.source, "tour_api");
+const otherPlace = verifyPlace({ name: "대구미술관", address: "대구 중구 달성공원로 35" }, tourEvidence);
+check("verifyPlace 다른 주소는 미검증", [otherPlace.operatingHours, otherPlace.verification.source], [undefined, "unverified"]);
 
 console.log(`✓ self-check 통과 (${passed}건)`);
