@@ -26,6 +26,7 @@ import {
   computeDistanceKm,
 } from "../src/lib/services/matching.ts";
 import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMapLinks.ts";
+import { summarize } from "./place-hit-rate.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -112,6 +113,27 @@ check(
   undefined
 );
 check("pickBestPlaceMatch 결과 없음", pickBestPlaceMatch("아무거나", []), undefined);
+
+// 완전일치가 없을 때의 포함관계 폴백 — 2026-09-12 실측으로 확인한 실제 실패 사례.
+// 카카오 공식 명칭에 수식이 붙어 있어서 완전일치만 받던 시절엔 둘 다 미매칭이었다.
+check(
+  "pickBestPlaceMatch 접두어 붙은 공식명 매칭",
+  pickBestPlaceMatch("약령시한의약박물관", [
+    { place_name: "대구약령시한의약박물관" },
+    { place_name: "무인민원발급창구 약령시한의약박물관" },
+  ]),
+  { place_name: "대구약령시한의약박물관" }
+);
+check(
+  "pickBestPlaceMatch 긴 공식명 매칭",
+  pickBestPlaceMatch("의료선교박물관", [{ place_name: "계명대학교 동산의료원 의료선교박물관" }]),
+  { place_name: "계명대학교 동산의료원 의료선교박물관" }
+);
+check(
+  "pickBestPlaceMatch 동명이인은 여전히 미매칭",
+  pickBestPlaceMatch("대구미술관", [{ place_name: "대구미술관" }, { place_name: "대구미술관" }]),
+  undefined
+);
 
 // pickRegionForAddress — 오늘 실제로 났던 버그(정확히 일치 검색이라 "대구"가 "대구광역시" 시드
 // 행을 못 찾고 매번 중복 생성하던 것)의 재발 방지 + 구/군 우선 매칭까지 함께 검증.
@@ -279,5 +301,27 @@ check(
   ["tool_end:get_air_quality", "tool_end:get_weather", "tool_start:get_air_quality", "tool_start:get_weather"]
 );
 check("consumeToolCalls 실패한 output 거부를 삼킴", leaked, null);
+
+
+// place-hit-rate의 집계 — 실재율 실험의 측정 도구라 틀리면 실험 결과 전체가 틀린다.
+// placeId가 없는 장소(카카오 검색 실패)만 miss로 세고, 되물은 응답(places 없음)은 제외한다.
+const hitRate = summarize([
+  {
+    startedAt: new Date("2026-09-12T01:00:00Z"),
+    userQuery: "중구 실내",
+    recommendationJson: { places: [{ name: "대구미술관", placeId: "p1" }, { name: "동성로 카페거리 및 실내 체험 공간", placeId: null }] },
+  },
+  { startedAt: new Date("2026-09-12T02:00:00Z"), userQuery: "어디로?", recommendationJson: { places: [] } },
+  {
+    startedAt: new Date("2026-09-13T01:00:00Z"),
+    userQuery: "수성구 아이",
+    recommendationJson: { places: [{ name: "수성못", placeId: "p2" }] },
+  },
+]);
+check("place-hit-rate 날짜별 실재율", hitRate.days, [
+  { 날짜: "2026-09-12", 추천건수: 1, 장소수: 2, 실재: 1, 실재율: "50%" },
+  { 날짜: "2026-09-13", 추천건수: 1, 장소수: 1, 실재: 1, 실재율: "100%" },
+]);
+check("place-hit-rate 실패한 이름만 수집", hitRate.misses.map((m) => m.name), ["동성로 카페거리 및 실내 체험 공간"]);
 
 console.log(`✓ self-check 통과 (${passed}건)`);
