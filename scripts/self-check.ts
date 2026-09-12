@@ -26,6 +26,7 @@ import {
   computeDistanceKm,
 } from "../src/lib/services/matching.ts";
 import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMapLinks.ts";
+import { summarize } from "./place-hit-rate.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -279,5 +280,27 @@ check(
   ["tool_end:get_air_quality", "tool_end:get_weather", "tool_start:get_air_quality", "tool_start:get_weather"]
 );
 check("consumeToolCalls 실패한 output 거부를 삼킴", leaked, null);
+
+
+// place-hit-rate의 집계 — 실재율 실험의 측정 도구라 틀리면 실험 결과 전체가 틀린다.
+// placeId가 없는 장소(카카오 검색 실패)만 miss로 세고, 되물은 응답(places 없음)은 제외한다.
+const hitRate = summarize([
+  {
+    startedAt: new Date("2026-09-12T01:00:00Z"),
+    userQuery: "중구 실내",
+    recommendationJson: { places: [{ name: "대구미술관", placeId: "p1" }, { name: "동성로 카페거리 및 실내 체험 공간", placeId: null }] },
+  },
+  { startedAt: new Date("2026-09-12T02:00:00Z"), userQuery: "어디로?", recommendationJson: { places: [] } },
+  {
+    startedAt: new Date("2026-09-13T01:00:00Z"),
+    userQuery: "수성구 아이",
+    recommendationJson: { places: [{ name: "수성못", placeId: "p2" }] },
+  },
+]);
+check("place-hit-rate 날짜별 실재율", hitRate.days, [
+  { 날짜: "2026-09-12", 추천건수: 1, 장소수: 2, 실재: 1, 실재율: "50%" },
+  { 날짜: "2026-09-13", 추천건수: 1, 장소수: 1, 실재: 1, 실재율: "100%" },
+]);
+check("place-hit-rate 실패한 이름만 수집", hitRate.misses.map((m) => m.name), ["동성로 카페거리 및 실내 체험 공간"]);
 
 console.log(`✓ self-check 통과 (${passed}건)`);

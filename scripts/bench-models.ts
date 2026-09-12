@@ -14,11 +14,21 @@ const MODELS = process.env.BENCH_MODELS?.split(",") ?? [
   "gemini-3.5-flash-lite",
 ];
 const SITUATION = "대구 날씨 예보(29도, 구름많음, 강수확률 30%), 미세먼지 좋음(PM10 25).";
-const CASES = [
+// 질문 3개로는 분산이 너무 컸다(같은 모델이 90% → 56%) — 8개로 늘렸다. 단 8개를 한 번에
+// 돌리면 모델당 하루 20요청 쿼터를 넘기니(추천 1건 = 왕복 3~5회) BENCH_CASES로 쪼개 돌린다.
+// 예: BENCH_CASES="실내 데이트,아이 동반,저비용 반나절,야외 산책"
+const ALL_CASES = [
   { name: "실내 데이트", district: "중구", query: "대구광역시에서 중구에서 데이트하기 좋은 실내 코스 추천해줘" },
   { name: "아이 동반", district: "수성구", query: "대구광역시에서 수성구에서 아이랑 갈만한 곳 추천해줘" },
   { name: "저비용 반나절", district: "중구", query: "대구광역시에서 돈 안 쓰고 반나절 정도 중구에서 놀 곳 추천해줘" },
+  { name: "야외 산책", district: "달서구", query: "대구광역시 달서구에서 산책하기 좋은 야외 코스 추천해줘" },
+  { name: "비 오는 날", district: "북구", query: "대구광역시 북구에서 비 올 때 실내에서 할 만한 거 추천해줘" },
+  { name: "부모님 동반", district: "동구", query: "대구광역시 동구에서 부모님 모시고 갈 만한 곳 추천해줘" },
+  { name: "친구들 저녁", district: "수성구", query: "대구광역시 수성구에서 친구들이랑 저녁에 놀 곳 추천해줘" },
+  { name: "전시 관람", district: "달서구", query: "대구광역시 달서구에서 전시 보고 커피 마실 코스 추천해줘" },
 ];
+const only = process.env.BENCH_CASES?.split(",").map((s) => s.trim());
+const CASES = only ? ALL_CASES.filter((c) => only.includes(c.name)) : ALL_CASES;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type Row = { model: string; case: string; sec: number; places: number; real: number; district: number; error?: string };
@@ -37,8 +47,11 @@ for (const model of MODELS) {
       const resolved = await Promise.all(places.map((p) => resolvePlaceByName(p.name, "대구").catch(() => null)));
       const real = resolved.filter(Boolean).length;
       const district = resolved.filter((p) => p && (p.roadAddress ?? p.jibunAddress ?? "").includes(testCase.district)).length;
+      // 검색이 안 된 이름을 그대로 찍는다 — 개수만 보면 "뭉뚱그린 이름" 때문인지 알 수 없다.
+      const missed = places.filter((_, i) => !resolved[i]).map((p) => p.name);
       rows.push({ model, case: testCase.name, sec, places: places.length, real, district });
       console.log(`${model} / ${testCase.name}: ${sec.toFixed(1)}s, 장소 ${places.length}개, 실재 ${real}, ${testCase.district} ${district}`);
+      if (missed.length) console.log(`  검색 실패: ${missed.join(" | ")}`);
     } catch (err) {
       const sec = (Date.now() - started) / 1000;
       const message = err instanceof Error ? err.message : String(err);
