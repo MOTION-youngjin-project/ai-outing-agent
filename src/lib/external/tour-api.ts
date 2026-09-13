@@ -24,6 +24,8 @@ export type TourismPlace = {
   parking?: string;
   petInfo?: string;
   closedDays?: string;
+  visitDuration?: string;
+  strollerRental?: "가능" | "없음";
 };
 
 export type TourismCacheStatus = "hit" | "miss" | "stale";
@@ -99,6 +101,11 @@ async function enrich(base: TourItem): Promise<{ result: TourismPlace; raw: Reco
   const fee = firstValue(intro, ["usefee", "usefeeculture", "usetimefestival"]);
   const parking = firstValue(intro, ["parking", "parkingculture", "parkingfood", "parkingleports", "parkinglodging"]);
   const petInfo = firstValue(pet, ["acmpyTypeCd", "acmpyPsblCpam", "etcAcmpyInfo", "relaPosesFclty"]);
+  // 관람 소요시간(spendtime)과 유모차 대여(chkbabycarriage*)는 detailIntro2가 이미 주고 있었는데
+  // 쓰지 않고 있었다. 대신 모델이 지어냈고, 지어낸 값은 틀렸다 — 2026-09-13 실측: 국립대구박물관을
+  // "약 2시간"이라 적었지만 spendtime은 "약 1시간 내외", RAG 코퍼스는 대구미술관을 "유모차 대여
+  // 가능"이라 적었지만 chkbabycarriageculture는 "없음"이었다.
+  const stroller = firstValue(intro, ["chkbabycarriageculture", "chkbabycarriage", "chkbabycarriageleports", "chkbabycarriageshopping"]);
   return {
     result: {
       contentId: merged.contentid, contentTypeId: merged.contenttypeid, name: merged.title,
@@ -108,6 +115,8 @@ async function enrich(base: TourItem): Promise<{ result: TourismPlace; raw: Reco
       imageUrl: merged.firstimage || images[0]?.originimgurl || undefined,
       operatingHours: cleanHtml(operatingHours), fee: cleanHtml(fee), parking: cleanHtml(parking), petInfo: cleanHtml(petInfo),
       closedDays: cleanHtml(firstValue(intro, ["restdate", "restdateculture", "restdatefood", "restdateleports", "restdateshopping"])),
+      visitDuration: cleanHtml(firstValue(intro, ["spendtime", "spendtimefestival"])),
+      strollerRental: !stroller ? undefined : stroller.includes("가능") ? "가능" : "없음",
     },
     raw: { base, common, intro, pet }, images,
   };

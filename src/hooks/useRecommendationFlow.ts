@@ -17,7 +17,6 @@ const TOOL_LABELS: Record<string, string> = {
   get_air_quality: "대기질 확인 중",
   get_weather: "날씨 확인 중",
   search_culture_events: "문화행사 찾는 중",
-  search_family_facility_info: "편의시설 정보 확인 중",
   search_daegu_parking: "주차장 확인 중",
 };
 

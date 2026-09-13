@@ -17,7 +17,9 @@ export function tourismRegionParams(operation: string): Record<string, string> {
 
 export function tourismCacheKey(keyword: string, limit: number) {
   // version 2: 위 지역 파라미터 수정 전에 캐시된 "0건" 결과를 무효화한다(캐시 TTL 24시간).
+  // version 3: visitDuration(spendtime)·strollerRental을 추가했다 — 그 전에 캐시된 payload에는
+  // 두 필드가 없어서 캐시가 만료될 때까지 소요시간이 안 붙는다.
   return createHash("sha256")
-    .update(JSON.stringify({ version: 2, region: "daegu", keyword: normalizeTourismKeyword(keyword), limit }))
+    .update(JSON.stringify({ version: 3, region: "daegu", keyword: normalizeTourismKeyword(keyword), limit }))
     .digest("hex");
 }

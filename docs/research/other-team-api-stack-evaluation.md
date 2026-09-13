@@ -12,9 +12,8 @@
 비교 없이 남의 스택만 설명하는 건 의미가 없어서, 먼저 코드로 확인한 현재 상태를 정리한다.
 
 - **LLM**: `src/lib/agent.ts` — `@langchain/google-genai`의 `ChatGoogleGenerativeAI`, `GEMINI_API_KEY`(AI Studio 무료 API 키)로 직접 호출. 모델 폴백 체인 `gemini-3.6-flash → gemini-3.5-flash → gemini-3.1-flash-lite → gemini-3.5-flash-lite`, 시도당 25초 타임아웃, 실패 모델 60초 쿨다운 캐시(인메모리 Map).
-- **RAG 임베딩**: `scripts/build-rag-index.ts`가 `GoogleGenerativeAIEmbeddings`(model: `gemini-embedding-001`, 같은 `GEMINI_API_KEY`)로 `src/lib/rag/documents.ts`의 하드코딩 문서 9건을 임베딩해서 `src/lib/rag/index.json`에 정적 캐싱.
-- **RAG 검색**: `src/lib/tools/facilityInfo.ts` — 벡터 DB 없이 `index.json`을 통째로 읽어와 코사인 유사도를 for 루프로 직접 계산, top-3 반환. Pinecone은커녕 pgvector도 아니고 순수 JS 배열 순회.
-- **RAG용 Prisma 테이블**: `prisma/schema.prisma`에 `RagDocument`/`RagChunk`(`embedding Json?` 컬럼 있음)/`RagRetrieval`이 정의돼 있지만, 실제 런타임 검색 경로(`facilityInfo.ts`)는 이 테이블을 안 쓰고 정적 `index.json`만 읽는다 — 스키마는 준비돼 있는데 배선이 안 된 상태로 보인다(이번 조사 범위 밖이라 사실 확인만 해두고 넘어감).
+- **RAG 임베딩**: `GoogleGenerativeAIEmbeddings`(model: `gemini-embedding-001`, 같은 `GEMINI_API_KEY`)를 `src/lib/embeddings.ts`에서 공통으로 쓴다. (2026-09-13 갱신: 이 절이 원래 설명하던 정적 `index.json` 코퍼스와 `scripts/build-rag-index.ts`는 삭제됐다 — [agent-latency-and-quota.md](../agent-latency-and-quota.md) 참고.)
+- **RAG 검색**: `src/lib/tools/pdfGuide.ts` — 벡터 DB 없이 `RagChunk` 행을 읽어와 코사인 유사도 + 렉시컬 점수를 JS로 직접 계산, top-5 반환. Pinecone은커녕 pgvector도 아니고 순수 JS 배열 순회.
 - **대중교통 길찾기**: 코드베이스 전체에 버스/지하철 관련 API 연동이 전혀 없음(확인됨).
 
 ---

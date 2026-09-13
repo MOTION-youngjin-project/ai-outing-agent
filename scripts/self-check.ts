@@ -352,4 +352,23 @@ check("verifyPlace 출처 표시", verified.verification.source, "tour_api");
 const otherPlace = verifyPlace({ name: "대구미술관", address: "대구 중구 달성공원로 35" }, tourEvidence);
 check("verifyPlace 다른 주소는 미검증", [otherPlace.operatingHours, otherPlace.verification.source], [undefined, "unverified"]);
 
+// 소요시간·유모차는 모델이 아니라 관광 API(spendtime/chkbabycarriage*)만 채운다.
+// 2026-09-13 실측: 모델은 국립대구박물관을 "약 2시간"이라 적었지만 spendtime은 "약 1시간
+// 내외"였고, RAG 코퍼스는 대구미술관을 "유모차 대여 가능"이라 적었지만 실제로는 "없음"이었다.
+const durationEvidence = [{ ...tourEvidence[0], visitDuration: "약 1시간 내외", strollerRental: "없음" as const }];
+const enriched = verifyPlace(
+  { name: "대구미술관", address: "대구 수성구 미술관로 40", features: ["유모차 대여", "수유실"] },
+  durationEvidence
+);
+check("verifyPlace 소요시간을 관광 API 값으로 채움", enriched.visitDuration, "약 1시간 내외");
+check("verifyPlace 유모차 '없음'이면 모델이 적은 유모차 문구를 지움", enriched.features, ["수유실"]);
+const strollerOk = verifyPlace(
+  { name: "대구미술관", address: "대구 수성구 미술관로 40", features: ["수유실"] },
+  [{ ...tourEvidence[0], strollerRental: "가능" as const }]
+);
+check("verifyPlace 유모차 '가능'이면 문구를 붙임", strollerOk.features, ["수유실", "유모차 대여 가능"]);
+// 근거가 없으면 채우지 않는다 — 빈칸이 지어낸 값보다 낫다.
+check("verifyPlace 근거 없으면 소요시간 비움", verified.visitDuration, undefined);
+check("verifyPlace 근거 없으면 features 원본 유지", verifyPlace({ name: "없는곳", features: ["유모차 대여"] }, []).features, ["유모차 대여"]);
+
 console.log(`✓ self-check 통과 (${passed}건)`);
