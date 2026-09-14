@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { fetchWeather, fetchRegions, type RecommendResult } from "@/lib/clientApi";
+import { fetchWeather, fetchAirQuality, fetchRegions, type RecommendResult } from "@/lib/clientApi";
+import { shortRegionName } from "@/lib/services/matching";
 import { CourseMapView } from "@/components/CourseMapView";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
@@ -22,12 +23,17 @@ export function MapScreen({ recommendation, runId }: { recommendation: Recommend
     queryFn: () => fetchWeather(regionId),
     enabled: !!regionId,
   });
+  const airQualityQuery = useQuery({
+    queryKey: ["air-quality", regionId],
+    queryFn: () => fetchAirQuality(regionId),
+    enabled: !!regionId,
+  });
 
   return (
     <>
       <div className="flex items-center justify-between px-5 pb-1 pt-5">
         <SidebarToggleButton />
-        <h1 className="text-[17px] font-bold text-ink">코스 지도</h1>
+        <h1 className="text-[17px] font-bold text-ink">오늘의 코스 지도</h1>
         <button
           onClick={() => router.push("/")}
           aria-label="새 질문"
@@ -37,13 +43,37 @@ export function MapScreen({ recommendation, runId }: { recommendation: Recommend
         </button>
       </div>
       <div className="flex flex-col gap-3 px-5">
+        {(regionName || weatherQuery.data || airQualityQuery.data) && (
+          <div className="flex items-center gap-4 overflow-x-auto rounded-2xl bg-white px-4 py-3 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+            {regionName && (
+              <span className="flex shrink-0 items-center gap-1.5">
+                <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
+                <span className="font-medium text-ink-soft">{shortRegionName(regionName)}</span>
+              </span>
+            )}
+            {airQualityQuery.data && (
+              <span className="flex shrink-0 items-center gap-1.5">
+                <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
+                <span className="text-muted">미세먼지</span>
+                <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
+              </span>
+            )}
+            {weatherQuery.data && (
+              <span className="flex shrink-0 items-center gap-1.5">
+                <Icon name="sun" className="h-[18px] w-[18px] text-amber-400" />
+                <span className="font-medium text-ink-soft">
+                  {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
+                  {weatherQuery.data.summary}
+                </span>
+              </span>
+            )}
+          </div>
+        )}
         <CourseMapView
           places={recommendation.places ?? []}
           runId={runId}
           cacheKey={runId}
           listHeading="오늘의 추천 코스"
-          regionName={regionName}
-          weather={weatherQuery.data}
         />
       </div>
     </>
