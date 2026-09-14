@@ -1,11 +1,16 @@
 // 한국관광공사_국문 관광정보 서비스_GW(TourAPI, KorService2) - 키워드로 장소를 검색해서
 // 대표 이미지 URL을 가져온다. 무료로 실제 장소 사진 필드를 제공하는 유일한 API로 확인됨
 // (docs/research/place-images-data-sources.md, 2026-09-08 실호출 검증 완료).
-// 주의: "대표이미지"로 지정된 사진이 화장실 안내 사진처럼 부적절한 경우가 실제로 있었음
-// (같은 조사에서 확인) — 사진이 있다고 항상 그 장소를 잘 보여준다는 보장은 없다.
+// searchKeyword2의 "대표이미지"(firstimage)는 화장실 안내 사진처럼 부적절한 경우가 실제로
+// 있었음(같은 조사, 2026-09-08 대구미술관 사례) — 그래서 firstimage 대신 detailImage2
+// 갤러리의 1번 사진을 우선 쓴다(2026-09-14). 메타데이터로 부적절한 사진을 가려낼 방법이
+// 없다는 게 이미 결론 났으니(docs/research/place-image-quality-filtering.md) 완전한 보장은
+// 아니지만, 별도로 "대표"라고 큐레이션되는 firstimage보다는 순서대로 매겨진 갤러리 사진이
+// 더 안정적이었다(같은 사례로 실측). 갤러리가 비어 있으면 firstimage로 폴백한다.
 import { tourismRegionParams } from "@/lib/external/tour-api-cache";
 
 const TOUR_API_URL = "https://apis.data.go.kr/B551011/KorService2/searchKeyword2";
+const DETAIL_IMAGE_URL = "https://apis.data.go.kr/B551011/KorService2/detailImage2";
 
 type TourApiItem = {
   contentid: string;
@@ -69,16 +74,37 @@ async function fetchWithRetry(query: string): Promise<TourApiItem[]> {
   throw lastError;
 }
 
-// 장소 대표 이미지를 찾아온다. 못 찾으면(검색 결과 없음/이미지 필드 없음) null —
+async function fetchGalleryFirst(contentId: string, apiKey: string): Promise<PlaceImageResult | null> {
+  const params = new URLSearchParams({
+    MobileOS: "ETC", MobileApp: "AiOutingAgent", _type: "json",
+    contentId, imageYN: "Y", numOfRows: "1", pageNo: "1",
+  });
+  const res = await fetch(`${DETAIL_IMAGE_URL}?serviceKey=${apiKey}&${params}`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  const data = await res.json();
+  if (data?.response?.header?.resultCode !== "0000") return null;
+
+  const item = data?.response?.body?.items?.item;
+  const first = Array.isArray(item) ? item[0] : item;
+  if (!first?.originimgurl) return null;
+
+  return { originalUrl: first.originimgurl, thumbnailUrl: first.smallimageurl || null };
+}
+
+// 장소 대표 이미지를 찾아온다. 못 찾으면(검색 결과 없음/갤러리·firstimage 둘 다 없음) null —
 // 호출부가 이미지 없이 그대로 진행한다(아이콘 placeholder 유지).
 export async function fetchPlaceImage(name: string, regionName?: string | null): Promise<PlaceImageResult | null> {
   // 2026-09-13 실측: 검색어 앞에 지역명을 붙이면("중구 달성공원") TourAPI 키워드 검색이
   // 0건이 된다 — 제목 매칭이라 지역명이 끼면 안 맞는다. 그래서 사진이 거의 안 붙었다.
   // 이름만으로 검색하고, 지역 한정은 lDongRegnCd로 한다(regionName은 결과를 고를 때만 쓴다).
   const items = await fetchWithRetry(name);
-  const item = items.find((i) => i.firstimage && (!regionName || (i.addr1 ?? "").includes(regionName))) ??
-    items.find((i) => i.firstimage);
-  if (!item?.firstimage) return null;
+  const item = items.find((i) => !regionName || (i.addr1 ?? "").includes(regionName)) ?? items[0];
+  if (!item) return null;
 
-  return { originalUrl: item.firstimage, thumbnailUrl: item.firstimage2 || null };
+  const apiKey = process.env.DATA_GO_KR_API_KEY!;
+  const gallery = await fetchGalleryFirst(item.contentid, apiKey).catch(() => null);
+  if (gallery) return gallery;
+
+  return item.firstimage ? { originalUrl: item.firstimage, thumbnailUrl: item.firstimage2 || null } : null;
 }
