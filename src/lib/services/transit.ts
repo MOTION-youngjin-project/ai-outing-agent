@@ -54,6 +54,11 @@ export async function fetchTransitDirections(
   const params = new URLSearchParams({
     fromPlace: `${from.latitude},${from.longitude}`,
     toPlace: `${to.latitude},${to.longitude}`,
+    // 기본 정류장 탐색 반경이 좁아서(내부적으로 OSM 도보 라우팅 기반) 산 중턱처럼
+    // 도로에서 떨어진 목적지는 반경 안에 정류장이 하나도 안 잡혀 빈 결과가 나온다
+    // (2026-09-14 실측: 대구사격장 — radius 없이 n_dest_offsets 0, radius=2000이면
+    // 42곳 잡혀 정상적으로 경로 나옴). 직선거리 기준 후보를 넓혀 잡도록 명시적으로 지정.
+    radius: "2000",
   });
 
   const res = await fetch(`${TRANSITOUS_URL}?${params}`, {
