@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchDrivingDirections, type PlaceWithMeta } from "@/lib/clientApi";
 import { NaverMap, type MapParkingSpot } from "@/components/NaverMap";
 import { CourseStopList } from "@/components/CourseStopList";
+import { CurrentLegView } from "@/components/CurrentLegView";
 import { Icon } from "@/components/Icon";
 import { extractCategoryLabel } from "@/lib/services/matching";
 import { WALK_DISTANCE_THRESHOLD_M, estimateWalkMinutes } from "@/lib/travelMode";
@@ -67,13 +68,34 @@ export function CourseMapView({
   const selectedPlace = selectedIndex >= 0 ? places[selectedIndex] : null;
   const prevPlace = selectedIndex > 0 ? places[selectedIndex - 1] : null;
 
+  // "현재 구간 보기"(디자인/지도(현재구간).png)는 핀 선택 카드 위에 얹히는 세 번째 상태다.
+  // 이전 장소가 있어야만(맨 처음 장소는 "현재 구간"이 없음) 켤 수 있다.
+  const [legActive, setLegActive] = useState(false);
+
+  // "전체 코스 보기"는 선택 카드로 한 단계만 돌아가는 게 아니라 목록까지 다 닫는다 —
+  // 버튼 이름 그대로 전체 코스를 보여준다.
+  function closeLeg() {
+    setLegActive(false);
+    setSelectedId(null);
+  }
+
+  function advanceLeg() {
+    const nextIndex = selectedIndex + 1;
+    if (nextIndex < places.length) {
+      setSelectedId(spotId(places[nextIndex], nextIndex));
+      // legActive는 켜진 채로 둔다 — 다음 장소도 이전 장소(방금 도착한 곳)가 있어서 이어진다.
+    } else {
+      closeLeg();
+    }
+  }
+
   return (
     <>
       {withCoords.length === 0 ? (
         <div className="flex h-64 items-center justify-center rounded-2xl bg-slate-100 text-[13px] text-muted">
           좌표가 확인된 장소가 없어 지도를 표시할 수 없어요.
         </div>
-      ) : (
+      ) : legActive && selectedPlace && prevPlace ? null : (
         <NaverMap
           center={{ latitude: withCoords[0].latitude, longitude: withCoords[0].longitude }}
           spots={spots}
@@ -84,13 +106,24 @@ export function CourseMapView({
         />
       )}
 
-      {selectedPlace ? (
+      {legActive && selectedPlace && prevPlace ? (
+        <CurrentLegView
+          from={prevPlace}
+          to={selectedPlace}
+          fromLabel={`${selectedIndex}번째`}
+          toLabel={`${selectedIndex + 1}번째`}
+          advanceLabel={selectedIndex + 1 < places.length ? "다음 장소로" : "코스 마치기"}
+          onAdvance={advanceLeg}
+          onClose={closeLeg}
+        />
+      ) : selectedPlace ? (
         <SelectedStopCard
           place={selectedPlace}
           index={selectedIndex}
           prevPlace={prevPlace}
           runId={runId}
           onClose={() => setSelectedId(null)}
+          onStartLeg={() => setLegActive(true)}
         />
       ) : (
         <>
@@ -108,12 +141,14 @@ function SelectedStopCard({
   prevPlace,
   runId,
   onClose,
+  onStartLeg,
 }: {
   place: PlaceWithMeta;
   index: number;
   prevPlace: PlaceWithMeta | null;
   runId: string | null;
   onClose: () => void;
+  onStartLeg: () => void;
 }) {
   const categoryLabel = extractCategoryLabel(place.category ?? null);
   const detailHref =
@@ -191,12 +226,12 @@ function SelectedStopCard({
             상세 보기
           </span>
         )}
-        {/* 실시간 턴바이턴 내비게이션은 별도 기능으로 미룸(다음 작업) — 그때까지는
-            준비 중으로 비활성 표시. */}
+        {/* 첫 장소는 "현재 구간"(이전 장소→여기)이 없어서 비활성. */}
         <button
-          disabled
-          title="준비 중인 기능입니다"
-          className="flex flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-full bg-slate-100 py-2 text-[13px] font-semibold text-slate-400"
+          onClick={onStartLeg}
+          disabled={!prevPlace}
+          title={prevPlace ? undefined : "첫 장소예요"}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-2 text-[13px] font-semibold text-white disabled:bg-slate-100 disabled:text-slate-400"
         >
           <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
           현재 구간 보기

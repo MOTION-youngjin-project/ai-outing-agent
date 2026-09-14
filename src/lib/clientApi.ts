@@ -96,6 +96,41 @@ export async function fetchDrivingDirections(
   }
 }
 
+export type WalkingStep = {
+  latitude: number;
+  longitude: number;
+  description: string;
+  turnType: number;
+  distanceToNextM: number | null;
+  timeToNextSec: number | null;
+};
+export type WalkingRoute = {
+  totalDistanceM: number;
+  totalTimeSec: number;
+  steps: WalkingStep[];
+  path: { latitude: number; longitude: number }[];
+};
+
+export async function fetchWalkingRoute(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+): Promise<WalkingRoute | null> {
+  try {
+    const params = new URLSearchParams({
+      fromLat: String(from.latitude),
+      fromLng: String(from.longitude),
+      toLat: String(to.latitude),
+      toLng: String(to.longitude),
+    });
+    const res = await fetch(`/api/directions/walking?${params}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchParking(district: string, placeName?: string, origin?: { latitude?: number | null; longitude?: number | null }): Promise<ParkingResult> {
     const params = new URLSearchParams({ district });
     if (placeName) params.set("placeName", placeName);

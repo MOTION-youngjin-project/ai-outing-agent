@@ -139,6 +139,7 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
       </>
     ),
     arrowUpRight: <path d="M7 17L17 7M9 7h8v8" />,
+    arrowUp: <path d="M12 19V5M6 11l6-6 6 6" />,
     train: (
       <>
         <rect x="6" y="3" width="12" height="14" rx="4" />
