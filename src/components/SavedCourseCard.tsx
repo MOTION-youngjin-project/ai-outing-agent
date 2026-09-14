@@ -86,7 +86,7 @@ export function SavedCourseCard({
                     <Icon name="pin" className="h-5 w-5 text-mint-mid" />
                   </div>
                 )}
-                <span className="absolute -left-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
+                <span className="absolute -left-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-cta text-[10px] font-bold text-white">
                   {i + 1}
                 </span>
               </div>
@@ -110,7 +110,7 @@ export function SavedCourseCard({
         onClick={() => router.push(`/saved/${saved.publicId}`)}
         className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
       >
-        <Icon name="compass" className="h-4 w-4" />
+        <Icon name="menu" className="h-4 w-4" />
         코스 다시 보기
       </button>
     </div>

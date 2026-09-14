@@ -9,6 +9,7 @@ import { deleteSavedCourse, fetchSavedCourses, fetchSavedPlaces } from "@/lib/cl
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SavedCourseCard } from "@/components/SavedCourseCard";
+import { extractCategoryLabel } from "@/lib/services/matching";
 
 type Tab = "course" | "place";
 type SortKey = "recent" | "name";
@@ -163,7 +164,7 @@ export function SavedScreen() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[16px] font-bold text-ink">{p.name}</div>
                   <div className="mt-0.5 truncate text-[13px] text-muted">
-                    {p.categorySummary ?? p.roadAddress ?? ""}
+                    {extractCategoryLabel(p.categorySummary ?? null) ?? p.roadAddress ?? ""}
                   </div>
                 </div>
                 <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />

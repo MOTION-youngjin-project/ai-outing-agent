@@ -42,7 +42,7 @@ export function CourseStopList({ places, runId }: { places: PlaceWithMeta[]; run
           <div key={i} className="flex gap-3">
             <div className="flex flex-col items-center">
               {categoryLabel && <span className="mb-1 whitespace-nowrap text-[10px] text-muted">{categoryLabel}</span>}
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[11px] font-bold text-mint-mid">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-cta text-[11px] font-bold text-white">
                 {i + 1}
               </span>
               {i < places.length - 1 && (

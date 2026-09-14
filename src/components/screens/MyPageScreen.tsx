@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { fetchSavedPlaces, fetchPreferences, putPreferences, fetchRecentQuestions } from "@/lib/clientApi";
+import { extractCategoryLabel } from "@/lib/services/matching";
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -74,7 +75,7 @@ export function MyPageScreen() {
         title="마이페이지"
         onBack={() => router.push("/")}
         right={
-          <button onClick={() => router.push("/settings")} aria-label="설정" className="p-1 text-muted">
+          <button onClick={() => router.push("/settings")} aria-label="설정" className="p-1 text-ink">
             <Icon name="gear" className="h-[22px] w-[22px]" />
           </button>
         }
@@ -90,13 +91,11 @@ export function MyPageScreen() {
               <div className="text-[17px] font-bold text-ink">{session.user?.name || session.user?.email}</div>
               <div className="mt-0.5 text-[13px] text-muted">저장한 나들이와 설정을 관리해요.</div>
             </div>
-            <button onClick={() => signOut()} className="shrink-0 text-[13px] font-medium text-accent">
-              로그아웃
-            </button>
+            <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />
           </div>
           <div className="mt-4 flex border-t border-hairline pt-3">
             {[
-              { icon: "bookmark", label: "저장한 장소", value: savedPlacesQuery.data?.length ?? 0 },
+              { icon: "pin", label: "저장한 장소", value: savedPlacesQuery.data?.length ?? 0 },
               { icon: "clock", label: "최근 추천", value: recentQuestionsQuery.data?.totalCount ?? 0 },
               // ponytail: 주차장을 따로 "저장"하는 기능 자체가 아직 없다 — 없는 걸 있는 척
               // 가짜 숫자로 보여주지 않고 정직하게 0. 기능 생기면 그때 실제 카운트로 교체.
@@ -146,7 +145,7 @@ export function MyPageScreen() {
                 <div className="flex-1">
                   <div className="text-[16px] font-bold text-ink">{p.name}</div>
                   <div className="mt-0.5 text-[13px] text-muted">
-                    {p.categorySummary ?? p.roadAddress ?? ""}
+                    {extractCategoryLabel(p.categorySummary ?? null) ?? p.roadAddress ?? ""}
                   </div>
                 </div>
                 <Icon name="next" className="h-5 w-5 text-slate-300" />
@@ -198,7 +197,9 @@ export function MyPageScreen() {
                 key={q.id}
                 className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
               >
-                <Icon name="sparkle" className="h-5 w-5 shrink-0 text-mint-mid" />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-mint-bg">
+                  <Icon name="sparkle" className="h-4 w-4 text-accent" />
+                </span>
                 <div className="flex-1">
                   <div className="text-[14px] font-medium text-ink">{q.question}</div>
                   <div className="mt-0.5 text-[12px] text-muted">{formatKoreanDateTime(q.askedAt)}</div>
