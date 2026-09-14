@@ -95,12 +95,12 @@ export function SettingsScreen() {
                 setNameSaved(false);
               }}
               placeholder="이름"
-              className={`flex-1 ${inputClass}`}
+              className={`min-w-0 flex-1 ${inputClass}`}
             />
             <button
               type="submit"
               disabled={namePending}
-              className="rounded-full bg-cta px-4 py-2.5 text-[14px] font-semibold text-white disabled:bg-slate-200"
+              className="shrink-0 whitespace-nowrap rounded-full bg-cta px-4 py-2.5 text-[14px] font-semibold text-white disabled:bg-slate-200"
             >
               저장
             </button>
