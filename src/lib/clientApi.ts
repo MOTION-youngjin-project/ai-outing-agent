@@ -205,6 +205,15 @@ export async function fetchRecentQuestions(): Promise<{ questions: RecentQuestio
   return { questions: data.data ?? [], totalCount: data.totalCount ?? 0 };
 }
 
+export type PlaceReview = {
+  author: string;
+  avatarUrl?: string | null;
+  rating: number;
+  text: string;
+  postedAt?: string | null;
+  tag?: string | null;
+};
+
 export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
   category?: string | null;
   distanceKm?: number | null;
@@ -215,6 +224,13 @@ export type PlaceWithMeta = NonNullable<Recommendation["places"]>[number] & {
   // 자동차 이동거리/시간. 실패/미계산이면 없음 — 배지 미표시로 처리한다.
   travelDistanceM?: number | null;
   travelDurationMin?: number | null;
+  // 평점/리뷰 — 실제 데이터 소스가 아직 없어서(docs/research/place-reviews-and-mood-data-sources.md)
+  // 채우는 곳이 없다. 디자인팀 리뷰 UI(디자인/방문자 리뷰.png)는 이미 나왔고 나중에 실제
+  // 데이터 소스가 정해지면 이 필드만 채우면 되도록 타입·표시 UI를 미리 준비해둔다 — 지금은
+  // 항상 undefined라 DetailScreen에 아무것도 안 뜬다(지어내지 않는다는 원칙 유지).
+  rating?: number | null;
+  reviewCount?: number | null;
+  reviews?: PlaceReview[] | null;
 };
 // agentRunId: /recommend/[runId] 라우팅용 — 새로고침/직링크 복원 때 이 id로 결과를 다시 조회한다.
 // isOwner: 새로고침/직링크 복원(GET /api/recommend/[runId])에서만 채워진다. false면 남의 링크를

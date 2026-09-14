@@ -12,6 +12,7 @@ import {
   type PlaceWithMeta,
 } from "@/lib/clientApi";
 import { splitHeadline } from "@/lib/textFormat";
+import { extractCategoryLabel } from "@/lib/services/matching";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -150,7 +151,17 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
           <h2 className="text-[22px] font-bold text-ink">{p.name}</h2>
           {(p.category || p.daeguDistrict) && (
             <p className="mt-1 text-[13px] text-muted">
-              {[p.category, p.daeguDistrict ? `대구 ${p.daeguDistrict}` : null].filter(Boolean).join(" · ")}
+              {[extractCategoryLabel(p.category ?? null), p.daeguDistrict ? `대구 ${p.daeguDistrict}` : null]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+          {p.rating != null && (
+            <p className="mt-1 flex items-center gap-1 text-[13px] text-ink-soft">
+              <Icon name="star" className="h-3.5 w-3.5 text-amber-400" />
+              <span className="font-bold text-ink">{p.rating.toFixed(1)}</span>
+              {p.reviewCount != null && <span>({p.reviewCount.toLocaleString()})</span>}
+              {p.reviews && p.reviews.length > 0 && <span>· 방문자 리뷰 {p.reviews.length}</span>}
             </p>
           )}
         </div>
@@ -252,6 +263,55 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
         </div>
         )}
 
+        {/* 실제 평점/리뷰 데이터 소스가 아직 없어 p.reviews는 항상 undefined다(위 타입 주석
+            참고) — 나중에 소스가 정해지면 이 블록이 그대로 뜬다. "더보기"는 목록 전용
+            화면 디자인이 아직 안 나와서(디자인/방문자 리뷰.png가 빈 프레임) 링크를 안 건다. */}
+        {p.reviews && p.reviews.length > 0 && (
+          <div className="flex flex-col gap-2.5 rounded-2xl bg-white px-4 py-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[15px] font-bold text-ink">방문자 리뷰</h3>
+              {p.reviewCount != null && p.reviewCount > p.reviews.length && (
+                <span className="text-[12px] font-medium text-muted">더보기 ›</span>
+              )}
+            </div>
+            <div className="flex gap-2.5 overflow-x-auto">
+              {p.reviews.slice(0, 2).map((r, i) => (
+                <div key={i} className="w-[calc(50%-5px)] shrink-0 rounded-xl border border-hairline p-3">
+                  <div className="flex items-center gap-2">
+                    {r.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- 리뷰 작성자 아바타, 외부 URL
+                      <img src={r.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
+                    ) : (
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-mint-soft text-[11px] font-bold text-mint-mid">
+                        {r.author.slice(0, 1)}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] font-semibold text-ink">{r.author}</p>
+                      {r.postedAt && <p className="text-[11px] text-muted">{r.postedAt}</p>}
+                    </div>
+                  </div>
+                  <div className="mt-1.5 flex gap-0.5">
+                    {Array.from({ length: 5 }, (_, i2) => (
+                      <Icon
+                        key={i2}
+                        name="star"
+                        className={`h-3 w-3 ${i2 < r.rating ? "text-amber-400" : "text-slate-200"}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-ink-soft">{r.text}</p>
+                  {r.tag && (
+                    <span className="mt-1.5 inline-block rounded-full bg-mint-bg px-2 py-0.5 text-[11px] font-medium text-accent">
+                      {r.tag}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {p.features && p.features.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {p.features.map((f, i) => (
@@ -288,7 +348,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
                   runId ? `/recommend/${runId}/place/${p.placeId}/parking` : `/place/${p.placeId}/parking`
                 )
               }
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
             >
               <Icon name="parking" className="h-4 w-4" />
               주차 정보 보기
