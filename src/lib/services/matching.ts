@@ -77,6 +77,12 @@ export function extractCategoryLabel(categorySummary: string | null): string | n
   return parts.at(-1) ?? null;
 }
 
+// 상단 날씨 배지 등 좁은 자리에 쓰는 짧은 지역명("대구광역시" → "대구").
+// 목업(홈 화면/Mobile.png)이 "대구 31°C"처럼 시/도 접미사 없이 쓴다.
+export function shortRegionName(name: string): string {
+  return name.replace(/(특별자치시|특별자치도|광역시|특별시|자치시|도)$/, "");
+}
+
 // 거리(km) 배지 계산. 소수 첫째자리로 반올림(예: 3.2km).
 export function computeDistanceKm(
   origin: { latitude: number; longitude: number } | null,

@@ -109,7 +109,7 @@ export function Sidebar() {
         <div className="flex flex-col gap-2.5 px-5 pt-4">
           <button
             onClick={goNewQuestion}
-            className="flex items-center justify-center gap-1.5 rounded-full bg-accent py-2.5 text-[14px] font-semibold text-white"
+            className="flex items-center justify-center gap-1.5 rounded-full bg-cta py-2.5 text-[14px] font-semibold text-white"
           >
             <Icon name="plus" className="h-4 w-4" />새 질문
           </button>

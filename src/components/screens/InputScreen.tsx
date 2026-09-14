@@ -10,6 +10,7 @@ import type { RecommendationFlow } from "@/hooks/useRecommendationFlow";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
 import { CourseCard } from "@/components/CourseCard";
+import { shortRegionName } from "@/lib/services/matching";
 
 // 결과 화면에서도 쓰는 것과 같은 문구 — 결과 화면은 홈으로 이동해 채우지만, 여긴 이미
 // 홈(채팅)이라 입력창에 바로 채우기만 하면 된다.
@@ -63,10 +64,14 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
     router.push(`/recommend/${recommendation.agentRunId}`);
   }
 
+  // 지역을 아직 안 골랐어도 상단 배지엔 대구 날씨를 기본으로 보여준다(디자인/홈 화면 —
+  // 지역 미선택 상태에서도 "대구 31°C" 배지가 항상 떠 있음).
+  const defaultRegionId = regions.find((r) => r.name === "대구광역시")?.id;
+  const badgeRegionId = regionId || defaultRegionId || "";
   const weatherQuery = useQuery({
-    queryKey: ["weather", regionId],
-    queryFn: () => fetchWeather(regionId),
-    enabled: !!regionId,
+    queryKey: ["weather", badgeRegionId],
+    queryFn: () => fetchWeather(badgeRegionId),
+    enabled: !!badgeRegionId,
   });
   const airQualityQuery = useQuery({
     queryKey: ["air-quality", regionId],
@@ -98,6 +103,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           weatherQuery.data && (
             <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
               <Icon name="sun" className="h-4 w-4 text-amber-400" />
+              {shortRegionName(regions.find((r) => r.id === badgeRegionId)?.name ?? "")}{" "}
               {weatherQuery.data.temperatureC !== null
                 ? `${weatherQuery.data.temperatureC}°C`
                 : weatherQuery.data.summary}
@@ -108,7 +114,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
       <div className="flex flex-1 flex-col gap-3 px-5">
         {!inConversation && (
           <>
-            <div className="pb-1 pt-3">
+            <div className="pb-1 pt-3 text-center">
               <h1 className="text-[26px] font-bold leading-tight text-accent">어디로 나가볼까요?</h1>
               <p className="mt-2 text-[13px] leading-relaxed text-muted">
                 지역을 고르고 하고 싶은 걸 편하게 적어주세요.
@@ -134,7 +140,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               </select>
             </div>
 
-            {(weatherQuery.data || airQualityQuery.data) && (
+            {!!regionId && (weatherQuery.data || airQualityQuery.data) && (
               <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
                 {airQualityQuery.data && (
                   <span className="flex items-center gap-1.5">
@@ -253,7 +259,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               type="submit"
               disabled={isPending || !regionId}
               aria-label="보내기"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-white transition-colors disabled:bg-slate-200 disabled:text-slate-400"
+              className={`flex h-10 w-10 items-center justify-center rounded-full bg-cta text-white transition-colors ${isPending ? "opacity-40" : ""}`}
             >
               <Icon name="send" className="h-[18px] w-[18px]" />
             </button>
@@ -304,8 +310,16 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           <span className="h-px flex-1 bg-hairline" />
         </div>
 
-        <div className="flex flex-col gap-2.5">
-          <h2 className="px-1 text-[13px] font-semibold text-muted">장소 검색</h2>
+        <div className="flex flex-col gap-2.5 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mint-bg">
+              <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
+            </span>
+            <div>
+              <h2 className="text-[15px] font-semibold text-ink">장소 검색</h2>
+              <p className="text-[12px] text-muted">가고 싶은 장소를 바로 찾아보세요.</p>
+            </div>
+          </div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -318,12 +332,12 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               value={placeQuery}
               onChange={(e) => setPlaceQuery(e.target.value)}
               placeholder="장소 이름으로 검색 (예: 대구미술관)"
-              className="flex-1 rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+              className="flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
             />
             <button
               type="submit"
               disabled={placesMutation.isPending || !placeQuery.trim()}
-              className="rounded-full bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)] disabled:text-muted/50"
+              className="rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
             >
               검색
             </button>
@@ -351,10 +365,16 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           )}
         </div>
 
-        <div className="mt-6 flex flex-col gap-2.5">
-          <h2 className="px-1 text-[13px] font-semibold text-muted">
-            문화행사 검색 <span className="font-normal">(전국 결과, 지역 필터 없음)</span>
-          </h2>
+        <div className="mt-4 flex flex-col gap-2.5 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mint-bg">
+              <Icon name="calendar" className="h-[18px] w-[18px] text-accent" />
+            </span>
+            <div>
+              <h2 className="text-[15px] font-semibold text-ink">문화행사 검색</h2>
+              <p className="text-[12px] text-muted">전국의 전시, 공연, 축제 정보를 찾아보세요.</p>
+            </div>
+          </div>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -365,7 +385,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             <select
               value={cultureDtype}
               onChange={(e) => setCultureDtype(e.target.value as (typeof CULTURE_DTYPES)[number])}
-              className="rounded-full bg-white px-3.5 py-2.5 text-[14px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none"
+              className="rounded-full border border-hairline bg-white px-3.5 py-2.5 text-[14px] font-medium text-ink-soft outline-none"
             >
               {CULTURE_DTYPES.map((d) => (
                 <option key={d} value={d}>
@@ -377,12 +397,12 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               value={cultureKeyword}
               onChange={(e) => setCultureKeyword(e.target.value)}
               placeholder="제목 검색어 (선택)"
-              className="flex-1 rounded-full bg-white px-4 py-2.5 text-[14px] text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none placeholder:text-muted/60"
+              className="flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
             />
             <button
               type="submit"
               disabled={cultureMutation.isPending}
-              className="rounded-full bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)] disabled:text-muted/50"
+              className="rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
             >
               검색
             </button>

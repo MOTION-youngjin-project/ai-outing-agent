@@ -39,7 +39,7 @@ export function BottomNav() {
   }
 
   const tabs = [
-    { id: "home", label: "홈", icon: "home", href: "/", active: pathname === "/" || onSearchedPlace || onRecommend },
+    { id: "home", label: "챗", icon: "chat", href: "/", active: pathname === "/" || onSearchedPlace || onRecommend },
     { id: "map", label: "지도", icon: "pin", onClick: goToMap, active: onMap },
     { id: "saved", label: "저장", icon: "bookmark", href: "/saved", active: onSaved },
     { id: "mypage", label: "마이", icon: "user", href: "/mypage", active: pathname === "/mypage" },

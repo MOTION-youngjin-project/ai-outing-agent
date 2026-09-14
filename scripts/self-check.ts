@@ -24,6 +24,7 @@ import {
   inferEnvironmentMode,
   extractCategoryLabel,
   computeDistanceKm,
+  shortRegionName,
 } from "../src/lib/services/matching.ts";
 import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMapLinks.ts";
 import { verifyPlace } from "../src/lib/place-verification.ts";
@@ -188,6 +189,11 @@ check("inferEnvironmentMode 신호 없으면 mixed", inferEnvironmentMode({ ...b
 check("extractCategoryLabel 계층에서 마지막 항목", extractCategoryLabel("여행 > 관광,명소 > 공원 > 도시공원"), "도시공원");
 check("extractCategoryLabel 단일 항목", extractCategoryLabel("카페"), "카페");
 check("extractCategoryLabel null", extractCategoryLabel(null), null);
+
+// shortRegionName — 상단 날씨 배지용 짧은 지역명(디자인/홈 화면이 "대구광역시"가 아니라 "대구"만 씀)
+check("shortRegionName 광역시 접미사 제거", shortRegionName("대구광역시"), "대구");
+check("shortRegionName 특별자치도 접미사 제거", shortRegionName("제주특별자치도"), "제주");
+check("shortRegionName 접미사 없으면 그대로", shortRegionName("세종"), "세종");
 
 // computeDistanceKm — 소수 첫째자리 반올림, origin/place 중 하나라도 없으면 null
 check(

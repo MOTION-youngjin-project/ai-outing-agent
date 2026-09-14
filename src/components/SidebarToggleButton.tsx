@@ -8,7 +8,7 @@ export function SidebarToggleButton() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   return (
     <button onClick={toggleSidebar} aria-label="메뉴 열기" className="p-1 text-ink lg:hidden">
-      <Icon name="menu" className="h-6 w-6" />
+      <Icon name="history" className="h-6 w-6" />
     </button>
   );
 }

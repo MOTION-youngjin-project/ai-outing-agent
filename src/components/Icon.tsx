@@ -57,6 +57,12 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
       </>
     ),
     bookmark: <path d="M6.5 4h11a1 1 0 011 1v15l-6.5-4-6.5 4V5a1 1 0 011-1z" />,
+    calendar: (
+      <>
+        <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+        <path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" />
+      </>
+    ),
     card: (
       <>
         <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
@@ -87,6 +93,16 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
     ),
     triangleAlert: <path d="M12 4.2L21.5 20H2.5L12 4.2z" strokeLinejoin="round" />,
     menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+    history: (
+      <>
+        <path d="M3 6h9M3 12h5M3 18h4" />
+        <circle cx="16" cy="13" r="7" />
+        <path d="M16 9.5V13l2.5 1.5" />
+      </>
+    ),
+    chat: (
+      <path d="M4 5.5h16a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-9l-4.2 3.6a.5.5 0 01-.8-.38V17.5H4A1.5 1.5 0 012.5 16V7A1.5 1.5 0 014 5.5z" />
+    ),
     more: (
       <>
         <circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none" />
