@@ -341,12 +341,12 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               value={placeQuery}
               onChange={(e) => setPlaceQuery(e.target.value)}
               placeholder="장소 이름으로 검색 (예: 대구미술관)"
-              className="flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
+              className="min-w-0 flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
             />
             <button
               type="submit"
               disabled={placesMutation.isPending || !placeQuery.trim()}
-              className="rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
+              className="shrink-0 whitespace-nowrap rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
             >
               검색
             </button>
@@ -394,7 +394,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             <select
               value={cultureDtype}
               onChange={(e) => setCultureDtype(e.target.value as (typeof CULTURE_DTYPES)[number])}
-              className="rounded-full border border-hairline bg-white px-3.5 py-2.5 text-[14px] font-medium text-ink-soft outline-none"
+              className="shrink-0 rounded-full border border-hairline bg-white px-3.5 py-2.5 text-[14px] font-medium text-ink-soft outline-none"
             >
               {CULTURE_DTYPES.map((d) => (
                 <option key={d} value={d}>
@@ -406,12 +406,12 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               value={cultureKeyword}
               onChange={(e) => setCultureKeyword(e.target.value)}
               placeholder="제목 검색어 (선택)"
-              className="flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
+              className="min-w-0 flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
             />
             <button
               type="submit"
               disabled={cultureMutation.isPending}
-              className="rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
+              className="shrink-0 whitespace-nowrap rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
             >
               검색
             </button>
