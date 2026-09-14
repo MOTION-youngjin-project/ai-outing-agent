@@ -176,7 +176,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           <div className="flex flex-col gap-3 pt-2">
             {lastUserMessage && (
               <div className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-[14px] leading-relaxed text-white">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-mint-bg px-4 py-2.5 text-[14px] leading-relaxed text-ink">
                   {lastUserMessage}
                 </div>
               </div>

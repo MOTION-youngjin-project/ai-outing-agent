@@ -49,7 +49,7 @@ export function ExternalMapMenu({
       <summary
         className={
           summaryClassName ??
-          "flex list-none items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white marker:content-none"
+          "flex list-none items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white marker:content-none"
         }
       >
         <Icon name={icon} className="h-4 w-4" />

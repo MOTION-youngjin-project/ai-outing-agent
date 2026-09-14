@@ -202,7 +202,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
 
         {lastUserMessage && (
           <div className="flex justify-end">
-            <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-accent px-4 py-2.5 text-[14px] text-white">
+            <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-mint-bg px-4 py-2.5 text-[14px] text-ink">
               {lastUserMessage}
             </div>
           </div>

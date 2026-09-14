@@ -34,16 +34,12 @@ export function ParkingDetailScreen({
         title={spot.name}
         onBack={() => router.push(parkingListHref)}
         right={
-          <div className="flex items-center gap-3">
-            {typeof navigator !== "undefined" && !!navigator.share && (
-              <button onClick={share} aria-label="공유하기" className="text-ink-soft">
-                <Icon name="share" className="h-5 w-5" />
-              </button>
-            )}
-            <span className="text-slate-300">
-              <Icon name="heart" className="h-5 w-5" />
-            </span>
-          </div>
+          typeof navigator !== "undefined" &&
+          !!navigator.share && (
+            <button onClick={share} aria-label="공유하기" className="text-ink-soft">
+              <Icon name="share" className="h-5 w-5" />
+            </button>
+          )
         }
       />
       <div className="flex flex-col gap-3 px-5">
@@ -139,7 +135,7 @@ export function ParkingDetailScreen({
         ) : (
           <button
             onClick={() => router.push(parkingListHref)}
-            className="mb-4 flex items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white"
+            className="mb-4 flex items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
           >
             <Icon name="send" className="h-4 w-4" />
             지도에서 보기

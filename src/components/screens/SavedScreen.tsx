@@ -67,7 +67,7 @@ export function SavedScreen() {
           </p>
           <button
             onClick={() => router.push("/login?next=/saved")}
-            className="rounded-full bg-accent px-5 py-2.5 text-[14px] font-semibold text-white"
+            className="rounded-full bg-cta px-5 py-2.5 text-[14px] font-semibold text-white"
           >
             로그인하기
           </button>
@@ -92,7 +92,7 @@ export function SavedScreen() {
               onClick={() => setTab(t.id)}
               className={
                 tab === t.id
-                  ? "flex-1 rounded-full bg-accent py-2 text-[14px] font-semibold text-white"
+                  ? "flex-1 rounded-full bg-cta py-2 text-[14px] font-semibold text-white"
                   : "flex-1 rounded-full py-2 text-[14px] font-medium text-muted"
               }
             >

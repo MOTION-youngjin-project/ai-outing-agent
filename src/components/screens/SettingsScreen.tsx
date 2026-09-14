@@ -100,7 +100,7 @@ export function SettingsScreen() {
             <button
               type="submit"
               disabled={namePending}
-              className="rounded-full bg-accent px-4 py-2.5 text-[14px] font-semibold text-white disabled:bg-slate-200"
+              className="rounded-full bg-cta px-4 py-2.5 text-[14px] font-semibold text-white disabled:bg-slate-200"
             >
               저장
             </button>
@@ -157,7 +157,7 @@ export function SettingsScreen() {
             <button
               type="submit"
               disabled={passwordPending}
-              className="mt-1 flex items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[15px] font-semibold text-white disabled:bg-slate-200"
+              className="mt-1 flex items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[15px] font-semibold text-white disabled:bg-slate-200"
             >
               비밀번호 변경
             </button>

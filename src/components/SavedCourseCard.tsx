@@ -108,7 +108,7 @@ export function SavedCourseCard({
 
       <button
         onClick={() => router.push(`/saved/${saved.publicId}`)}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white"
+        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
       >
         <Icon name="compass" className="h-4 w-4" />
         코스 다시 보기

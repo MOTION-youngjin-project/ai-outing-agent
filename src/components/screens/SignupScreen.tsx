@@ -78,7 +78,7 @@ export function SignupScreen() {
         <button
           type="submit"
           disabled={pending}
-          className="mt-1 flex items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[15px] font-semibold text-white disabled:bg-slate-200"
+          className="mt-1 flex items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[15px] font-semibold text-white disabled:bg-slate-200"
         >
           회원가입
         </button>

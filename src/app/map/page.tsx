@@ -22,7 +22,7 @@ export default function MapEmptyPage() {
         </p>
         <button
           onClick={() => router.push("/")}
-          className="rounded-full bg-accent px-5 py-2.5 text-[14px] font-semibold text-white"
+          className="rounded-full bg-cta px-5 py-2.5 text-[14px] font-semibold text-white"
         >
           홈에서 질문하기
         </button>

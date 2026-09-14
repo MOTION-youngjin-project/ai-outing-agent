@@ -97,7 +97,7 @@ export function DirectionsScreen({
                     onClick={() => setSelectedOption(r.option)}
                     className={
                       (selectedOption ?? routes[0].option) === r.option
-                        ? "flex-1 rounded-full bg-accent py-2 text-[13px] font-semibold text-white"
+                        ? "flex-1 rounded-full bg-cta py-2 text-[13px] font-semibold text-white"
                         : "flex-1 rounded-full border border-hairline bg-white py-2 text-[13px] text-ink-soft"
                     }
                   >

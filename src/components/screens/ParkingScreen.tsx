@@ -115,15 +115,7 @@ export function ParkingScreen({
 
   return (
     <>
-      <ScreenHeader
-        title={`${place.name} 주차 정보`}
-        onBack={() => router.push(placeHref)}
-        right={
-          <span className="p-1 text-slate-300">
-            <Icon name="heart" className="h-[22px] w-[22px]" />
-          </span>
-        }
-      />
+      <ScreenHeader title={`${place.name} 주차 정보`} onBack={() => router.push(placeHref)} />
 
       {parkingQuery.isLoading && (
         <div className="flex items-center gap-2 px-5">
@@ -132,7 +124,7 @@ export function ParkingScreen({
         </div>
       )}
       {parkingQuery.isError && <div role="alert" className="px-5 py-4"><p>주차장 정보를 불러오지 못했습니다.</p><button onClick={() => parkingQuery.refetch()} className="mt-2 text-accent">주차장 다시 조회</button></div>}
-      {selectedId && parkingQuery.data?.spots.some(s => s.id === selectedId) && <div className="px-5 py-3"><button className="rounded-full bg-accent px-4 py-2 text-white" onClick={() => openParkingDetail(parkingQuery.data!.spots.find(s => s.id === selectedId)!)}>선택한 주차장 상세보기</button></div>}
+      {selectedId && parkingQuery.data?.spots.some(s => s.id === selectedId) && <div className="px-5 py-3"><button className="rounded-full bg-cta px-4 py-2 text-white" onClick={() => openParkingDetail(parkingQuery.data!.spots.find(s => s.id === selectedId)!)}>선택한 주차장 상세보기</button></div>}
       {!parkingQuery.isLoading && parkingQuery.data?.spots.length === 0 && (
         <p className="px-6 text-[14px] text-muted">주차장 정보를 찾을 수 없습니다.</p>
       )}
