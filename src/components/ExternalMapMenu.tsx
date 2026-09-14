@@ -17,6 +17,7 @@ export function ExternalMapMenu({
   longitude,
   name,
   label = "지도에서 보기",
+  icon = "send",
   className,
   summaryClassName,
   // 버튼 여러 개가 나란히 있는 좁은 자리(예: CourseCard의 3버튼 줄)에 넣을 땐 메뉴가
@@ -27,6 +28,7 @@ export function ExternalMapMenu({
   longitude: number;
   name: string;
   label?: string;
+  icon?: string;
   className?: string;
   summaryClassName?: string;
   popupAbove?: boolean;
@@ -50,7 +52,7 @@ export function ExternalMapMenu({
           "flex list-none items-center justify-center gap-1.5 rounded-full bg-accent py-3 text-[14px] font-semibold text-white marker:content-none"
         }
       >
-        <Icon name="send" className="h-4 w-4" />
+        <Icon name={icon} className="h-4 w-4" />
         {label}
       </summary>
       <div

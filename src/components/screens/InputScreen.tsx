@@ -90,15 +90,24 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
   return (
     <>
       <div className="flex items-center justify-between px-5 pb-1 pt-5">
-        <SidebarToggleButton />
+        <SidebarToggleButton filled={inConversation} />
         {inConversation ? (
-          <button
-            onClick={startNewQuestion}
-            aria-label="새 질문"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
-          >
-            <Icon name="plus" className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={startNewQuestion}
+              aria-label="새 질문"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
+            >
+              <Icon name="plus" className="h-4 w-4" />
+            </button>
+            <button
+              onClick={startNewQuestion}
+              aria-label="대화 나가기"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
+            >
+              <Icon name="exit" className="h-4 w-4" />
+            </button>
+          </div>
         ) : (
           weatherQuery.data && (
             <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">

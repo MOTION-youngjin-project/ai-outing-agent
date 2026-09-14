@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import type { PlaceWithMeta } from "@/lib/clientApi";
 import { WALK_DISTANCE_THRESHOLD_M, estimateWalkMinutes } from "@/lib/travelMode";
+import { extractCategoryLabel } from "@/lib/services/matching";
 
 // 코스 정류지를 번호+점선 타임라인으로 보여주는 목록 — CourseCard(채팅 인라인 카드),
 // MapScreen(지도 탭), 저장한 코스 다시 보기가 같은 구성을 쓴다(디자인/채팅.png, 지도.png, 저장.png).
@@ -31,12 +32,16 @@ export function CourseStopList({ places, runId }: { places: PlaceWithMeta[]; run
                 </div>
               )}
             </div>
+            <Icon name="next" className="mt-1 h-4 w-4 shrink-0 self-start text-slate-300" />
           </>
         );
+
+        const categoryLabel = extractCategoryLabel(p.category ?? null);
 
         return (
           <div key={i} className="flex gap-3">
             <div className="flex flex-col items-center">
+              {categoryLabel && <span className="mb-1 whitespace-nowrap text-[10px] text-muted">{categoryLabel}</span>}
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[11px] font-bold text-mint-mid">
                 {i + 1}
               </span>
