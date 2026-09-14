@@ -1,9 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchDrivingDirections, type PlaceWithMeta } from "@/lib/clientApi";
+import { fetchDrivingDirections, type PlaceWithMeta, type WeatherInfo } from "@/lib/clientApi";
 import { NaverMap, type MapParkingSpot } from "@/components/NaverMap";
 import { CourseStopList } from "@/components/CourseStopList";
+import { Icon } from "@/components/Icon";
+import { shortRegionName } from "@/lib/services/matching";
 
 // 코스를 지도(번호 핀 + 구간 폴리라인) + 정류지 목록으로 보여주는 본문. 지도 탭(MapScreen)과
 // 저장한 코스 다시 보기(SavedCourseScreen)가 같은 화면을 쓰기 때문에 따로 뺐다.
@@ -13,11 +15,17 @@ export function CourseMapView({
   runId,
   cacheKey,
   listHeading,
+  regionName,
+  weather,
 }: {
   places: PlaceWithMeta[];
   runId: string | null;
   cacheKey: string;
   listHeading?: string;
+  // 지도 화면(디자인/지도.png)만 지도 위에 날씨 배지를 띄운다 — 저장한 코스 다시 보기는
+  // 지금 store의 regionId가 그 코스의 지역과 다를 수 있어서 안 넘긴다(MapScreen만 넘김).
+  regionName?: string;
+  weather?: WeatherInfo | null;
 }) {
   const withCoords = places.filter(
     (p): p is typeof p & { latitude: number; longitude: number } => p.latitude != null && p.longitude != null
@@ -60,12 +68,21 @@ export function CourseMapView({
           좌표가 확인된 장소가 없어 지도를 표시할 수 없어요.
         </div>
       ) : (
-        <NaverMap
-          center={{ latitude: withCoords[0].latitude, longitude: withCoords[0].longitude }}
-          spots={spots}
-          routePath={routePath.length > 1 ? routePath : undefined}
-          className="relative h-72 w-full overflow-hidden rounded-2xl"
-        />
+        <div className="relative">
+          <NaverMap
+            center={{ latitude: withCoords[0].latitude, longitude: withCoords[0].longitude }}
+            spots={spots}
+            routePath={routePath.length > 1 ? routePath : undefined}
+            className="relative h-72 w-full overflow-hidden rounded-2xl"
+          />
+          {weather && (
+            <span className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.15)]">
+              <Icon name="sun" className="h-4 w-4 text-amber-400" />
+              {regionName && shortRegionName(regionName)}{" "}
+              {weather.temperatureC !== null ? `${weather.temperatureC}°C` : weather.summary}
+            </span>
+          )}
+        </div>
       )}
 
       {listHeading && <h2 className="px-1 text-[15px] font-bold text-ink">{listHeading}</h2>}
