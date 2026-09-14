@@ -91,7 +91,7 @@ function escapeHtml(text: string): string {
 }
 
 const SPOT_BADGE_STYLE =
-  "width:26px;height:26px;border-radius:999px;background:#14b8a6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;";
+  "width:26px;height:26px;border-radius:999px;background:#1ec9b8;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;";
 
 // 기본은 번호 배지만(라벨이 항상 떠 있으면 주차장이 몰린 지역에서 서로 겹쳐 못 읽는다).
 // 마커를 탭하면 그 마커만 이름·도보시간 라벨을 위에 띄운다.
