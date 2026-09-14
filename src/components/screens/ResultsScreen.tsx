@@ -16,6 +16,7 @@ import {
 } from "@/lib/clientApi";
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { splitHeadline } from "@/lib/textFormat";
+import { extractCategoryLabel } from "@/lib/services/matching";
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { summarize } from "@/hooks/useRecommendationFlow";
 import { useAppStore } from "@/lib/store";
@@ -167,6 +168,10 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
     <>
       <div className="flex items-center justify-between px-5 pb-1 pt-5">
         <SidebarToggleButton />
+        {/* 디자인/추천 결과(정보 상세보기).png 원문 그대로는 "장소 상세 보기"인데, 이
+            화면은 이 코스로 들어온 사람이 "코스 상세 보기"를 눌러 오는 목록 화면이라
+            트리거 버튼과 맞춰 이 문구를 쓴다. */}
+        <h1 className="text-[17px] font-bold text-ink">코스 상세 보기</h1>
         <button
           onClick={() => router.push("/")}
           aria-label="새 질문"
@@ -285,9 +290,9 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                     <Icon name="pin" className="h-7 w-7 text-mint-mid" />
                   </div>
                 )}
-                {p.tags?.[0] && (
-                  <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-white">
-                    {p.tags[0]} 추천
+                {extractCategoryLabel(p.category ?? null) && (
+                  <span className="absolute left-2 top-2 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-accent">
+                    {extractCategoryLabel(p.category ?? null)}
                   </span>
                 )}
               </button>
@@ -304,7 +309,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                       onClick={() => openDetail(p)}
                       disabled={!p.placeId}
                       aria-label="상세 보기"
-                      className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-ink-soft disabled:opacity-40"
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white disabled:opacity-40"
                     >
                       <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
                     </button>
@@ -315,11 +320,11 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                       aria-label="찜하기"
                       className={
                         favoriteIndexes.has(i)
-                          ? "flex h-6 w-6 items-center justify-center rounded-full bg-accent text-white"
-                          : "flex h-6 w-6 items-center justify-center rounded-full border border-hairline text-slate-300"
+                          ? "flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white"
+                          : "flex h-7 w-7 items-center justify-center rounded-full border border-ink/70 text-ink"
                       }
                     >
-                      <Icon name="check" className="h-3.5 w-3.5" />
+                      <Icon name={favoriteIndexes.has(i) ? "check" : "checkCircle"} className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -377,7 +382,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           <button
             onClick={() => regenerateMutation.mutate()}
             disabled={regenerateMutation.isPending}
-            className="shrink-0 rounded-full bg-accent px-4 py-2 text-[13px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
+            className="shrink-0 rounded-full bg-cta px-4 py-2 text-[13px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
           >
             {regenerateMutation.isPending ? "추천 중..." : "다른 곳 추천"}
           </button>
