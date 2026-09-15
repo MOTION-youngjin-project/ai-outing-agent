@@ -47,12 +47,15 @@ export function BottomNav() {
 
   // 방금 받은 추천이 있으면(store, 새로고침하면 사라짐) 그 코스로, 없으면 빈 상태로.
   // "코스 상세 보기"(openCourseDetail)와 같은 패턴 — 캐시를 미리 채워 재요청 없이 바로 뜬다.
-  function goToMap() {
+  // navigate: 기본은 push(브라우저 자체 하단 네비 클릭). 나들플랜 앱의 네이티브 탭 전환은
+  // replace로 호출해서 탭을 오갈 때마다 히스토리가 쌓이지 않게 한다 — 안 그러면 네이티브 뒤로가기가
+  // 실제 뒤로가기 대신 탭 전환을 한 단계씩 되돌리고, Flutter의 탭 선택 표시도 웹 콘텐츠와 어긋난다.
+  function goToMap(navigate: typeof router.push = router.push) {
     if (lastRecommendation) {
       queryClient.setQueryData(["recommend", lastRecommendation.agentRunId], lastRecommendation);
-      router.push(`/map/${lastRecommendation.agentRunId}`);
+      navigate(`/map/${lastRecommendation.agentRunId}`);
     } else {
-      router.push("/map");
+      navigate("/map");
     }
   }
 
@@ -61,10 +64,10 @@ export function BottomNav() {
   useEffect(() => {
     function handleNativeTab(event: Event) {
       const tab = (event as CustomEvent<string>).detail;
-      if (tab === "map") goToMap();
-      else if (tab === "chat") router.push("/");
-      else if (tab === "saved") router.push("/saved");
-      else if (tab === "mypage") router.push("/mypage");
+      if (tab === "map") goToMap(router.replace);
+      else if (tab === "chat") router.replace("/");
+      else if (tab === "saved") router.replace("/saved");
+      else if (tab === "mypage") router.replace("/mypage");
     }
     window.addEventListener("native-tab", handleNativeTab);
     return () => window.removeEventListener("native-tab", handleNativeTab);
@@ -74,7 +77,7 @@ export function BottomNav() {
 
   const tabs = [
     { id: "home", label: "챗", icon: "chat", href: "/", active: pathname === "/" || onSearchedPlace || onRecommend },
-    { id: "map", label: "지도", icon: "pin", onClick: goToMap, active: onMap },
+    { id: "map", label: "지도", icon: "pin", onClick: () => goToMap(), active: onMap },
     { id: "saved", label: "저장", icon: "bookmark", href: "/saved", active: onSaved },
     { id: "mypage", label: "마이", icon: "user", href: "/mypage", active: pathname === "/mypage" },
   ] as const;
