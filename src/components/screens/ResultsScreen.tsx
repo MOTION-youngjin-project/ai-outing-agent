@@ -25,6 +25,7 @@ import { SidebarToggleButton } from "@/components/SidebarToggleButton";
 import { PlanShareButton } from "@/components/PlanShareButton";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { PlaceMatchRecovery } from "@/components/PlaceMatchRecovery";
+import { NearbyPlaces } from "@/components/NearbyPlaces";
 
 // 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
 // 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
@@ -372,6 +373,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                 )}
               </div>
             </div>
+            <NearbyPlaces name={p.name} category={p.category} latitude={p.latitude} longitude={p.longitude} exclude={(recommendation.places ?? []).map((place) => place.name)} />
             {/* 필터링 중엔 화면상 인접 카드가 실제 코스 순서상 인접이 아닐 수 있어 — 전체
                 보기(activeFilter === null)일 때만 이동시간을 보여준다. */}
             {activeFilter === null &&
