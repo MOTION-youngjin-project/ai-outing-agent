@@ -34,10 +34,13 @@ function toLine(event: RecommendationProgressEvent | { type: "result"; result: u
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return NextResponse.json({ error: "올바른 JSON이 필요합니다." }, { status: 400 });
-  const { history, origin } = body;
+  const { history, origin, conversationId } = body;
 
   if (!Array.isArray(history) || history.length === 0 || history.length > 50 || history.some(h => !h || !["user", "assistant"].includes(h.role) || typeof h.content !== "string" || h.content.length > 10000)) {
     return NextResponse.json({ error: "history가 필요합니다." }, { status: 400 });
+  }
+  if (conversationId !== undefined && conversationId !== null && (typeof conversationId !== "string" || !/^[0-9a-f-]{36}$/i.test(conversationId))) {
+    return NextResponse.json({ error: "conversationId 형식이 올바르지 않습니다." }, { status: 400 });
   }
   const validOrigin = parseOrigin(origin);
   const session = await auth();
@@ -60,7 +63,7 @@ export async function POST(req: NextRequest) {
         }
       };
       try {
-        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, guestHash(token));
+        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, guestHash(token), conversationId ?? null);
         emit({ type: "result", result });
       } catch (err) {
         console.error(err);

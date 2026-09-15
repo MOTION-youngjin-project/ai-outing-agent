@@ -43,8 +43,19 @@ export function summarize(rec: Recommendation): string {
 // initialRegions: 홈(/) 서버 컴포넌트가 SSR로 미리 조회해둔 시/도 목록 — regions
 // useQuery의 initialData로 꽂아서 첫 로딩 깜빡임을 없앤다.
 export function useRecommendationFlow(initialRegions?: Region[]) {
-  const { history, setHistory, input, setInput, regionId, lastRecommendation, setLastRecommendation } =
-    useAppStore();
+  const {
+    history,
+    setHistory,
+    input,
+    setInput,
+    regionId,
+    lastRecommendation,
+    setLastRecommendation,
+    recommendations,
+    setRecommendations,
+    conversationId,
+    setConversationId,
+  } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
 
@@ -84,16 +95,19 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
 
   const suggestMutation = useMutation({ mutationFn: postSuggest });
   const recommendMutation = useMutation({
-    mutationFn: (historyWithUser: ChatTurn[]) => postRecommend(historyWithUser, handleProgress),
-    onSuccess: (rec, historyWithUser) => {
+    mutationFn: ({ historyWithUser, conversationId }: { historyWithUser: ChatTurn[]; conversationId: string }) =>
+      postRecommend(historyWithUser, conversationId, handleProgress),
+    onSuccess: (rec, { historyWithUser }) => {
       const historyWithReply: ChatTurn[] = [
         ...historyWithUser,
         { role: "assistant", content: summarize(rec) },
       ];
       setHistory(historyWithReply);
       // 채팅 화면 안에 인라인 카드로 보여준다(자동으로 /recommend/[runId]로 이동하지
-      // 않음) — "코스 상세 보기"를 눌러야 그 화면으로 이동한다.
+      // 않음) — "코스 상세 보기"를 눌러야 그 화면으로 이동한다. recommendations는 history의
+      // 사용자 턴과 같은 순서로 쌓여서, 채팅 화면이 턴마다 CourseCard를 다시 그릴 때 쓴다.
       setLastRecommendation(rec);
+      setRecommendations([...recommendations, rec]);
       suggestMutation.mutate(historyWithReply);
       if (session) {
         queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
@@ -111,17 +125,21 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
     const content = history.length === 0 && regionName ? `${regionName}에서 ${text}` : text;
 
     const historyWithUser: ChatTurn[] = [...history, { role: "user", content }];
+    // 이 대화의 첫 turn이면(사이드바 "새 질문"으로 시작했거나 아직 한 번도 안 보낸 상태)
+    // 새 conversationId를 발급한다 — 과거 대화를 이어서 보내는 중이면 이미 store에 있는
+    // 값을 그대로 재사용해서 같은 대화로 계속 묶인다.
+    const activeConversationId = conversationId ?? crypto.randomUUID();
+    if (!conversationId) setConversationId(activeConversationId);
     setHistory(historyWithUser);
     setInput("");
     recommendMutation.reset();
     suggestMutation.reset();
     setActiveTools(new Set());
     setResolvingPlaces(false);
-    recommendMutation.mutate(historyWithUser);
+    recommendMutation.mutate({ historyWithUser, conversationId: activeConversationId });
   }
 
   const recommendation = lastRecommendation;
-  const promptMessage = recommendation?.needsMoreInfo ? recommendation.message : null;
   const errorMessage = recommendMutation.error instanceof Error ? recommendMutation.error.message : null;
   const displayedSuggestion =
     recommendMutation.isPending || suggestMutation.isPending
@@ -146,7 +164,6 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
     regions,
     regionsQuery,
     recommendation,
-    promptMessage,
     errorMessage,
     displayedSuggestion,
     showSuggestionChip,

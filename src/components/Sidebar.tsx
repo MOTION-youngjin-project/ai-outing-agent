@@ -3,11 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
-import { fetchRecentQuestions, type RecentQuestion } from "@/lib/clientApi";
+import { fetchRecentQuestions, fetchConversation, type RecentQuestion } from "@/lib/clientApi";
+import { summarize } from "@/hooks/useRecommendationFlow";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
+import type { ChatTurn } from "@/lib/agent";
 
 function isSameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -57,6 +59,9 @@ export function Sidebar() {
   const setHistory = useAppStore((s) => s.setHistory);
   const setInput = useAppStore((s) => s.setInput);
   const setLastRecommendation = useAppStore((s) => s.setLastRecommendation);
+  const setRecommendations = useAppStore((s) => s.setRecommendations);
+  const setConversationId = useAppStore((s) => s.setConversationId);
+  const setRegionId = useAppStore((s) => s.setRegionId);
   const router = useRouter();
   const pathname = usePathname();
   const { status } = useSession();
@@ -73,6 +78,26 @@ export function Sidebar() {
   );
   const groups = groupByDay(filtered);
 
+  // 사이드바 "대화" 항목 클릭 → 그 대화의 전체 turn을 불러와 홈 화면(채팅) 상태로
+  // 복원한다 — 새로고침 시 초기화되는 것과 동일 원칙으로 URL에는 남기지 않는다.
+  const openConversationMutation = useMutation({
+    mutationFn: fetchConversation,
+    onSuccess: (data) => {
+      const history: ChatTurn[] = data.turns.flatMap((t) => [
+        { role: "user", content: t.userQuery },
+        { role: "assistant", content: summarize(t.recommendation) },
+      ]);
+      setHistory(history);
+      setRecommendations(data.turns.map((t) => t.recommendation));
+      setConversationId(data.conversationId);
+      if (data.regionId) setRegionId(data.regionId);
+      setLastRecommendation(data.turns[data.turns.length - 1]?.recommendation ?? null);
+      setInput("");
+      router.push("/");
+      closeSidebar();
+    },
+  });
+
   function goLogin() {
     router.push(`/login?next=${encodeURIComponent(pathname)}`);
   }
@@ -81,6 +106,8 @@ export function Sidebar() {
     setHistory([]);
     setInput("");
     setLastRecommendation(null);
+    setRecommendations([]);
+    setConversationId(null);
     router.push("/");
     closeSidebar();
   }
@@ -178,16 +205,16 @@ export function Sidebar() {
                   <h2 className="pb-2 text-[12px] font-semibold text-muted">{group.label}</h2>
                   <div className="flex flex-col gap-1">
                     {group.items.map((q) => (
-                      <Link
+                      <button
                         key={q.id}
-                        href={`/recommend/${q.id}`}
-                        onClick={closeSidebar}
-                        className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-page"
+                        onClick={() => openConversationMutation.mutate(q.id)}
+                        disabled={openConversationMutation.isPending}
+                        className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-page disabled:opacity-50"
                       >
                         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full border border-hairline" />
                         <span className="min-w-0 flex-1 truncate text-[13px] text-ink-soft">{q.question}</span>
                         <span className="shrink-0 text-[11px] text-muted">{formatEntryTime(q.askedAt)}</span>
-                      </Link>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -198,7 +225,9 @@ export function Sidebar() {
 
         {authed && (
           <p className="px-5 pb-5 pt-2 text-[11px] leading-relaxed text-muted">
-            대화를 선택하면 이전 추천 흐름을 그대로 이어갈 수 있어요.
+            {openConversationMutation.isError
+              ? "대화를 불러오지 못했어요. 다시 시도해주세요."
+              : "대화를 선택하면 이전 추천 흐름을 그대로 이어갈 수 있어요."}
           </p>
         )}
       </aside>

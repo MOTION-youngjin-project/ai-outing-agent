@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
-import { fetchWeather, fetchAirQuality, fetchPlacesSearch, fetchCulturalEvents } from "@/lib/clientApi";
+import { fetchWeather, fetchAirQuality, fetchPlacesSearch, fetchCulturalEvents, type RecommendResult } from "@/lib/clientApi";
 import type { RecommendationFlow } from "@/hooks/useRecommendationFlow";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
@@ -29,13 +29,23 @@ const QUICK_PROMPTS = [
 const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
 
 export function InputScreen({ flow }: { flow: RecommendationFlow }) {
-  const { input, setInput, regionId, setRegionId, history, setHistory, setLastRecommendation } = useAppStore();
+  const {
+    input,
+    setInput,
+    regionId,
+    setRegionId,
+    history,
+    setHistory,
+    setLastRecommendation,
+    recommendations,
+    setRecommendations,
+    setConversationId,
+  } = useAppStore();
   const router = useRouter();
   const queryClient = useQueryClient();
   const {
     regions,
     recommendation,
-    promptMessage,
     errorMessage,
     displayedSuggestion,
     showSuggestionChip,
@@ -48,20 +58,23 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
   // 결과가 도착하면(needsMoreInfo든 코스든) 홈 화면 대신 채팅 스레드 형태로 전환한다
   // (디자인/채팅.png). "새 질문"을 눌러야 다시 홈 화면으로 돌아간다.
   const inConversation = !!recommendation;
-  const hasCourse = !!recommendation && !recommendation.needsMoreInfo && (recommendation.places?.length ?? 0) > 0;
-  const lastUserMessage = [...history].reverse().find((t) => t.role === "user")?.content ?? null;
+  // 대화 전체를 턴 단위로 다시 그린다 — recommendations는 history의 사용자 턴과 같은
+  // 순서로 쌓여있어서 인덱스로 짝지을 수 있다(아직 응답 안 온 마지막 턴은 recommendations
+  // 쪽이 하나 짧아서 자연히 AI 블록 없이 사용자 말풍선만 뜬다).
+  const userTurns = history.filter((t) => t.role === "user");
   const regionName = regions.find((r) => r.id === regionId)?.name;
 
   function startNewQuestion() {
     setHistory([]);
     setInput("");
     setLastRecommendation(null);
+    setRecommendations([]);
+    setConversationId(null);
   }
 
-  function openCourseDetail() {
-    if (!recommendation) return;
-    queryClient.setQueryData(["recommend", recommendation.agentRunId], recommendation);
-    router.push(`/recommend/${recommendation.agentRunId}`);
+  function openCourseDetail(rec: RecommendResult) {
+    queryClient.setQueryData(["recommend", rec.agentRunId], rec);
+    router.push(`/recommend/${rec.agentRunId}`);
   }
 
   // 지역을 아직 안 골랐어도 상단 배지엔 대구 날씨를 기본으로 보여준다(디자인/홈 화면 —
@@ -173,43 +186,54 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
         )}
 
         {inConversation && (
-          <div className="flex flex-col gap-3 pt-2">
-            {lastUserMessage && (
-              <div className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-mint-bg px-4 py-2.5 text-[14px] leading-relaxed text-ink">
-                  {lastUserMessage}
-                </div>
-              </div>
-            )}
-            <div className="flex items-start gap-2">
-              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mint-soft">
-                <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
-              </span>
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <span className="text-[12px] font-semibold text-muted">AI 추천</span>
-                {promptMessage && (
-                  <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
-                    <p className="text-[14px] leading-relaxed text-ink">{promptMessage}</p>
+          <div className="flex flex-col gap-4 pt-2">
+            {userTurns.map((turn, i) => {
+              const rec = recommendations[i];
+              const isLast = i === userTurns.length - 1;
+              const turnHasCourse = !!rec && !rec.needsMoreInfo && (rec.places?.length ?? 0) > 0;
+              return (
+                <div key={i} className="flex flex-col gap-3">
+                  <div className="flex justify-end">
+                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-mint-bg px-4 py-2.5 text-[14px] leading-relaxed text-ink">
+                      {turn.content}
+                    </div>
                   </div>
-                )}
-                {hasCourse && recommendation && (
-                  <>
-                    <CourseCard
-                      recommendation={recommendation}
-                      regionName={regionName}
-                      weather={weatherQuery.data}
-                      airQuality={airQualityQuery.data}
-                      onOpenDetail={openCourseDetail}
-                    />
-                    {recommendation.message && (
-                      <div className="rounded-2xl bg-white px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-                        {recommendation.message}
+                  {rec && (
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mint-soft">
+                        <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
+                        <span className="text-[12px] font-semibold text-muted">AI 추천</span>
+                        {rec.needsMoreInfo && (
+                          <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
+                            <p className="text-[14px] leading-relaxed text-ink">{rec.message}</p>
+                          </div>
+                        )}
+                        {turnHasCourse && (
+                          <>
+                            <CourseCard
+                              recommendation={rec}
+                              regionName={regionName}
+                              // 지난 턴의 그때 그 순간 날씨/대기질은 저장돼 있지 않다 —
+                              // 지금 값을 보여줘도 되는 건 가장 최근 턴뿐이다.
+                              weather={isLast ? weatherQuery.data : undefined}
+                              airQuality={isLast ? airQualityQuery.data : undefined}
+                              onOpenDetail={() => openCourseDetail(rec)}
+                            />
+                            {rec.message && (
+                              <div className="rounded-2xl bg-white px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                                {rec.message}
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

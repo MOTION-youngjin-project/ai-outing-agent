@@ -16,7 +16,14 @@ function SessionBoundary({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     if (identity === "loading") return;
     if (previous.current !== null && previous.current !== identity) {
-      useAppStore.setState({ input: "", history: [], lastRecommendation: null, sidebarOpen: false });
+      useAppStore.setState({
+        input: "",
+        history: [],
+        lastRecommendation: null,
+        recommendations: [],
+        conversationId: null,
+        sidebarOpen: false,
+      });
     }
     previous.current = identity;
   }, [identity]);

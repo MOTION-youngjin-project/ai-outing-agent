@@ -458,6 +458,10 @@ model AgentRun {
   // 마이페이지 "최근 질문"에 그대로 보여줄 사용자 원문 메시지(history의 마지막 turn).
   // 비로그인 요청은 userId/userQuery 둘 다 null로 남는다(추적 안 함).
   userQuery            String?               @map("user_query") @db.VarChar(1000)
+  // 같은 대화(연속된 turn)의 agent_runs를 묶는 키 — 클라이언트가 대화 시작 시 발급해서
+  // 매 turn마다 그대로 실어보낸다. 이 컬럼 도입 전 행은 전부 null로 남고(백필 없음),
+  // 그룹핑 쪽 애플리케이션 코드가 null이면 그 행의 id 자체를 대체 키로 취급한다.
+  conversationId       String?               @map("conversation_id") @db.Char(36)
   requestMode          RequestMode           @map("request_mode")
   currentRegionId      BigInt?               @map("current_region_id") @db.UnsignedBigInt
   environmentMode      EnvironmentMode?      @map("environment_mode")
@@ -479,6 +483,7 @@ model AgentRun {
   @@index([status, startedAt])
   @@index([expiresAt])
   @@index([userId, startedAt])
+  @@index([conversationId])
   @@map("agent_runs")
 }
 

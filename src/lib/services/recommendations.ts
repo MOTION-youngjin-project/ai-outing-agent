@@ -51,7 +51,8 @@ export async function createRecommendationRun(
   onProgress?: (event: RecommendationProgressEvent) => void,
   origin?: GeoPoint | null,
   userId?: string | null,
-  sessionKeyHash?: string | null
+  sessionKeyHash?: string | null,
+  conversationId?: string | null
 ): Promise<RecommendationRunResult> {
   const regionName = normalizeSido(history.map((h) => h.content).join(" "));
   const region = regionName ? await findOrCreateSidoRegion(regionName) : null;
@@ -74,6 +75,7 @@ export async function createRecommendationRun(
         userId: userIdBigInt,
         sessionKeyHash: userId ? null : sessionKeyHash,
         userQuery,
+        conversationId,
         requestMode: "question",
         currentRegionId: region?.id,
         status: "failed",
@@ -95,6 +97,7 @@ export async function createRecommendationRun(
           userId: userIdBigInt,
         sessionKeyHash: userId ? null : sessionKeyHash,
           userQuery,
+          conversationId,
           requestMode: "question",
           currentRegionId: region?.id,
           status: "completed",
@@ -220,6 +223,7 @@ export async function createRecommendationRun(
         userId: userIdBigInt,
         sessionKeyHash: userId ? null : sessionKeyHash,
         userQuery,
+        conversationId,
         requestMode: "question",
         currentRegionId: region?.id,
         status: unresolvedCount > 0 ? "partial" : "completed",

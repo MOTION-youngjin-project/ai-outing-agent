@@ -317,6 +317,7 @@ export function getCurrentPosition(): Promise<{ latitude: number; longitude: num
 // 장소 정리 단계를 onProgress로 실시간 전달하고, "result"/"error" 줄로 끝난다.
 export async function postRecommend(
   history: ChatTurn[],
+  conversationId?: string | null,
   onProgress?: (event: RecommendProgressEvent) => void
 ): Promise<RecommendResult> {
   const origin = await getCurrentPosition();
@@ -326,7 +327,7 @@ export async function postRecommend(
     res = await fetch("/api/recommend", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ history, origin }),
+      body: JSON.stringify({ history, origin, conversationId }),
     });
   } catch {
     throw new Error("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
@@ -364,6 +365,17 @@ export async function postRecommend(
 export async function fetchRecommendation(runId: string): Promise<RecommendResult> {
   const res = await fetch(`/api/recommend/${runId}`);
   if (!res.ok) throw new Error("추천 결과를 찾을 수 없습니다.");
+  const data = await res.json();
+  return data.data;
+}
+
+export type ConversationTurn = { agentRunId: string; userQuery: string; recommendation: RecommendResult };
+export type ConversationData = { conversationId: string; regionId: string | null; turns: ConversationTurn[] };
+
+// 사이드바 "대화 기록"에서 과거 대화를 열어 홈 화면으로 이어서 보낼 때 쓴다(로그인 소유자만).
+export async function fetchConversation(conversationId: string): Promise<ConversationData> {
+  const res = await fetch(`/api/conversations/${conversationId}`);
+  if (!res.ok) throw new Error("대화를 찾을 수 없습니다.");
   const data = await res.json();
   return data.data;
 }
