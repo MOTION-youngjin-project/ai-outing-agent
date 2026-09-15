@@ -59,22 +59,25 @@ async function fetchOnce(nx: number, ny: number, apiKey: string) {
     data?.response?.body?.items?.item ?? [];
   if (items.length === 0) throw new Error("예보 데이터를 찾을 수 없습니다.");
 
-  // 가장 이른 fcstDate+fcstTime(다음 예보 시각) 하나를 골라 그 시각의 카테고리 값들을 모은다.
-  const earliest = [...items].sort((a, b) =>
-    (a.fcstDate + a.fcstTime).localeCompare(b.fcstDate + b.fcstTime)
-  )[0];
-  const target = earliest.fcstDate + earliest.fcstTime;
-  const slot = items.filter((i) => i.fcstDate + i.fcstTime === target);
-
-  const get = (category: string) => slot.find((i) => i.category === category)?.fcstValue;
-  return {
-    fcstDate: earliest.fcstDate,
-    fcstTime: earliest.fcstTime,
-    sky: SKY_LABEL[get("SKY") ?? ""] ?? "정보없음",
-    pty: PTY_LABEL[get("PTY") ?? ""] ?? "없음",
-    tmp: get("TMP"),
-    pop: get("POP"),
-  };
+  // 한 응답에 포함된 시간대별 값을 보존한다. 배지를 펼칠 때 기상청을 다시 호출하지 않는다.
+  const grouped = new Map<string, typeof items>();
+  for (const item of items) {
+    const key = item.fcstDate + item.fcstTime;
+    const slot = grouped.get(key) ?? [];
+    slot.push(item);
+    grouped.set(key, slot);
+  }
+  const hourly = [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([key, slot]) => {
+      const get = (category: string) => slot.find((item) => item.category === category)?.fcstValue;
+      const tmp = get("TMP");
+      if (tmp === undefined) return [];
+      return [{ fcstDate: key.slice(0, 8), fcstTime: key.slice(8), sky: SKY_LABEL[get("SKY") ?? ""] ?? "정보없음", pty: PTY_LABEL[get("PTY") ?? ""] ?? "없음", tmp, pop: get("POP") }];
+    })
+    .slice(0, 12);
+  if (hourly.length === 0) throw new Error("시간별 예보 데이터를 찾을 수 없습니다.");
+  return { ...hourly[0], hourly };
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
