@@ -31,10 +31,17 @@ export type SavedPlaceResult = {
 };
 export type RecentQuestion = { id: string; question: string; askedAt: string };
 
+// 지금은 대구권 데이터만 있는 앱이라(핸드오프 2026-09-14), 지역 선택지를 대구광역시 +
+// 그 구/군으로 좁힌다. 다른 지역 데이터가 쌓이면 이 필터부터 걷어낼 것.
 export async function fetchRegions(): Promise<Region[]> {
-  const res = await fetch("/api/regions?level=sido");
-  const data = await res.json();
-  return data.data ?? [];
+  const sidoRes = await fetch("/api/regions?level=sido&search=대구광역시");
+  const sidoData = await sidoRes.json();
+  const daegu: Region | undefined = sidoData.data?.[0];
+  if (!daegu) return sidoData.data ?? [];
+
+  const districtRes = await fetch(`/api/regions?parentId=${daegu.id}`);
+  const districtData = await districtRes.json();
+  return [daegu, ...(districtData.data ?? [])];
 }
 
 export async function fetchWeather(regionId: string): Promise<WeatherInfo | null> {
