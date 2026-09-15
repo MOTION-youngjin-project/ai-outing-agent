@@ -1,10 +1,27 @@
 "use client";
 
+import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
 import { useAppStore } from "@/lib/store";
+
+// 나들플랜 안드로이드 앱(webview_flutter)이 WebView User-Agent 뒤에 붙이는 식별자.
+// 앱 안에서 열렸을 때는 네이티브 탭바와 중복되는 이 웹 자체 네비를 숨긴다.
+const NATIVE_APP_UA_MARKER = "NadeulPlanApp";
+
+// UA는 마운트 이후에만(클라이언트에서만) 읽을 수 있고 이후 바뀌지 않으니, 구독이 필요 없는
+// useSyncExternalStore로 서버/클라이언트 스냅샷을 분리한다 — 하이드레이션 mismatch 없이.
+function subscribeNever() {
+  return () => {};
+}
+function isNativeAppSnapshot() {
+  return navigator.userAgent.includes(NATIVE_APP_UA_MARKER);
+}
+function isNativeAppServerSnapshot() {
+  return false;
+}
 
 // 모바일 전용(데스크톱은 AppShell이 lg:hidden으로 감싼다) — 사이드바 화면(홈/채팅/마이)에서만 노출.
 // "추천"(/recommend) 탭은 "지도" 탭으로 교체됨(디자인/지도.png) — /recommend/[runId]는
@@ -25,7 +42,8 @@ export function BottomNav() {
   const onSaved = SAVED_PATH.test(pathname);
   const onSearchedPlace = SEARCHED_PLACE_PATH.test(pathname);
   const show = pathname === "/" || onRecommend || onMap || onSaved || onSearchedPlace || pathname === "/mypage";
-  if (!show) return null;
+
+  const isNativeApp = useSyncExternalStore(subscribeNever, isNativeAppSnapshot, isNativeAppServerSnapshot);
 
   // 방금 받은 추천이 있으면(store, 새로고침하면 사라짐) 그 코스로, 없으면 빈 상태로.
   // "코스 상세 보기"(openCourseDetail)와 같은 패턴 — 캐시를 미리 채워 재요청 없이 바로 뜬다.
@@ -37,6 +55,22 @@ export function BottomNav() {
       router.push("/map");
     }
   }
+
+  // 나들플랜 앱의 네이티브 하단 탭바가 탭 눌릴 때 던지는 추상 이벤트를 받아 실제 라우팅을
+  // 결정한다 — 어느 URL로 갈지는 각 탭 버튼과 동일한 로직(goToMap 등)을 그대로 재사용.
+  useEffect(() => {
+    function handleNativeTab(event: Event) {
+      const tab = (event as CustomEvent<string>).detail;
+      if (tab === "map") goToMap();
+      else if (tab === "chat") router.push("/");
+      else if (tab === "saved") router.push("/saved");
+      else if (tab === "mypage") router.push("/mypage");
+    }
+    window.addEventListener("native-tab", handleNativeTab);
+    return () => window.removeEventListener("native-tab", handleNativeTab);
+  });
+
+  if (!show || isNativeApp) return null;
 
   const tabs = [
     { id: "home", label: "챗", icon: "chat", href: "/", active: pathname === "/" || onSearchedPlace || onRecommend },
