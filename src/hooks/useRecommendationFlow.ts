@@ -13,6 +13,13 @@ import {
   type RecommendProgressEvent,
 } from "@/lib/clientApi";
 
+// 나들플랜 안드로이드 앱(webview_flutter)이 등록하는 채널 — 일반 브라우저에는 없음.
+declare global {
+  interface Window {
+    NativeChatBridge?: { postMessage(message: string): void };
+  }
+}
+
 const TOOL_LABELS: Record<string, string> = {
   get_air_quality: "대기질 확인 중",
   get_weather: "날씨 확인 중",
@@ -108,6 +115,9 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
       // 사용자 턴과 같은 순서로 쌓여서, 채팅 화면이 턴마다 CourseCard를 다시 그릴 때 쓴다.
       setLastRecommendation(rec);
       setRecommendations([...recommendations, rec]);
+      // 사용자가 다른 탭에 가 있는 동안 답변이 도착했으면 네이티브 챗 탭에 알림 점을 띄운다
+      // — 챗 탭 안(currentIndex===0)이면 Flutter가 무시하므로 항상 호출해도 된다.
+      window.NativeChatBridge?.postMessage("response-ready");
       suggestMutation.mutate(historyWithReply);
       if (session) {
         queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
