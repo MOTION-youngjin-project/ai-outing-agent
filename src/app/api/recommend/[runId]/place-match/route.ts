@@ -2,18 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { GUEST_COOKIE, guestHash } from "@/lib/recommendation-owner";
-import { getCachedPlaceById, recoverPlaceMatch } from "@/lib/services/places";
+import { getCachedPlaceById, recoverPlaceMatch, resolveSelectedCandidate, type PlaceMatchCandidate } from "@/lib/services/places";
 import { extractCategoryLabel } from "@/lib/services/matching";
 import type { RecommendResult, PlaceWithMeta } from "@/lib/clientApi";
 
 export const runtime = "nodejs";
 
+function isValidCandidate(value: unknown): value is PlaceMatchCandidate {
+  const c = value as Partial<PlaceMatchCandidate> | null;
+  return !!c && typeof c.externalId === "string" && typeof c.name === "string" && typeof c.address === "string"
+    && typeof c.latitude === "number" && typeof c.longitude === "number" && typeof c.mapUrl === "string";
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params;
   const body = await request.json().catch(() => null);
   const placeIndex = body?.placeIndex;
-  const selectedExternalId = body?.selectedExternalId;
-  if (!Number.isInteger(placeIndex) || placeIndex < 0 || (selectedExternalId !== undefined && (typeof selectedExternalId !== "string" || !/^\d+$/.test(selectedExternalId)))) {
+  const selectedCandidate = body?.selectedCandidate;
+  if (!Number.isInteger(placeIndex) || placeIndex < 0 || (selectedCandidate !== undefined && !isValidCandidate(selectedCandidate))) {
     return NextResponse.json({ error: "장소 재검색 요청이 올바르지 않습니다." }, { status: 400 });
   }
 
@@ -42,11 +48,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const region = run.currentRegion?.level === "구군" ? run.currentRegion.parent?.name : run.currentRegion?.name;
 
   try {
-    const recovered = await recoverPlaceMatch(original.name, region, {
-      address: original.address,
-      district: original.daeguDistrict,
-      reference: neighbor ? { latitude: neighbor.latitude!, longitude: neighbor.longitude! } : null,
-    }, selectedExternalId);
+    // 사용자가 이미 후보 목록에서 하나를 골랐으면(selectedCandidate) 그 데이터로 바로
+    // 확정한다 — 카카오를 다시 검색하면 결과가 바뀌어 방금 고른 후보를 못 찾을 수 있다.
+    const recovered = selectedCandidate
+      ? { place: await resolveSelectedCandidate(selectedCandidate), candidates: [] as PlaceMatchCandidate[] }
+      : await recoverPlaceMatch(original.name, region, {
+          address: original.address,
+          district: original.daeguDistrict,
+          reference: neighbor ? { latitude: neighbor.latitude!, longitude: neighbor.longitude! } : null,
+        });
     if (!recovered.place) return NextResponse.json({ data: { place: null, candidates: recovered.candidates } });
 
     const cached = await getCachedPlaceById(recovered.place.publicId);

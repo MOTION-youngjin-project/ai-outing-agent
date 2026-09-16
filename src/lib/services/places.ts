@@ -228,7 +228,17 @@ export async function searchAndCachePlaces(query: string): Promise<CachedPlace[]
 // 그래도 못 찾으면(검색 결과 0건) null — 호출부가 그 장소는 DB 연결 없이 건너뛴다.
 export async function resolvePlaceByName(name: string, regionName?: string | null, hint: PlaceMatchHint = {}): Promise<Place | null> {
   const query = regionName ? `${regionName} ${name}` : name;
-  const documents = await fetchPlaces(query).catch(() => []);
+  // fetchPlaces 자체가 이미 3회 재시도한다 — 여기서 실패를 삼키면 API 장애 때마다
+  // recoverPlaceMatch의 최대 4개 쿼리(각 3회 재시도, 총 12회)로 또 넘어가 장애를
+  // 증폭시킨다. 검색 자체가 실패한 경우와 "검색은 됐지만 못 찾음"을 구분해서,
+  // 전자는 바로 포기한다.
+  let documents: KakaoDocument[];
+  try {
+    documents = await fetchPlaces(query);
+  } catch (err) {
+    console.error(`장소 검색 실패(${name}):`, err);
+    return null;
+  }
   const candidates = regionName ? documents.filter(d => {
     const address = `${d.road_address_name} ${d.address_name}`;
     const sido = normalizeSido(regionName);
@@ -288,10 +298,37 @@ export async function recoverPlaceMatch(
   selectedExternalId?: string,
 ): Promise<{ place: Place | null; candidates: PlaceMatchCandidate[] }> {
   const result = await findPlaceMatchCandidates(name, regionName, hint);
+  // 주소나 기준 좌표 같은 실제 corroboration 없이 이름 유사도만으로는 자동으로
+  // 고르지 않는다 — district(지역) 필터만으로는 동명이인/동일 상호 지점을
+  // 구분 못 해서, 힌트 없는 호출(예: 주차장 검색의 장소명 매칭)에서 엉뚱한
+  // 좌표를 조용히 골라버릴 수 있다. 이 경우는 후보만 돌려주고 자동 선택은 안 한다.
+  const canAutoPick = !!hint.address || !!hint.reference;
   const selected = selectedExternalId
     ? result.documents.find(document => document.id === selectedExternalId)
-    : pickConfidentPlaceMatch(name, result.documents, hint);
+    : canAutoPick ? pickConfidentPlaceMatch(name, result.documents, hint) : undefined;
   if (!selected) return { place: null, candidates: result.candidates };
   const source = await getOrCreateDataSource("PLACE_SEARCH", "장소 검색 API (Kakao Local)", "search_api");
   return { place: await upsertPlaceFromDoc(selected, source.id), candidates: result.candidates };
+}
+
+// 사용자가 findPlaceMatchCandidates가 앞서 돌려준 후보 하나를 화면에서 직접 고른
+// 경우 쓴다. selectedExternalId만 받아 recoverPlaceMatch로 카카오를 다시 검색하면,
+// 그 사이 카카오 결과 순서/구성이 바뀌어 방금 고른 id를 새 결과에서 못 찾을 수
+// 있다 — 사용자의 선택이 조용히 무시되고 엉뚱한 새 후보 목록으로 바뀌는 문제였다.
+// 후보 자체가 매칭에 필요한 정보(이름/주소/좌표 등)를 이미 담고 있으므로, 그걸
+// 그대로 써서 재검색 없이 확정한다.
+export async function resolveSelectedCandidate(candidate: PlaceMatchCandidate): Promise<Place> {
+  const doc: KakaoDocument = {
+    id: candidate.externalId,
+    place_name: candidate.name,
+    category_name: candidate.category ?? "",
+    road_address_name: candidate.address,
+    address_name: candidate.address,
+    phone: "",
+    place_url: candidate.mapUrl,
+    x: String(candidate.longitude),
+    y: String(candidate.latitude),
+  };
+  const source = await getOrCreateDataSource("PLACE_SEARCH", "장소 검색 API (Kakao Local)", "search_api");
+  return upsertPlaceFromDoc(doc, source.id);
 }
