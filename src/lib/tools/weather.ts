@@ -67,16 +67,17 @@ async function fetchOnce(nx: number, ny: number, apiKey: string) {
     slot.push(item);
     grouped.set(key, slot);
   }
+  // 슬롯에 TMP가 없다고 통째로 버리면(응답이 부분적으로 잘려온 경우) hourly가
+  // 비어서 아래에서 던지고, 그러면 최초 조회(캐시 없음)인 지역은 날씨 배지 자체가
+  // 사라진다. tmp는 없을 수 있는 값으로 두고 그대로 내보낸다 — 호출부(weatherTool,
+  // getCachedWeather)는 이미 tmp가 없을 때 null/"?"로 대체하도록 돼 있다.
   const hourly = [...grouped.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .flatMap(([key, slot]) => {
+    .map(([key, slot]) => {
       const get = (category: string) => slot.find((item) => item.category === category)?.fcstValue;
-      const tmp = get("TMP");
-      if (tmp === undefined) return [];
-      return [{ fcstDate: key.slice(0, 8), fcstTime: key.slice(8), sky: SKY_LABEL[get("SKY") ?? ""] ?? "정보없음", pty: PTY_LABEL[get("PTY") ?? ""] ?? "없음", tmp, pop: get("POP") }];
+      return { fcstDate: key.slice(0, 8), fcstTime: key.slice(8), sky: SKY_LABEL[get("SKY") ?? ""] ?? "정보없음", pty: PTY_LABEL[get("PTY") ?? ""] ?? "없음", tmp: get("TMP"), pop: get("POP") };
     })
     .slice(0, 12);
-  if (hourly.length === 0) throw new Error("시간별 예보 데이터를 찾을 수 없습니다.");
   return { ...hourly[0], hourly };
 }
 

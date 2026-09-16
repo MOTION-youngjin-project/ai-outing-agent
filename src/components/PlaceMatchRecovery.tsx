@@ -14,13 +14,13 @@ export function PlaceMatchRecovery({ runId, placeIndex, placeName, readOnly, onR
   const [status, setStatus] = useState<"idle" | "loading" | "failed">("idle");
   const [candidates, setCandidates] = useState<PlaceMatchCandidate[]>([]);
 
-  async function retry(selectedExternalId?: string) {
+  async function retry(selectedCandidate?: PlaceMatchCandidate) {
     setStatus("loading");
     try {
       const response = await fetch(`/api/recommend/${encodeURIComponent(runId)}/place-match`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ placeIndex, ...(selectedExternalId ? { selectedExternalId } : {}) }),
+        body: JSON.stringify({ placeIndex, ...(selectedCandidate ? { selectedCandidate } : {}) }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error);
@@ -52,7 +52,7 @@ export function PlaceMatchRecovery({ runId, placeIndex, placeName, readOnly, onR
           <ul className="space-y-2">
             {candidates.map(candidate => (
               <li key={candidate.externalId}>
-                <button type="button" disabled={status === "loading"} onClick={() => retry(candidate.externalId)}
+                <button type="button" disabled={status === "loading"} onClick={() => retry(candidate)}
                   className="w-full rounded-lg bg-white px-3 py-2 text-left shadow-sm disabled:opacity-50">
                   <span className="block font-semibold text-ink">{candidate.name}</span>
                   <span className="mt-0.5 block text-[11px] text-muted">{candidate.address || "주소 정보 없음"}</span>

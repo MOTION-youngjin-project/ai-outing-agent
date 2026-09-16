@@ -98,7 +98,9 @@ async function loadPlaceLifeInfo(placePublicId: string, refresh: boolean): Promi
 }
 
 export function getPlaceLifeInfo(placePublicId: string, refresh = false): Promise<PlaceLifeInfo | null> {
-  const key = placePublicId;
+  // refresh 여부를 키에 포함하지 않으면, 진행 중인 일반 조회에 새로고침 요청이
+  // 합쳐져서 새로고침이 무시되고 캐시된 결과가 그대로 반환된다.
+  const key = `${placePublicId}:${refresh}`;
   const existing = inFlight.get(key);
   if (existing) return existing;
   const pending = loadPlaceLifeInfo(placePublicId, refresh).finally(() => inFlight.delete(key));
