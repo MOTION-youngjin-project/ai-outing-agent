@@ -198,7 +198,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mint-soft">
                         <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
                       </span>
-                      <div className="flex min-w-0 max-w-[85%] flex-col gap-2">
+                      <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <span className="text-[12px] font-semibold text-muted">AI 추천</span>
                         {rec.needsMoreInfo && (
                           <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
