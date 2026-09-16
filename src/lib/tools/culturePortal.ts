@@ -1,5 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { withRetry } from "../withRetry.ts";
 
 // 문화체육관광부_문화예술공연(통합) - 문화공공데이터광장(KCISA)
 // https://www.culture.go.kr/data/openapi/openapiView.do?id=580
@@ -86,8 +87,6 @@ async function fetchOnce(dtype: string, keyword: string, apiKey: string) {
   return parsed.filter((item) => !isEventEnded(item.eventPeriod));
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // 성공 결과만 1시간 캐시한다. 행사 목록은 하루 단위로 바뀌는데 이 API는 같은 질의에도
 // 25초 타임아웃과 0.4초 응답을 오가서, 한 번 받아둔 결과를 재사용하는 편이 훨씬 안정적이다.
 // (프로세스 메모리 — 인스턴스가 하나뿐이라 테이블을 새로 만들 이유가 없다.)
@@ -113,21 +112,15 @@ export async function fetchCulturePortal(dtype: string, keyword: string): Promis
     throw new Error("문화포털 API가 응답하지 않습니다(최근 실패, 잠시 후 다시 시도).");
   }
 
-  const MAX_ATTEMPTS = 2;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const items = await fetchOnce(dtype, keyword, apiKey);
-      cache.set(cacheKey, { at: Date.now(), items });
-      failures.delete(cacheKey);
-      return items;
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
+  try {
+    const items = await withRetry(() => fetchOnce(dtype, keyword, apiKey), 2);
+    cache.set(cacheKey, { at: Date.now(), items });
+    failures.delete(cacheKey);
+    return items;
+  } catch (err) {
+    failures.set(cacheKey, Date.now());
+    throw err;
   }
-  failures.set(cacheKey, Date.now());
-  throw lastError;
 }
 
 export const culturePortalTool = tool(

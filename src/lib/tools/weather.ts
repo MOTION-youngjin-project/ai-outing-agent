@@ -1,6 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { normalizeSido, SIDO_LATLON, latLonToGrid } from "../region.ts";
+import { withRetry } from "../withRetry.ts";
 
 // 기상청 단기예보 조회서비스(getVilageFcst)
 // https://www.data.go.kr/data/15084084/openapi.do
@@ -81,24 +82,12 @@ async function fetchOnce(nx: number, ny: number, apiKey: string) {
   return { ...hourly[0], hourly };
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // ponytail: 에어코리아와 동일하게 SERVICETIMEOUT_ERROR가 잦아 최대 3회 재시도.
 export async function fetchWeather(nx: number, ny: number) {
   const apiKey = process.env.DATA_GO_KR_API_KEY;
   if (!apiKey) throw new Error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(nx, ny, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(nx, ny, apiKey), 3);
 }
 
 export const weatherTool = tool(

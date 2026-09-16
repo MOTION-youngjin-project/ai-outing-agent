@@ -1,6 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { normalizeSido } from "../region.ts";
+import { withRetry } from "../withRetry.ts";
 
 // 한국환경공단 에어코리아 - 시도별 실시간 측정정보 조회
 // https://www.data.go.kr/data/15073861/openapi.do
@@ -53,25 +54,13 @@ async function fetchOnce(sidoName: string, apiKey: string) {
   return { pm10: avgPm10, grade: gradeFromPm10(avgPm10), stationCount: values.length };
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // ponytail: 에어코리아 API가 SERVICETIMEOUT_ERROR를 자주 반환해(실측 4회 중 3회) 최대 3회 재시도.
 // 계속 실패하면 지수 백오프/재시도 큐 등 정교한 재시도 전략 도입.
 export async function fetchAirQuality(sidoName: string) {
   const apiKey = process.env.DATA_GO_KR_API_KEY;
   if (!apiKey) throw new Error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(sidoName, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(sidoName, apiKey), 3);
 }
 
 export const airQualityTool = tool(
