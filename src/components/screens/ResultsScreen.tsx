@@ -186,21 +186,24 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
         <button
           onClick={() => router.push("/")}
           aria-label="새 질문"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+          className="sk sk-slot h-9 w-9 bg-white text-ink"
         >
           <Icon name="plus" className="h-4 w-4" />
         </button>
       </div>
-      <div className="flex flex-col gap-3 px-5 pt-3">
+      {/* 화면 진입 시 구역이 순서대로 도착한다 — 공유 버튼 → 환경 정보 → 질문 →
+          AI 코멘트 → 필터 → 결과 목록 → 다시 추천. 결과 카드는 그 안에서 다시
+          40ms씩 이어진다(카드마다 inline animationDelay). */}
+      <div className="sk-stagger flex flex-col gap-3 px-5 pt-3">
         <PlanShareButton recommendation={recommendation} />
-        <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3.5 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+        <div className="sk-panel sk-enter flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 text-[13px]">
           <span className="flex items-center gap-1.5">
             <Icon name="pin" className="h-[18px] w-[18px] text-muted" />
             <span className="font-medium text-ink-soft">{regionName || "-"}</span>
           </span>
           {airQualityQuery.data && (
             <span className="flex items-center gap-1.5">
-              <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
+              <span className="sk-slot h-7 w-7"><Icon name="dust" className="h-[16px] w-[16px]" /></span>
               <span className="text-muted">미세먼지</span>
               <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
             </span>
@@ -218,7 +221,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
 
         {lastUserMessage && (
           <div className="flex justify-end">
-            <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-mint-bg px-4 py-2.5 text-[14px] text-ink">
+            <div className="max-w-[80%] rounded-[16px_4px_3px_16px] border border-mint-soft bg-mint-bg px-4 py-2.5 text-[14px] text-ink">
               {lastUserMessage}
             </div>
           </div>
@@ -229,7 +232,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           AI 추천
         </div>
 
-        <div className="rounded-2xl border border-accent/40 bg-mint-bg px-4 py-4">
+        <div className="sk-panel sk-enter border-accent/40 bg-mint-bg px-4 py-4">
           <div className="flex gap-2">
             <Icon name="sparkle" className="mt-0.5 h-[18px] w-[18px] shrink-0 text-accent" />
             <div className="flex flex-col gap-1.5">
@@ -241,12 +244,12 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
         {/* ponytail: 정류지 간 이동시간(자동차)은 네이버 Directions로 채워서 카드 사이에
             표시함. 코스 합산 시간/비용은 여전히 API 미제공이라 비워둠. */}
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="sk-stagger flex gap-2 overflow-x-auto pb-2.5 pt-1">
           {categoryTags.length > 0 && (
             <select
               value={categoryTags.includes(activeFilter ?? "") ? (activeFilter as string) : categoryTags[0]}
               onChange={(e) => setActiveFilter(e.target.value)}
-              className="shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] font-medium text-ink-soft outline-none"
+              className="sk-input shrink-0 px-3 py-1.5 text-[13px] font-medium text-ink-soft outline-none"
             >
               {categoryTags.map((tag) => (
                 <option key={tag} value={tag}>
@@ -259,11 +262,10 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             onClick={() => setActiveFilter(null)}
             className={
               activeFilter === null
-                ? "flex shrink-0 items-center gap-1.5 rounded-full border border-accent bg-white px-3.5 py-1.5 text-[13px] font-semibold text-accent"
-                : "shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-muted"
+                ? "sk sk-on flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px]"
+                : "sk shrink-0 px-3.5 py-1.5 text-[13px] font-medium text-muted"
             }
           >
-            {activeFilter === null && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
             전체
           </button>
           {FILTER_LABELS.map((label) => (
@@ -272,11 +274,10 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
               onClick={() => setActiveFilter(activeFilter === label ? null : label)}
               className={
                 activeFilter === label
-                  ? "flex shrink-0 items-center gap-1.5 rounded-full border border-accent bg-white px-3.5 py-1.5 text-[13px] font-semibold text-accent"
-                  : "shrink-0 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-muted"
+                  ? "sk sk-on flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px]"
+                  : "sk shrink-0 px-3.5 py-1.5 text-[13px] font-medium text-muted"
               }
             >
-              {activeFilter === label && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
               {label}
             </button>
           ))}
@@ -290,7 +291,8 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             // display:contents로 레이아웃엔 안 끼고, 카드+이동시간 줄 두 형제를 한 key 아래 묶기만 한다.
             <div key={i} className="contents">
             <div
-              className="flex overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.06)]"
+              className="sk-panel sk-enter flex overflow-hidden"
+              style={{ animationDelay: `${Math.min(idx, 6) * 45}ms` }}
             >
               <button onClick={() => openDetail(p)} className="relative w-[132px] shrink-0">
                 {p.imageUrl ? (
@@ -302,7 +304,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                   </div>
                 )}
                 {extractCategoryLabel(p.category ?? null) && (
-                  <span className="absolute left-2 top-2 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-accent">
+                  <span className="sk-tag absolute left-2 top-2 bg-white">
                     {extractCategoryLabel(p.category ?? null)}
                   </span>
                 )}
@@ -320,7 +322,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                       onClick={() => openDetail(p)}
                       disabled={!p.placeId}
                       aria-label="상세 보기"
-                      className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white disabled:opacity-40"
+                      className="sk sk-primary sk-slot h-7 w-7"
                     >
                       <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
                     </button>
@@ -331,8 +333,8 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                       aria-label="찜하기"
                       className={
                         favoriteIndexes.has(i)
-                          ? "flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white"
-                          : "flex h-7 w-7 items-center justify-center rounded-full border border-ink/70 text-ink"
+                          ? "sk-slot sk-slot-on h-7 w-7"
+                          : "sk-slot h-7 w-7 border-[var(--sk-line)] bg-white text-muted"
                       }
                     >
                       <Icon name={favoriteIndexes.has(i) ? "check" : "checkCircle"} className="h-3.5 w-3.5" />
@@ -355,14 +357,14 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                   <button
                     onClick={() => openDetail(p)}
                     disabled={!p.placeId}
-                    className="flex-1 rounded-full border border-hairline py-1.5 text-[12px] font-medium text-ink-soft disabled:opacity-50"
+                    className="sk sk-quiet flex-1 py-1.5 text-[12px] font-semibold text-muted"
                   >
                     상세 보기
                   </button>
                   <button
                     onClick={() => viewParkingFor(p)}
                     disabled={!p.daeguDistrict || !p.placeId}
-                    className="flex-1 rounded-full bg-mint-bg py-1.5 text-[12px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
+                    className="sk flex-1 py-1.5 text-[12px] font-bold text-accent-deep"
                   >
                     주차 정보
                   </button>
@@ -388,17 +390,17 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
         </div>
 
         {readOnly ? (
-          <p className="mt-2 rounded-full bg-white px-4 py-2.5 text-center text-[13px] text-muted shadow-[0_1px_4px_rgba(17,24,39,0.07)]">
+          <p className="sk-panel mt-2 px-4 py-2.5 text-center text-[13px] text-muted">
             공유받은 추천이라 다시 추천은 할 수 없어요. 홈에서 직접 추천받아보세요.
           </p>
         ) : (
-        <div className="mt-2 flex items-center gap-2 rounded-full bg-white py-1.5 pl-4 pr-1.5 shadow-[0_1px_4px_rgba(17,24,39,0.07)]">
+        <div className="sk-panel sk-enter mt-2 flex items-center gap-2 py-1.5 pl-4 pr-1.5">
           <Icon name="sparkle" className="h-4 w-4 shrink-0 text-accent" />
           <span className="flex-1 truncate text-[13px] text-ink-soft">다른 분위기로 다시 추천해보세요</span>
           <button
             onClick={() => regenerateMutation.mutate()}
             disabled={regenerateMutation.isPending}
-            className="shrink-0 rounded-full bg-cta px-4 py-2 text-[13px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
+            className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2 text-[13px] ${regenerateMutation.isPending ? "sk-loading" : ""}`}
           >
             {regenerateMutation.isPending ? "추천 중..." : "다른 곳 추천"}
           </button>

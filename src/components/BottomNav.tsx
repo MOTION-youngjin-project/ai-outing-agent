@@ -82,11 +82,27 @@ export function BottomNav() {
     { id: "mypage", label: "마이", icon: "user", href: "/mypage", active: pathname === "/mypage" },
   ] as const;
 
+  // 선택된 탭 아래로 트랙 하나가 미끄러져 옮겨간다 — 탭마다 따로 켜지는 게 아니라
+  // 같은 트랙이 이동하는 것이라 "어디서 어디로 갔는지"가 눈에 남는다.
+  // 탭은 flex-1이라 폭이 균등하므로 index * (100/탭수)%로 정확히 맞는다.
+  const activeIndex = tabs.findIndex((t) => t.active);
+
   return (
-    <nav className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-[460px] -translate-x-1/2 items-center justify-around border-t border-hairline bg-white/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 backdrop-blur">
+    // 현재 탭은 sk-navitem[aria-current]로 3px 솟아오르고 아이콘이 한 번 튄다 —
+    // 색을 지워도 "어느 탭에 있는지"가 높이와 트랙 위치로 읽힌다.
+    <nav className="fixed bottom-0 left-1/2 z-20 flex w-full max-w-[460px] -translate-x-1/2 items-end justify-around border-t border-hairline bg-white/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+      <span aria-hidden className="sk-navrail">
+        <i
+          style={{
+            width: `${100 / tabs.length}%`,
+            transform: `translateX(${Math.max(activeIndex, 0) * 100}%)`,
+            opacity: activeIndex < 0 ? 0 : 1,
+          }}
+        />
+      </span>
       {tabs.map((tab) => {
-        const className = `flex flex-1 flex-col items-center gap-1 py-1 text-[11px] font-medium ${
-          tab.active ? "text-accent" : "text-slate-400"
+        const className = `sk-navitem flex flex-1 flex-col items-center gap-1 px-1 py-1.5 text-[11px] ${
+          tab.active ? "font-bold" : "font-medium text-slate-400"
         }`;
         const content = (
           <>
@@ -95,11 +111,21 @@ export function BottomNav() {
           </>
         );
         return "onClick" in tab ? (
-          <button key={tab.id} onClick={tab.onClick} className={className}>
+          <button
+            key={tab.id}
+            onClick={tab.onClick}
+            aria-current={tab.active ? "page" : undefined}
+            className={className}
+          >
             {content}
           </button>
         ) : (
-          <Link key={tab.id} href={tab.href} className={className}>
+          <Link
+            key={tab.id}
+            href={tab.href}
+            aria-current={tab.active ? "page" : undefined}
+            className={className}
+          >
             {content}
           </Link>
         );
