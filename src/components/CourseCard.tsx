@@ -99,7 +99,7 @@ export function CourseCard({
       <div className="mt-3 flex items-stretch gap-1.5">
         <button
           onClick={onOpenDetail}
-          className="flex flex-1 items-center justify-center gap-1 rounded-full bg-mint-bg py-2.5 text-[12px] font-semibold text-accent"
+          className="flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-full bg-mint-bg py-2.5 text-[11px] font-semibold text-accent"
         >
           <Icon name="menu" className="h-3.5 w-3.5" />
           코스 상세 보기
@@ -107,7 +107,7 @@ export function CourseCard({
         <button
           onClick={saveCourse}
           disabled={places.length === 0 || saveCourseMutation.isPending || saved}
-          className="flex flex-1 items-center justify-center gap-1 rounded-full bg-mint-bg py-2.5 text-[12px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
+          className="flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-full bg-mint-bg py-2.5 text-[11px] font-semibold text-accent disabled:bg-slate-100 disabled:text-slate-400"
         >
           <Icon name={saved ? "check" : "checkCircle"} className="h-3.5 w-3.5" />
           {saved ? "저장됨" : "코스 저장"}
@@ -121,12 +121,12 @@ export function CourseCard({
             icon="arrowUpRight"
             popupAbove
             className="flex-1"
-            summaryClassName="flex list-none items-center justify-center gap-1 rounded-full bg-cta py-2.5 text-[12px] font-semibold text-white marker:content-none"
+            summaryClassName="flex list-none items-center justify-center gap-1 whitespace-nowrap rounded-full bg-cta py-2.5 text-[11px] font-semibold text-white marker:content-none"
           />
         ) : (
           <button
             disabled
-            className="flex flex-1 items-center justify-center gap-1 rounded-full bg-slate-100 py-2.5 text-[12px] font-semibold text-slate-400"
+            className="flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-full bg-slate-100 py-2.5 text-[11px] font-semibold text-slate-400"
           >
             <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
             이 코스로 가기
