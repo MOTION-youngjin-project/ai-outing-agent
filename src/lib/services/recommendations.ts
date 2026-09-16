@@ -137,7 +137,10 @@ export async function createRecommendationRun(
       // 이 장소 하나만 못 찾은 것으로 취급하고 전체 요청을 실패시키지 않는다.
       let place: Place | null = null;
       try {
-        place = await resolvePlaceByName(p.name, regionName);
+        place = await resolvePlaceByName(p.name, regionName, {
+          address: p.address,
+          district: p.daeguDistrict,
+        });
       } catch (err) {
         console.error(`장소 매칭 실패(${p.name}):`, err);
       }

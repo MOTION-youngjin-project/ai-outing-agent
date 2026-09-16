@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDataSource } from "./shared";
-import { pickBestPlaceMatch, pickRegionForAddress } from "./matching";
+import { pickBestPlaceMatch, pickConfidentPlaceMatch, pickRegionForAddress, rankPlaceMatches, type PlaceMatchHint } from "./matching";
 import { fetchPlaceImage } from "@/lib/tools/tourApi";
 import { DAEGU_DISTRICTS } from "@/lib/tools/parking";
 import type { Place } from "../../../generated/prisma/client";
@@ -22,6 +22,18 @@ type KakaoDocument = {
   place_url: string;
   x: string; // 경도
   y: string; // 위도
+};
+
+export type PlaceMatchCandidate = {
+  externalId: string;
+  name: string;
+  address: string;
+  category: string | null;
+  latitude: number;
+  longitude: number;
+  mapUrl: string;
+  score: number;
+  distanceM: number | null;
 };
 
 async function fetchOnce(query: string, apiKey: string): Promise<KakaoDocument[]> {
@@ -214,19 +226,72 @@ export async function searchAndCachePlaces(query: string): Promise<CachedPlace[]
 //      랭킹이 그 지역 결과를 우선하게 만든다 — 단순 "대구미술관" 검색보다 정확.
 //   2. pickBestPlaceMatch로 이름이 정확히 일치하는 결과를 최우선으로 고른다.
 // 그래도 못 찾으면(검색 결과 0건) null — 호출부가 그 장소는 DB 연결 없이 건너뛴다.
-export async function resolvePlaceByName(name: string, regionName?: string | null): Promise<Place | null> {
+export async function resolvePlaceByName(name: string, regionName?: string | null, hint: PlaceMatchHint = {}): Promise<Place | null> {
   const query = regionName ? `${regionName} ${name}` : name;
-  const documents = await fetchPlaces(query);
-  if (documents.length === 0) return null;
-
+  const documents = await fetchPlaces(query).catch(() => []);
   const candidates = regionName ? documents.filter(d => {
     const address = `${d.road_address_name} ${d.address_name}`;
     const sido = normalizeSido(regionName);
     return sido ? normalizeSido(address) === sido : address.includes(regionName);
   }) : documents;
   const best = pickBestPlaceMatch(name, candidates);
-  if (!best) return null;
+  if (!best) return (await recoverPlaceMatch(name, regionName, hint)).place;
 
   const source = await getOrCreateDataSource("PLACE_SEARCH", "장소 검색 API (Kakao Local)", "search_api");
   return upsertPlaceFromDoc(best, source.id);
+}
+
+function uniqueDocuments(groups: KakaoDocument[][]): KakaoDocument[] {
+  return [...new Map(groups.flat().map(document => [document.id, document])).values()];
+}
+
+function inRequestedRegion(document: KakaoDocument, regionName?: string | null) {
+  if (!regionName) return true;
+  const address = `${document.road_address_name} ${document.address_name}`;
+  const sido = normalizeSido(regionName);
+  return sido ? normalizeSido(address) === sido : address.includes(regionName);
+}
+
+export async function findPlaceMatchCandidates(
+  name: string,
+  regionName?: string | null,
+  hint: PlaceMatchHint = {},
+): Promise<{ documents: KakaoDocument[]; candidates: PlaceMatchCandidate[] }> {
+  const queries = [
+    [regionName, name].filter(Boolean).join(" "),
+    [name, regionName, hint.district].filter(Boolean).join(" "),
+    [name, hint.district].filter(Boolean).join(" "),
+    name,
+  ].filter((query, index, all) => query && all.indexOf(query) === index);
+  const settled = await Promise.allSettled(queries.map(query => fetchPlaces(query)));
+  const successful = settled.flatMap(result => result.status === "fulfilled" ? [result.value] : []);
+  if (successful.length === 0) throw new Error("카카오 장소 검색에 실패했습니다.");
+  const documents = uniqueDocuments(successful).filter(document => inRequestedRegion(document, regionName));
+  const ranked = rankPlaceMatches(name, documents, hint).filter(item => item.score >= 20).slice(0, 5);
+  return {
+    documents,
+    candidates: ranked.map(({ document, score, distanceM }) => ({
+      externalId: document.id,
+      name: document.place_name,
+      address: document.road_address_name || document.address_name,
+      category: document.category_name || null,
+      latitude: Number(document.y), longitude: Number(document.x),
+      mapUrl: document.place_url, score, distanceM,
+    })),
+  };
+}
+
+export async function recoverPlaceMatch(
+  name: string,
+  regionName?: string | null,
+  hint: PlaceMatchHint = {},
+  selectedExternalId?: string,
+): Promise<{ place: Place | null; candidates: PlaceMatchCandidate[] }> {
+  const result = await findPlaceMatchCandidates(name, regionName, hint);
+  const selected = selectedExternalId
+    ? result.documents.find(document => document.id === selectedExternalId)
+    : pickConfidentPlaceMatch(name, result.documents, hint);
+  if (!selected) return { place: null, candidates: result.candidates };
+  const source = await getOrCreateDataSource("PLACE_SEARCH", "장소 검색 API (Kakao Local)", "search_api");
+  return { place: await upsertPlaceFromDoc(selected, source.id), candidates: result.candidates };
 }

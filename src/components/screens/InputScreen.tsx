@@ -10,6 +10,7 @@ import type { RecommendationFlow } from "@/hooks/useRecommendationFlow";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
 import { CourseCard } from "@/components/CourseCard";
+import { HourlyWeatherPopover } from "@/components/HourlyWeatherPopover";
 import { shortRegionName } from "@/lib/services/matching";
 
 // 결과 화면에서도 쓰는 것과 같은 문구 — 결과 화면은 홈으로 이동해 채우지만, 여긴 이미
@@ -123,13 +124,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           </div>
         ) : (
           weatherQuery.data && (
-            <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-              <Icon name="sun" className="h-4 w-4 text-amber-400" />
-              {shortRegionName(regions.find((r) => r.id === badgeRegionId)?.name ?? "")}{" "}
-              {weatherQuery.data.temperatureC !== null
-                ? `${weatherQuery.data.temperatureC}°C`
-                : weatherQuery.data.summary}
-            </span>
+            <HourlyWeatherPopover regionName={shortRegionName(regions.find((r) => r.id === badgeRegionId)?.name ?? "")} weather={weatherQuery.data} />
           )
         )}
       </div>

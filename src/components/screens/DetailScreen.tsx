@@ -19,6 +19,7 @@ import { ScreenHeader } from "@/components/ScreenHeader";
 import { NaverMap } from "@/components/NaverMap";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { buildSharePlanText } from "@/lib/share-plan";
+import { PlaceLifeInfo } from "@/components/PlaceLifeInfo";
 
 // 실시간 방문자 리뷰(⭐ 평점, 리뷰 텍스트)는 이번 스코프에 없음 — 팀 자체 조사 결과
 // (docs/research/place-reviews-and-mood-data-sources.md) 무료로 실제 데이터를 받을 수
@@ -321,6 +322,8 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
             ))}
           </div>
         )}
+
+        {p.placeId && <PlaceLifeInfo placeId={p.placeId} />}
 
         {p.latitude !== null && p.latitude !== undefined && p.longitude !== null && p.longitude !== undefined && (
           <NaverMap

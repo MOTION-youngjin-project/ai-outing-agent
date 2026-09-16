@@ -7,7 +7,7 @@ import type { TransitItinerary } from "@/lib/services/transit";
 export type Region = { id: string; parentId: string | null; name: string; level: string };
 export type ParkingSpotWithDistance = ParkingSpot & { distanceMeters: number | null; walkMinutes: number | null };
 export type ParkingResult = { spots: ParkingSpotWithDistance[]; destination: { latitude: number; longitude: number } | null };
-export type WeatherInfo = { temperatureC: number | null; precipitationProbability: number | null; summary: string };
+export type WeatherInfo = { temperatureC: number | null; precipitationProbability: number | null; summary: string; hourly: { forecastAt: string; temperatureC: number | null; precipitationProbability: number | null; summary: string }[] };
 export type AirQualityInfo = { pm10Value: number | null; overallGrade: string };
 export type PlaceResult = {
   id: string;

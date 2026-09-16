@@ -25,6 +25,60 @@ export function pickBestPlaceMatch<T extends { place_name: string }>(
   return contains.sort((a, b) => normalize(a.place_name).length - normalize(b.place_name).length)[0];
 }
 
+export type PlaceMatchHint = {
+  address?: string | null;
+  district?: string | null;
+  reference?: { latitude: number; longitude: number } | null;
+};
+
+const compactPlaceText = (value: string) => value.normalize("NFKC").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
+const bigrams = (value: string) => {
+  const normalized = compactPlaceText(value);
+  if (normalized.length < 2) return normalized ? [normalized] : [];
+  return Array.from({ length: normalized.length - 1 }, (_, index) => normalized.slice(index, index + 2));
+};
+
+// 완전일치하지 않는 공식 명칭(예: 안심연꽃단지 → 안심창조밸리 연꽃단지)을
+// 이름 유사도, 주소 힌트, 기준 좌표와의 거리로 순위화한다. 점수가 비슷하면 자동으로
+// 고르지 않고 화면에서 사용자가 선택하게 한다.
+export function rankPlaceMatches<T extends {
+  place_name: string; road_address_name: string; address_name: string; x: string; y: string;
+}>(name: string, documents: T[], hint: PlaceMatchHint = {}) {
+  const target = compactPlaceText(name);
+  const targetPairs = new Set(bigrams(name));
+  const district = compactPlaceText(hint.district ?? "");
+  const addressHint = compactPlaceText(hint.address ?? "");
+  return documents.map((document) => {
+    const candidate = compactPlaceText(document.place_name);
+    const pairs = new Set(bigrams(document.place_name));
+    const overlap = [...targetPairs].filter(pair => pairs.has(pair)).length;
+    const similarity = targetPairs.size ? overlap / targetPairs.size : 0;
+    const address = compactPlaceText(`${document.road_address_name} ${document.address_name}`);
+    let score = Math.round(similarity * 60);
+    if (candidate === target) score += 100;
+    else if (candidate.includes(target) || target.includes(candidate)) score += 35;
+    if (district && address.includes(district)) score += 20;
+    if (addressHint && address && (address.includes(addressHint) || addressHint.includes(address))) score += 25;
+    let distanceM: number | null = null;
+    const latitude = Number(document.y), longitude = Number(document.x);
+    if (hint.reference && Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      distanceM = Math.round(haversineMeters(hint.reference, { latitude, longitude }));
+      score += Math.max(0, 20 - Math.floor(distanceM / 1000));
+    }
+    return { document, score, distanceM };
+  }).sort((a, b) => b.score - a.score || (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
+}
+
+export function pickConfidentPlaceMatch<T extends {
+  place_name: string; road_address_name: string; address_name: string; x: string; y: string;
+}>(name: string, documents: T[], hint: PlaceMatchHint = {}): T | undefined {
+  const ranked = rankPlaceMatches(name, documents, hint);
+  const first = ranked[0], second = ranked[1];
+  if (!first || first.score < 55) return undefined;
+  if (second && first.score - second.score < 15) return undefined;
+  return first.document;
+}
+
 // 주소 문자열과 후보 Region 목록으로 가장 적절한 Region을 고른다.
 // 먼저 주소 첫 토큰으로 시/도를 잡고("대구" → 대구광역시), 그 시/도에 속한 구/군만
 // 토큰 일치로 좁힌다(예: "대구 수성구..." → 수성구). 구/군을 못 찾으면 시/도로 완화한다.

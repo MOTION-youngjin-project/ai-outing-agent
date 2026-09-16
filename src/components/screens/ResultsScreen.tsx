@@ -24,6 +24,8 @@ import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
 import { PlanShareButton } from "@/components/PlanShareButton";
 import { RecommendationSources } from "@/components/RecommendationSources";
+import { PlaceMatchRecovery } from "@/components/PlaceMatchRecovery";
+import { NearbyPlaces } from "@/components/NearbyPlaces";
 
 // 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
 // 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
@@ -95,6 +97,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   const [favoriteIndexes, setFavoriteIndexes] = useState<Set<number>>(new Set());
   // null = "전체" 선택 상태. 결과 카드의 tags 필드와 매칭해서 필터링한다.
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [resolvedOverrides, setResolvedOverrides] = useState<Map<number, PlaceWithMeta>>(new Map());
   // 카카오 category_name에서 뽑은 실제 소분류(예: "전시관", "카페") — 지어낸 카테고리가
   // 아니라 place.category(추천 결과에 이미 채워져 있는 값)만 드롭다운 옵션으로 쓴다.
   const categoryTags = Array.from(
@@ -107,12 +110,13 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   if (recommendation !== prevRecommendation) {
     setPrevRecommendation(recommendation);
     setActiveFilter(null);
+    setResolvedOverrides(new Map());
   }
 
   // 원래 인덱스(i)를 같이 들고 있어야 찜하기(favoriteIndexes)가 필터링 후에도 올바른
   // 카드를 가리킨다.
   const filteredPlaces = (recommendation.places ?? [])
-    .map((p, i) => ({ p, i }))
+    .map((p, i) => ({ p: resolvedOverrides.get(i) ?? p, i }))
     .filter(
       ({ p }) => !activeFilter || (p.tags as readonly string[] | undefined)?.includes(activeFilter) || p.category === activeFilter
     );
@@ -125,6 +129,13 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   function viewParkingFor(place: PlaceWithMeta) {
     if (!place.daeguDistrict || !place.placeId) return;
     router.push(`/recommend/${runId}/place/${place.placeId}/parking`);
+  }
+
+  function applyResolvedPlace(index: number, place: PlaceWithMeta) {
+    setResolvedOverrides(previous => new Map(previous).set(index, place));
+    queryClient.setQueryData<RecommendResult>(["recommend", runId], current => current?.places
+      ? { ...current, places: current.places.map((item, placeIndex) => placeIndex === index ? place : item) }
+      : current);
   }
 
   async function toggleFavorite(place: PlaceWithMeta, index: number) {
@@ -356,8 +367,13 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                     주차 정보
                   </button>
                 </div>
+                {!p.placeId && (
+                  <PlaceMatchRecovery runId={runId} placeIndex={i} placeName={p.name} readOnly={readOnly}
+                    onResolved={place => applyResolvedPlace(i, place)} />
+                )}
               </div>
             </div>
+            <NearbyPlaces name={p.name} category={p.category} latitude={p.latitude} longitude={p.longitude} exclude={(recommendation.places ?? []).map((place) => place.name)} />
             {/* 필터링 중엔 화면상 인접 카드가 실제 코스 순서상 인접이 아닐 수 있어 — 전체
                 보기(activeFilter === null)일 때만 이동시간을 보여준다. */}
             {activeFilter === null &&

@@ -147,6 +147,7 @@ model Place {
   anchoredParkingSuggestions RouteParkingRecommendation[] @relation("ParkingAnchorPlace")
   templateStops              PopularRouteTemplatePlace[]
   savedByUsers               SavedPlace[]
+  lifeInfoCaches             PlaceLifeInfoCache[]
 
   @@index([normalizedName, latitude, longitude])
   @@index([regionId, isActive])
@@ -154,14 +155,30 @@ model Place {
   @@map("places")
 }
 
+model PlaceLifeInfoCache {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  placeId     BigInt   @map("place_id") @db.UnsignedBigInt
+  topic       String   @db.VarChar(40)
+  payloadJson Json     @map("payload_json")
+  sourceCount Int      @default(0) @map("source_count") @db.SmallInt
+  aiUsed      Boolean  @default(false) @map("ai_used")
+  fetchedAt   DateTime @default(now()) @map("fetched_at") @db.Timestamp(0)
+  expiresAt   DateTime @map("expires_at") @db.Timestamp(0)
+  place       Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([placeId, topic])
+  @@index([expiresAt])
+  @@map("place_life_info_caches")
+}
+
 model User {
-  id            BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
-  email         String       @unique @db.VarChar(255)
-  passwordHash  String       @map("password_hash") @db.VarChar(255)
-  name          String?      @db.VarChar(100)
+  id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  email         String        @unique @db.VarChar(255)
+  passwordHash  String        @map("password_hash") @db.VarChar(255)
+  name          String?       @db.VarChar(100)
   // agent.ts의 PLACE_TAGS(실내/야외/데이트/저비용)와 같은 값만 담는다. 값이 4개뿐이라
   // 별도 테이블 없이 JSON 배열 하나로 충분하다고 판단.
-  preferredTags Json?        @map("preferred_tags")
+  preferredTags Json?         @map("preferred_tags")
   createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamp(0)
   savedPlaces   SavedPlace[]
   savedCourses  SavedCourse[]
@@ -200,15 +217,15 @@ model SavedCourse {
 }
 
 model SavedPlace {
-  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  userId    BigInt   @map("user_id") @db.UnsignedBigInt
-  placeId   BigInt   @map("place_id") @db.UnsignedBigInt
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId         BigInt    @map("user_id") @db.UnsignedBigInt
+  placeId        BigInt    @map("place_id") @db.UnsignedBigInt
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
   // 방문 예정일. null이면 "그냥 저장한 장소", 값이 있으면 마이페이지 > 방문 예정에
   // 날짜순으로 뜬다 — 별도 테이블 없이 한 칸으로 두 상태를 표현한다.
   plannedVisitAt DateTime? @map("planned_visit_at") @db.Date
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  place     Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  place          Place     @relation(fields: [placeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, placeId])
   @@map("saved_places")
