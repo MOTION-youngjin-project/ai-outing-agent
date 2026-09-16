@@ -58,7 +58,7 @@ export function rankPlaceMatches<T extends {
     if (candidate === target) score += 100;
     else if (candidate.includes(target) || target.includes(candidate)) score += 35;
     if (district && address.includes(district)) score += 20;
-    if (addressHint && (address.includes(addressHint) || addressHint.includes(address))) score += 25;
+    if (addressHint && address && (address.includes(addressHint) || addressHint.includes(address))) score += 25;
     let distanceM: number | null = null;
     const latitude = Number(document.y), longitude = Number(document.x);
     if (hint.reference && Number.isFinite(latitude) && Number.isFinite(longitude)) {

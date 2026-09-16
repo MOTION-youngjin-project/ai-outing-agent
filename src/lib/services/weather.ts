@@ -79,7 +79,9 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
     const fetched = await fetchWeather(nx, ny);
     const source = await getOrCreateDataSource("KMA", "기상청", "open_api");
 
-    const fetchedAt = new Date();
+    // fetched_at 컬럼이 @db.Timestamp(0)라 밀리초가 잘린다 — 쓰기/조회 값을
+    // 미리 초 단위로 맞추지 않으면 findFirstOrThrow가 방금 넣은 행을 못 찾는다.
+    const fetchedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
     await prisma.weatherSnapshot.createMany({
       data: fetched.hourly.map((hour) => ({
         sourceId: source.id,
