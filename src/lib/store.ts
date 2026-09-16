@@ -16,14 +16,16 @@ interface AppState {
   // 질문 시작 시(Sidebar "새 질문") history와 함께 초기화된다.
   lastRecommendation: RecommendResult | null;
   // history의 사용자 턴과 같은 순서로 쌓이는 턴별 추천 결과 — 채팅 화면이 각 턴마다
-  // CourseCard를 온전히 다시 그릴 때 쓴다(history 자체엔 요약 텍스트만 있음).
-  recommendations: RecommendResult[];
+  // CourseCard를 온전히 다시 그릴 때 쓴다(history 자체엔 요약 텍스트만 있음). 실패한
+  // 턴도 null로 자리를 채워서 인덱스가 history의 사용자 턴과 항상 맞게 유지한다 —
+  // 성공한 턴만 push하면 실패 이후 턴부터 인덱스가 영구히 어긋난다.
+  recommendations: (RecommendResult | null)[];
   setInput: (input: string) => void;
   setHistory: (history: ChatTurn[]) => void;
   setConversationId: (conversationId: string | null) => void;
   setRegionId: (regionId: string) => void;
   setLastRecommendation: (result: RecommendResult | null) => void;
-  setRecommendations: (recommendations: RecommendResult[]) => void;
+  setRecommendations: (recommendations: (RecommendResult | null)[]) => void;
   openSidebar: () => void;
   closeSidebar: () => void;
   toggleSidebar: () => void;
