@@ -97,7 +97,6 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   const [favoriteIndexes, setFavoriteIndexes] = useState<Set<number>>(new Set());
   // null = "전체" 선택 상태. 결과 카드의 tags 필드와 매칭해서 필터링한다.
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
-  const [resolvedOverrides, setResolvedOverrides] = useState<Map<number, PlaceWithMeta>>(new Map());
   // 카카오 category_name에서 뽑은 실제 소분류(예: "전시관", "카페") — 지어낸 카테고리가
   // 아니라 place.category(추천 결과에 이미 채워져 있는 값)만 드롭다운 옵션으로 쓴다.
   const categoryTags = Array.from(
@@ -110,13 +109,12 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   if (recommendation !== prevRecommendation) {
     setPrevRecommendation(recommendation);
     setActiveFilter(null);
-    setResolvedOverrides(new Map());
   }
 
   // 원래 인덱스(i)를 같이 들고 있어야 찜하기(favoriteIndexes)가 필터링 후에도 올바른
   // 카드를 가리킨다.
   const filteredPlaces = (recommendation.places ?? [])
-    .map((p, i) => ({ p: resolvedOverrides.get(i) ?? p, i }))
+    .map((p, i) => ({ p, i }))
     .filter(
       ({ p }) => !activeFilter || (p.tags as readonly string[] | undefined)?.includes(activeFilter) || p.category === activeFilter
     );
@@ -131,8 +129,12 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
     router.push(`/recommend/${runId}/place/${place.placeId}/parking`);
   }
 
+  // react-query 캐시(["recommend", runId])가 이 결과의 유일한 출처다 — 여기만 갱신하면
+  // 상위 페이지가 이 컴포넌트에 새 recommendation prop을 내려주면서 filteredPlaces에도
+  // 그대로 반영된다. 예전엔 로컬 상태(resolvedOverrides)에도 같은 값을 따로 들고 있었는데,
+  // 새 recommendation prop이 들어오는 타이밍에 그 로컬 상태를 초기화해버려서 반영한 결과가
+  // 화면에서 잠깐 원래대로 되돌아갈 수 있는 경쟁 상태가 있었다.
   function applyResolvedPlace(index: number, place: PlaceWithMeta) {
-    setResolvedOverrides(previous => new Map(previous).set(index, place));
     queryClient.setQueryData<RecommendResult>(["recommend", runId], current => current?.places
       ? { ...current, places: current.places.map((item, placeIndex) => placeIndex === index ? place : item) }
       : current);
