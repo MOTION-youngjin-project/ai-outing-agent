@@ -8,6 +8,7 @@
 // 아니지만, 별도로 "대표"라고 큐레이션되는 firstimage보다는 순서대로 매겨진 갤러리 사진이
 // 더 안정적이었다(같은 사례로 실측). 갤러리가 비어 있으면 firstimage로 폴백한다.
 import { tourismRegionParams } from "@/lib/external/tour-api-cache";
+import { withRetry } from "../withRetry.ts";
 
 const TOUR_API_URL = "https://apis.data.go.kr/B551011/KorService2/searchKeyword2";
 const DETAIL_IMAGE_URL = "https://apis.data.go.kr/B551011/KorService2/detailImage2";
@@ -54,24 +55,12 @@ async function fetchOnce(query: string, apiKey: string): Promise<TourApiItem[]> 
   return Array.isArray(item) ? item : [item];
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // ponytail: 다른 공공데이터 API들과 동일하게 최대 3회 재시도.
 async function fetchWithRetry(query: string): Promise<TourApiItem[]> {
   const apiKey = process.env.DATA_GO_KR_API_KEY;
   if (!apiKey) throw new Error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(query, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(query, apiKey), 3);
 }
 
 async function fetchGalleryFirst(contentId: string, apiKey: string): Promise<PlaceImageResult | null> {

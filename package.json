@@ -36,7 +36,6 @@
     "next-auth": "^5.0.0-beta.32",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-markdown": "^10.1.0",
     "zod": "^4.5.4",
     "zustand": "^5.0.15"
   },

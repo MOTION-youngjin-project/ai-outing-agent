@@ -42,16 +42,29 @@ export async function searchPdfGuides(query: string, limit = 5) {
   })).filter(chunk => chunk.score > 0).sort((a, b) => b.score - a.score).slice(0, Math.min(Math.max(limit, 1), 8));
 }
 
+export type PdfGuideResult = Awaited<ReturnType<typeof searchPdfGuides>>[number];
+
+export function registerPdfSources(results: PdfGuideResult[], sources: Map<string, RecommendationSource>) {
+  for (const result of results) sources.set(result.sourceId, {
+    id: result.sourceId, documentTitle: result.title,
+    page: result.page ?? null, sourceUrl: result.sourceUrl,
+  });
+}
+
+// createRecommendationRun이 이 도구를 호출 전에 미리 실행해 프롬프트에 주입할 때도 같은
+// 포맷을 쓴다 — 도구가 실제로 실행됐을 때와 텍스트가 달라지면 모델이 sourceIds를 엉뚱하게 쓴다.
+export function formatPdfResults(results: PdfGuideResult[]): string | null {
+  if (!results.length) return null;
+  return results.map((result) => `${result.content}\n[출처 ID: ${result.sourceId}, ${result.title}, PDF p.${result.page ?? "?"}]`).join("\n\n");
+}
+
 export function createPdfGuideTool(sources: Map<string, RecommendationSource>) {
 return tool(async ({ query }) => {
   try {
     const results = await searchPdfGuides(query);
     if (!results.length) return "색인된 대구 관광 PDF에서 관련 정보를 찾지 못했습니다.";
-    for (const result of results) sources.set(result.sourceId, {
-      id: result.sourceId, documentTitle: result.title,
-      page: result.page ?? null, sourceUrl: result.sourceUrl,
-    });
-    return results.map((result) => `${result.content}\n[출처 ID: ${result.sourceId}, ${result.title}, PDF p.${result.page ?? "?"}]`).join("\n\n");
+    registerPdfSources(results, sources);
+    return formatPdfResults(results)!;
   } catch (error) {
     return `대구 관광 PDF 검색 실패: ${error instanceof Error ? error.message : String(error)}`;
   }

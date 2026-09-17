@@ -1,6 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { coordinate } from "../coordinates";
+import { withRetry } from "../withRetry";
 
 // 대구광역시 통합주차정보시스템 - 민간주차장 API(주차장정보 조회)
 // https://pis.daegu.go.kr/api/mingan/prkInfo
@@ -173,23 +174,11 @@ export function estimateWalkMinutes(meters: number): number {
   return Math.max(1, Math.round(meters / 67));
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function fetchParking(sggCd: string) {
   const apiKey = process.env.DAEGU_PARKING_API_KEY;
   if (!apiKey) throw new Error("DAEGU_PARKING_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(sggCd, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(sggCd, apiKey), 3);
 }
 
 export type ParkingSpot = {

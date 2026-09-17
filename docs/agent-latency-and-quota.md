@@ -121,6 +121,63 @@ KorService2는 오퍼레이션마다 지역 파라미터가 다르다(실측):
 지어낸 값에서 검증된 값으로 바뀌었다. **잃은 것**: `spendtime`이 없는 장소(공원·음식점 등
 문화시설이 아닌 곳)는 소요시간이 빈칸이다 — 빈칸이 틀린 값보다 낫다고 판단했다.
 
+## search_daegu_pdf_guides 사전 조회로 왕복 1회 절감 (2026-09-17)
+
+LangSmith 트레이스 4건을 실측하니(2026-09-16~17) `search_daegu_pdf_guides`가 **매번 첫 번째
+도구로 호출**됐다 — 시스템 프롬프트에 "독립적인 도구는 동시에 호출해라"라고 이미 써놨는데도
+`search_culture_events`와 병렬로 부르지 않고 항상 별도 왕복으로 순차 처리했다(Gemini
+function-calling에는 OpenAI의 `parallel_tool_calls` 같은 강제 옵션이 없다 —
+`@langchain/google-genai`에 그런 설정 자체가 없다, 실측 확인).
+
+날씨/대기질(`describeSituation`)과 같은 원리로 대응했다: `createRecommendationRun`이
+대화 전체 텍스트로 `search_daegu_pdf_guides`를 날씨·대기질과 병렬로 미리 조회해
+(`describeGuides()`) 프롬프트에 주입하고, 결과를 `sources` 맵에도 미리 등록해둔다
+(`registerPdfSources`/`formatPdfResults`, `src/lib/tools/pdfGuide.ts`) — 그래야 모델이
+도구를 안 불러도 `sourceIds`로 인용한 출처가 정상적으로 풀린다. 도구 자체는 폴백용으로
+남겨뒀다(프롬프트: "필요한 정보가 여기 있으면 다시 호출하지 마라").
+
+**검증 방법**: 로컬 Laragon DB엔 `rag_chunks`(임베딩 포함)가 비어 있어 이 기능은 로컬로
+의미 있게 테스트할 수 없었다. 프로덕션 서버에서 `RAG_PDF` 소스의 `data_sources`/
+`rag_documents`/`rag_chunks`(620건, 임베딩 포함)를 JSON으로 덤프해(SSH로 Prisma 스크립트
+실행, ca.pem 불필요 — 이 서버 DB는 Aiven이 아니라 서버 로컬 MySQL이다) 로컬로 내려받고
+upsert 스크립트로 그대로 넣은 뒤 `next dev`로 검증했다. **이 방법은 재사용 가능** —
+임베딩이 필요한 다른 로컬 검증에도 PDF 재수집(다운로드+추출+임베딩 API 호출) 대신 이 경로가
+훨씬 싸다.
+
+**실측 결과** (LangSmith, 프로덕션):
+
+| | 이전(3회 왕복 고정) | 이후 |
+|---|---|---|
+| 모델 왕복 | 항상 3회 | culture_events 필요 없으면 1회, 필요하면 2회 |
+| LangGraph 체인 소요 | 5.5~8.6초 | 6.2초(문화행사 호출 포함) |
+
+`sourceIds` 인용도 정상 작동 확인(prefetch로만 얻은 pdf-27/38/12를 모델이 도구 호출 없이
+그대로 인용, `sources` 배열에 documentTitle/page/sourceUrl까지 정상 첨부).
+
+**검토했지만 안 하기로 결정: `search_culture_events` 사전조회 (2026-09-17).** 날씨/PDF와
+같은 `Promise.all` 배치에 넣으면 병렬이라 지연 비용 자체는 크지 않다 — 처음 우려했던
+"야외 요청에도 API 호출하는 손해"는 속도 관점에서는 작은 문제였다. 진짜 문제는 품질이다:
+이 도구는 호출 전에 `dtype`(9개 분야)을 정해야 하는데 지금은 모델이 대화 맥락으로 판단한다.
+서버가 미리 하려면 `inferDtype()`(텍스트에 분야 키워드가 없으면 무조건 "전시"로 기본값)
+같은 단순 규칙으로 대체해야 하는데, 분야를 잘못 짚으면(예: "공연"이라는 단어가 없는 공연
+요청 → 전시로 잘못 조회) 모델에게 무관한 문화행사 정보를 "이미 조회됨"으로 주입하게 되고,
+모델이 그걸 정답으로 오인해 다시 검색하지 않을 위험이 있다. 속도보다 추천 품질이 우선이라
+보류함(사용자 확인). **다시 검토할 조건**: `dtype`을 신뢰성 있게 미리 추정할 방법이 생기면
+(예: 규칙이 아니라 별도의 아주 가벼운/빠른 분류 단계) 그때 재고할 것 — 지금 이 결정이
+"영원히 안 한다"는 뜻은 아니다.
+
+## PlaceSchema에서 항상 버려지는 필드 제거 (2026-09-17)
+
+`place-verification.ts`의 `verifyPlace`가 `operatingHours`/`fee`를 **항상** 관광 API
+값으로 덮어쓴다(`return { ...place, operatingHours: match?.operatingHours, fee: match?.fee, ... }`)
+— 매치가 없으면 `undefined`로도 덮어써서, 모델이 이 두 필드를 채워도 100% 버려진다.
+`PlaceSchema`(agent.ts)에서 아예 뺐다. 화면에 보이는 값은 `EnrichedPlace` 타입의 확장
+필드로 그대로 유지되므로(이미 `closedDays`/`visitDuration`이 같은 패턴) 동작 변화 없음.
+
+**실측**: 최종 구조화 출력 호출(3.0~3.5초)이 2필드×3~5장소 정도 줄어든 만큼만 짧아져서,
+Gemini 응답시간 자체의 변동폭(로컬 3.07~3.28초, 프로덕션 3.07~3.39초) 안에 묻혀 단독으로는
+측정이 안 될 만큼 작다. 다만 버려지는 출력을 만드는 것 자체가 낭비이므로 위험 없이 유지.
+
 ## Gemini 무료 티어 쿼터 (제품 제약이다)
 
 429 응답의 `QuotaFailure` 원문 기준:

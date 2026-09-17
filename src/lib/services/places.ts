@@ -7,6 +7,7 @@ import { DAEGU_DISTRICTS } from "@/lib/tools/parking";
 import type { Place } from "../../../generated/prisma/client";
 import { coordinate } from "../coordinates";
 import { normalizeSido } from "../region";
+import { withRetry } from "../withRetry";
 
 // 카카오 로컬 - 키워드로 장소 검색
 // https://developers.kakao.com/docs/latest/ko/local/dev-guide#search-by-keyword
@@ -53,24 +54,12 @@ async function fetchOnce(query: string, apiKey: string): Promise<KakaoDocument[]
   return data.documents.filter((d: KakaoDocument) => d?.id && typeof d.place_name === "string" && coordinate(d.y, d.x));
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // ponytail: 다른 공공데이터 API들과 동일하게 최대 3회 재시도.
 async function fetchPlaces(query: string): Promise<KakaoDocument[]> {
   const apiKey = process.env.KAKAO_API_KEY;
   if (!apiKey) throw new Error("KAKAO_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(query, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(query, apiKey), 3);
 }
 
 function normalizePlaceName(name: string): string {

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { normalizeSido } from "@/lib/region";
-import { runAgentStream, type AgentProgressEvent, type ChatTurn, type Recommendation } from "@/lib/agent";
+import { runAgentStream, type AgentProgressEvent, type ChatTurn, type GuideContext, type Recommendation } from "@/lib/agent";
+import { searchPdfGuides, formatPdfResults } from "@/lib/tools/pdfGuide";
 import { getCachedWeather } from "./weather";
 import { getCachedAirQuality } from "./airQuality";
 import { resolvePlaceByName, resolveDaeguDistrict } from "./places";
@@ -64,11 +65,16 @@ export async function createRecommendationRun(
   // 날씨·대기질은 에이전트가 도구로 물어보던 값인데, 여기서 미리(그리고 병렬로) 조회해
   // 프롬프트에 넣어주면 모델 왕복이 2회 줄어든다 — 왕복 1회가 2.5~5초다(2026-09-12 실측).
   // 캐시 서비스라 대부분 DB 조회로 끝나고, 실패하면 넣지 않는다(그때는 도구가 남아 있다).
-  const situation = regionName ? await describeSituation(regionName) : undefined;
+  // search_daegu_pdf_guides도 같은 원리 — 2026-09-17 LangSmith 실측 4/4 요청에서 매번
+  // 첫 도구로 호출됐다. 서로 의존하지 않으니 날씨/대기질과 병렬로 미리 조회한다.
+  const [situation, guideContext] = await Promise.all([
+    regionName ? describeSituation(regionName) : Promise.resolve(undefined),
+    describeGuides(history.map((h) => h.content).join(" ")),
+  ]);
 
   let recommendation: Recommendation;
   try {
-    recommendation = await runAgentStream(history, onProgress, situation);
+    recommendation = await runAgentStream(history, onProgress, situation, guideContext);
   } catch (err) {
     await prisma.agentRun.create({
       data: {
@@ -313,4 +319,17 @@ async function describeSituation(regionName: string): Promise<string | undefined
     parts.push(`미세먼지 ${air.overallGrade}${air.pm10Value !== null ? `(PM10 ${air.pm10Value})` : ""}`);
   }
   return parts.length ? parts.join(", ") + "." : undefined;
+}
+
+// search_daegu_pdf_guides를 대화 전체 텍스트로 미리 돌려둔다 — 모델이 도구를 호출할 때
+// 쓰는 질의도 결국 대화 맥락에서 뽑은 키워드라(2026-09-17 LangSmith 실측: "사월 수성구 관광",
+// "데이트 수성구 중구" 등) 전체 대화 텍스트를 그대로 질의로 써도 크게 다르지 않다.
+// 실패하면 조용히 비워두고, 그때는 에이전트가 기존처럼 도구로 직접 검색한다.
+async function describeGuides(query: string): Promise<GuideContext> {
+  try {
+    const results = await searchPdfGuides(query);
+    return { text: formatPdfResults(results), results };
+  } catch {
+    return { text: null, results: [] };
+  }
 }

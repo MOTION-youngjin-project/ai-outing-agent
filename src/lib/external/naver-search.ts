@@ -31,11 +31,14 @@ export async function searchNaverLifeInfo(query: string): Promise<LifeInfoSource
   const secret = process.env.NAVER_SEARCH_CLIENT_SECRET?.trim();
   if (!id || !secret) throw new Error("NAVER_SEARCH_API_NOT_CONFIGURED");
 
-  const url = new URL("https://openapi.naver.com/v1/search/webkr.json");
+  // 네이버 검색 API는 developers.naver.com 방식(openapi.naver.com,
+  // X-Naver-Client-Id/Secret)에서 NAVER API HUB(NCP)로 이관됐다 — 엔드포인트와
+  // 인증 헤더가 둘 다 바뀌었다(naverDirections.ts의 x-ncp-apigw-api-key 패턴과 동일).
+  const url = new URL("https://naverapihub.apigw.ntruss.com/search/v1/webkr");
   url.searchParams.set("query", query);
   url.searchParams.set("display", "5");
   const response = await fetch(url, {
-    headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret },
+    headers: { "x-ncp-apigw-api-key-id": id, "x-ncp-apigw-api-key": secret },
     signal: AbortSignal.timeout(6_000),
     cache: "no-store",
   });

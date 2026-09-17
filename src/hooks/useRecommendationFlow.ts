@@ -124,6 +124,12 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
         queryClient.invalidateQueries({ queryKey: ["recommendations"] });
       }
     },
+    // history엔 이미 이 턴의 사용자 메시지가 들어가 있다(sendMessage가 먼저 반영) —
+    // 여기서 recommendations를 안 늘리면 다음 턴부터 userTurns[i]<->recommendations[i]
+    // 인덱스 매칭(InputScreen.tsx)이 영구적으로 한 칸씩 어긋난다. null로 자리만 채운다.
+    onError: () => {
+      setRecommendations([...recommendations, null]);
+    },
   });
 
   function sendMessage() {
