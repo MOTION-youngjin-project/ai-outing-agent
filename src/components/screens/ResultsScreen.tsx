@@ -23,6 +23,7 @@ import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { FilterMenu } from "@/components/FilterMenu";
 import { PlanShareButton } from "@/components/PlanShareButton";
+import { StartTripButton } from "@/components/StartTripButton";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { PlaceMatchRecovery } from "@/components/PlaceMatchRecovery";
 import { NearbyPlaces } from "@/components/NearbyPlaces";
@@ -236,6 +237,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
           40ms씩 이어진다(카드마다 inline animationDelay). */}
       <div className="sk-stagger flex flex-col gap-3 px-5 pt-3">
         <PlanShareButton recommendation={recommendation} />
+        <StartTripButton recommendation={recommendation} />
         {/* 지역·대기질·날씨 세 조각이 한 줄에 겨우 안 들어가 "25°C · 흐림"만 두 번째
             줄로 떨어졌다 — 간격을 줄이고 지역명을 홈 화면 배지와 같은 짧은 표기로
             맞추면 한 줄에 앉는다(대구광역시 → 대구). */}
