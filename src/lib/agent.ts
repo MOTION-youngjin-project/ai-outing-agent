@@ -1,6 +1,6 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { createAgent, toolStrategy } from "langchain";
-import { createPdfGuideTool } from "./tools/pdfGuide";
+import { createPdfGuideTool, registerPdfSources, type PdfGuideResult } from "./tools/pdfGuide";
 import { resolveSources, type RecommendationSource } from "./recommendation-sources";
 import type { PlaceVerification } from "./place-verification";
 import { z } from "zod";
@@ -195,7 +195,12 @@ function completeRecommendation(value: unknown, sources: Map<string, Recommendat
 // (2026-09-07 실측 — gemini-flash-latest에서 400 에러 재현, node_modules 소스로 원인 확인)
 // toolStrategy로 강제로 function-calling 기반 구조화 출력을 쓴다 — 이 경로는 스키마를
 // 제대로 정제해서 보낸다.
-function buildAgent(model: string, sources: Map<string, RecommendationSource>, situation?: string) {
+// search_daegu_pdf_guides는 2026-09-17 LangSmith 실측(4/4 요청)에서 매번 첫 도구로
+// 호출됐다 — 날씨/대기질처럼 서버가 대화 내용으로 미리 검색해 프롬프트에 넣으면 이
+// 도구 호출 왕복(모델 판단 1.1~1.5초 + 검색 0.7~2.2초)을 통째로 없앨 수 있다.
+export type GuideContext = { text: string | null; results: PdfGuideResult[] };
+
+function buildAgent(model: string, sources: Map<string, RecommendationSource>, situation?: string, guideText?: string | null) {
   const llm = new ChatGoogleGenerativeAI({
     model,
     apiKey: process.env.GEMINI_API_KEY,
@@ -220,6 +225,13 @@ function buildAgent(model: string, sources: Map<string, RecommendationSource>, s
           " 날씨·비·미세먼지가 대화에 언급되더라도 판단은 이 값으로 끝내라 — 같은 값을 " +
           "get_weather/get_air_quality로 다시 조회할 필요가 없다. 실내/야외는 이 값으로 정하고 " +
           "이유에도 이 수치를 근거로 써라."
+        : "") +
+      (guideText
+        ? "\n\n[대구 공식 PDF 검색 결과 - 서버가 이미 조회함] " +
+          guideText +
+          "\n\n위는 서버가 이 대화 내용으로 미리 search_daegu_pdf_guides를 돌린 결과다. 필요한 정보가 " +
+          "여기 있으면 다시 도구를 호출하지 말고 그대로 sourceIds에 담아 써라. 다른 키워드로 더 찾아야 " +
+          "할 것 같을 때만 도구를 호출해라."
         : ""),
     responseFormat: toolStrategy(RecommendationSchema),
   });
@@ -230,7 +242,8 @@ function buildAgent(model: string, sources: Map<string, RecommendationSource>, s
 // 콜백이 살아있는지 판별)를 한 곳에 모았다. 두 함수는 agent를 "어떻게 호출하는지"만 다르다.
 async function withModelFallback<T>(
   run: (agent: ReturnType<typeof buildAgent>, isCurrent: () => boolean, sources: Map<string, RecommendationSource>) => Promise<T>,
-  situation?: string
+  situation?: string,
+  guideContext?: GuideContext
 ): Promise<T> {
   let lastError: unknown;
   let currentAttempt = 0;
@@ -243,7 +256,8 @@ async function withModelFallback<T>(
 
     const attempt = ++currentAttempt;
     const sources = new Map<string, RecommendationSource>();
-    const agent = buildAgent(model, sources, situation);
+    if (guideContext?.results.length) registerPdfSources(guideContext.results, sources);
+    const agent = buildAgent(model, sources, situation, guideContext?.text);
 
     try {
       return await run(agent, () => attempt === currentAttempt, sources);
@@ -318,7 +332,10 @@ export async function runAgentStream(
   history: ChatTurn[],
   onProgress?: (event: AgentProgressEvent) => void,
   // 서버가 미리 조회한 날씨·대기질 한 줄. 있으면 모델이 같은 값을 도구로 다시 묻지 않는다.
-  situation?: string
+  situation?: string,
+  // 서버가 대화 내용으로 미리 돌린 search_daegu_pdf_guides 결과. 있으면 모델이 같은
+  // 도구를 다시 호출하지 않는다(그래서 왕복 1회가 줄어든다).
+  guideContext?: GuideContext
 ): Promise<Recommendation> {
   return withModelFallback(async (agent, isCurrent, sources) => {
     // signal을 넘겨야 포기한 시도를 실제로 끊을 수 있다. 안 넘기면 다음 모델로 넘어간
@@ -344,7 +361,7 @@ export async function runAgentStream(
       controller.abort();
       throw err;
     }
-  }, situation);
+  }, situation, guideContext);
 }
 
 const SUGGEST_SYSTEM_PROMPT =
