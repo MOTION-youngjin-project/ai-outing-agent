@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -65,6 +65,18 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
   const userTurns = history.filter((t) => t.role === "user");
   const regionName = regions.find((r) => r.id === regionId)?.name;
 
+  // 새 턴이 붙었을 때만 맨 아래(= 답변 끝 + 입력창)로 따라 내려간다.
+  // 턴 수가 그대로면 아무것도 하지 않으므로, 사용자가 위로 올려 기록을 읽는 중에
+  // 화면이 멋대로 튀지 않는다. 레이아웃이 반영된 다음 프레임에 재야 높이가 맞다.
+  const turnCount = history.length;
+  useEffect(() => {
+    if (turnCount === 0) return;
+    const id = requestAnimationFrame(() => {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [turnCount]);
+
   function startNewQuestion() {
     setHistory([]);
     setInput("");
@@ -110,14 +122,14 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             <button
               onClick={startNewQuestion}
               aria-label="새 질문"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
+              className="sk sk-primary sk-slot h-9 w-9"
             >
               <Icon name="plus" className="h-4 w-4" />
             </button>
             <button
               onClick={startNewQuestion}
               aria-label="대화 나가기"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white"
+              className="sk sk-primary sk-slot h-9 w-9"
             >
               <Icon name="exit" className="h-4 w-4" />
             </button>
@@ -131,7 +143,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
       <div className="flex flex-1 flex-col gap-3 px-5">
         {!inConversation && (
           <>
-            <div className="pb-1 pt-3 text-center">
+            <div className="sk-enter pb-1 pt-3 text-center">
               <h1 className="text-[26px] font-bold leading-tight text-accent">어디로 나가볼까요?</h1>
               <p className="mt-2 text-[13px] leading-relaxed text-muted">
                 지역을 고르고 하고 싶은 걸 편하게 적어주세요.
@@ -140,13 +152,13 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+            <div className="sk-input sk-enter flex items-center gap-2 px-4 py-3">
               <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
               <select
                 value={regionId}
                 onChange={(e) => setRegionId(e.target.value)}
                 disabled={isPending}
-                className="flex-1 bg-transparent text-[15px] font-medium text-ink outline-none disabled:opacity-50"
+                className="-my-2 flex-1 bg-transparent py-2 text-[15px] font-medium text-ink outline-none disabled:opacity-50"
               >
                 <option value="">지역을 선택하세요</option>
                 {regions.map((r) => (
@@ -158,10 +170,10 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             </div>
 
             {!!regionId && (weatherQuery.data || airQualityQuery.data) && (
-              <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+              <div className="sk-panel sk-enter flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-[13px]">
                 {airQualityQuery.data && (
                   <span className="flex items-center gap-1.5">
-                    <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
+                    <span className="sk-slot h-7 w-7"><Icon name="dust" className="h-[16px] w-[16px]" /></span>
                     <span className="text-muted">미세먼지</span>
                     <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
                   </span>
@@ -180,8 +192,11 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           </>
         )}
 
+        {/* 스레드의 구조·데이터 흐름은 develop 그대로다(턴별 recommendations[i],
+            마지막 턴에만 현재 날씨/대기질). 바뀐 건 className뿐 — 40ms 간격으로
+            올라오고(sk-stagger), 말풍선/패널/아바타가 SOCKET 조형을 따른다. */}
         {inConversation && (
-          <div className="flex flex-col gap-4 pt-2">
+          <div className="sk-stagger flex flex-col gap-4 pt-2">
             {userTurns.map((turn, i) => {
               const rec = recommendations[i];
               const isLast = i === userTurns.length - 1;
@@ -189,19 +204,19 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               return (
                 <div key={i} className="flex flex-col gap-3">
                   <div className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-mint-bg px-4 py-2.5 text-[14px] leading-relaxed text-ink">
+                    <div className="max-w-[85%] rounded-[16px_4px_3px_16px] bg-mint-bg px-4 py-2.5 text-[14px] leading-relaxed text-ink">
                       {turn.content}
                     </div>
                   </div>
                   {rec && (
                     <div className="flex items-start gap-2">
-                      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-mint-soft">
+                      <span className="sk-slot mt-0.5 h-7 w-7">
                         <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
                       </span>
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <span className="text-[12px] font-semibold text-muted">AI 추천</span>
                         {rec.needsMoreInfo && (
-                          <div className="rounded-2xl border border-accent/30 bg-mint-bg px-4 py-3.5">
+                          <div className="sk-panel border-accent/30 bg-mint-bg px-4 py-3.5">
                             <p className="text-[14px] leading-relaxed text-ink">{rec.message}</p>
                           </div>
                         )}
@@ -217,7 +232,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                               onOpenDetail={() => openCourseDetail(rec)}
                             />
                             {rec.message && (
-                              <div className="rounded-2xl bg-white px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                              <div className="sk-panel px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft">
                                 {rec.message}
                               </div>
                             )}
@@ -233,27 +248,44 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
         )}
 
         {errorMessage && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="sk-panel border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMessage}
           </div>
         )}
 
+        {/* 조회 중 — 패널 위를 느린 스캔 밴드가 왕복한다(가짜 진행률은 만들지 않는다).
+            progressLabel은 실제 도구 호출 이벤트에서 나오는 값이고, 그 문구가 바뀔 때만
+            key가 바뀌어 위로 밀려 올라오며 교체된다 = "다음 단계로 넘어갔다". */}
         {isPending && (
-          <div className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-            <p className="text-[14px] text-muted">{progressLabel}</p>
+          <div className="sk-panel sk-scan sk-enter flex items-center gap-2.5 px-4 py-3.5" role="status">
+            <span className="sk-dot" />
+            <p key={progressLabel} className="sk-swap text-[14px] text-muted">
+              {progressLabel}
+            </p>
           </div>
         )}
 
-        <div className="flex flex-col gap-2 pt-2">
+        {/* 입력창 — 대화 중에는 화면 하단에 붙어 있어야 한다(스크롤로 사라지면
+            위로 기록을 읽다가 질문을 못 한다). position:sticky라 자리를 그대로
+            차지하므로 별도 여백 계산이 필요 없고, 맨 아래까지 내리면 제자리에 앉는다.
+            bottom은 탭바 높이(--sk-dock)에서 10px 빼서 아래끝이 탭바에 살짝 물리게
+            한다 — 그래야 둘 사이 틈으로 본문이 비쳐 보이지 않는다.
+            탭바가 없는 lg에서는 0이다. */}
+        <div
+          className={
+            inConversation
+              ? "sticky bottom-[calc(var(--sk-dock)-10px+env(safe-area-inset-bottom))] z-10 -mx-5 mt-1 flex flex-col gap-2 border-t border-[var(--sk-line-soft)] bg-page/95 px-5 pb-3 pt-2.5 backdrop-blur lg:bottom-0"
+              : "flex flex-col gap-2 pt-2"
+          }
+        >
           {showSuggestionChip && !input && (
             <button
               type="button"
               onClick={acceptSuggestion}
-              className="flex items-center gap-1.5 self-start rounded-full border border-accent/40 bg-mint-bg px-3.5 py-1.5 text-[13px] font-medium text-accent"
+              className="sk sk-on flex max-w-full items-center gap-1.5 self-start px-3.5 py-1.5 text-[13px]"
             >
-              <Icon name="sparkle" className="h-3.5 w-3.5" />
-              {displayedSuggestion}
+              <Icon name="sparkle" className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 truncate">{displayedSuggestion}</span>
             </button>
           )}
 
@@ -262,7 +294,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               e.preventDefault();
               sendMessage();
             }}
-            className="flex items-center gap-2 rounded-full bg-white p-1.5 pl-4 shadow-[0_1px_4px_rgba(17,24,39,0.07)]"
+            className="sk-input flex items-center gap-2 p-1.5 pl-4"
           >
             <div className="relative flex-1">
               {!input && (
@@ -287,7 +319,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               type="submit"
               disabled={isPending || !regionId}
               aria-label="보내기"
-              className={`flex h-10 w-10 items-center justify-center rounded-full bg-cta text-white transition-colors ${isPending ? "opacity-40" : ""}`}
+              className={`sk sk-primary sk-slot h-10 w-10 ${isPending ? "sk-loading" : ""}`}
             >
               <Icon name="send" className="h-[18px] w-[18px]" />
             </button>
@@ -300,14 +332,18 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             <p className="px-4 text-[13px] text-red-600">위에서 지역을 먼저 선택해주세요.</p>
           )}
 
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div
+            className={`sk-stagger flex gap-2 overflow-x-auto ${
+              inConversation ? `pb-1.5 pt-1 ${input ? "hidden" : ""}` : "pb-2.5 pt-1"
+            }`}
+          >
             {inConversation
               ? QUICK_REFINEMENTS.map((text) => (
                   <button
                     key={text}
                     type="button"
                     onClick={() => setInput(text)}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+                    className="sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-medium text-ink-soft"
                   >
                     {text}
                   </button>
@@ -317,7 +353,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                     key={q.label}
                     type="button"
                     onClick={() => setInput(q.text)}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-hairline bg-white px-3.5 py-1.5 text-[13px] text-ink-soft"
+                    className="sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-medium text-ink-soft"
                   >
                     {q.icon ? (
                       <Icon name={q.icon} className="h-3.5 w-3.5 text-mint-mid" />
@@ -338,9 +374,9 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           <span className="h-px flex-1 bg-hairline" />
         </div>
 
-        <div className="flex flex-col gap-2.5 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+        <div className="sk-panel sk-enter flex flex-col gap-2.5 p-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mint-bg">
+            <span className="sk-slot h-9 w-9">
               <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
             </span>
             <div>
@@ -360,19 +396,19 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               value={placeQuery}
               onChange={(e) => setPlaceQuery(e.target.value)}
               placeholder="장소 이름으로 검색 (예: 대구미술관)"
-              className="min-w-0 flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
+              className="sk-input min-w-0 flex-1 px-3.5 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
             />
             <button
               type="submit"
               disabled={placesMutation.isPending || !placeQuery.trim()}
-              className="shrink-0 whitespace-nowrap rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
+              className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14px] ${placesMutation.isPending ? "sk-loading" : ""}`}
             >
               검색
             </button>
           </form>
           {placesMutation.isPending && <p className="px-1 text-xs text-muted">검색 중...</p>}
           {placesMutation.data && (
-            <div className="flex flex-col gap-2">
+            <div className="sk-stagger flex flex-col gap-2">
               {placesMutation.data.length === 0 && (
                 <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
               )}
@@ -380,7 +416,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                 <Link
                   key={p.id}
                   href={`/place/${p.id}`}
-                  className="block rounded-2xl bg-white px-4 py-3 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+                  className="sk-panel block px-4 py-3 text-left"
                 >
                   <div className="text-[15px] font-semibold text-ink">{p.name}</div>
                   {p.roadAddress && <div className="text-[13px] text-muted">{p.roadAddress}</div>}
@@ -393,9 +429,9 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           )}
         </div>
 
-        <div className="mt-4 flex flex-col gap-2.5 rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+        <div className="sk-panel sk-enter mt-4 flex flex-col gap-2.5 p-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mint-bg">
+            <span className="sk-slot h-9 w-9">
               <Icon name="calendar" className="h-[18px] w-[18px] text-accent" />
             </span>
             <div>
@@ -413,7 +449,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             <select
               value={cultureDtype}
               onChange={(e) => setCultureDtype(e.target.value as (typeof CULTURE_DTYPES)[number])}
-              className="shrink-0 rounded-full border border-hairline bg-white px-3.5 py-2.5 text-[14px] font-medium text-ink-soft outline-none"
+              className="sk-input shrink-0 px-3 py-2.5 text-[14px] font-medium text-ink-soft outline-none"
             >
               {CULTURE_DTYPES.map((d) => (
                 <option key={d} value={d}>
@@ -425,19 +461,19 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
               value={cultureKeyword}
               onChange={(e) => setCultureKeyword(e.target.value)}
               placeholder="제목 검색어 (선택)"
-              className="min-w-0 flex-1 rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
+              className="sk-input min-w-0 flex-1 px-3.5 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
             />
             <button
               type="submit"
               disabled={cultureMutation.isPending}
-              className="shrink-0 whitespace-nowrap rounded-full border border-hairline bg-white px-4 py-2.5 text-[14px] font-medium text-ink-soft disabled:text-muted/50"
+              className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14px] ${cultureMutation.isPending ? "sk-loading" : ""}`}
             >
               검색
             </button>
           </form>
           {cultureMutation.isPending && <p className="px-1 text-xs text-muted">검색 중...</p>}
           {cultureMutation.data && (
-            <div className="flex flex-col gap-2">
+            <div className="sk-stagger flex flex-col gap-2">
               {cultureMutation.data.length === 0 && (
                 <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
               )}
@@ -448,7 +484,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                     href={event.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+                    className="sk-panel flex items-center gap-2 px-4 py-3"
                   >
                     <div className="flex-1">
                       <div className="text-[15px] font-semibold text-ink">{event.title}</div>
@@ -459,7 +495,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
                     <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />
                   </a>
                 ) : (
-                  <div key={i} className="rounded-2xl bg-white px-4 py-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+                  <div key={i} className="sk-panel px-4 py-3">
                     <div className="text-[15px] font-semibold text-ink">{event.title}</div>
                     <div className="text-[13px] text-muted">
                       {event.eventSite} · {event.eventPeriod}

@@ -90,15 +90,18 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-const SPOT_BADGE_STYLE =
-  "width:26px;height:26px;border-radius:999px;background:#1ec9b8;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3);cursor:pointer;";
-
 // 기본은 번호 배지만(라벨이 항상 떠 있으면 주차장이 몰린 지역에서 서로 겹쳐 못 읽는다).
 // 마커를 탭하면 그 마커만 이름·도보시간 라벨을 위에 띄운다.
+//
+// 마커 content는 문자열이지만 실제로는 앱 DOM 안에 삽입되므로 globals.css의 전역
+// 클래스가 그대로 먹는다. 그래서 인라인 스타일 대신 sk-mappin / sk-mappin-on /
+// sk-maplabel을 쓴다 — 나머지 UI와 같은 조형(사각 슬롯 + 우하단 각진 모서리)과
+// 같은 모션(선택 시 pop + settle + 파문 한 번)을 공유한다. 크기는 26px 그대로라
+// anchor 좌표와 지도 가독성은 바뀌지 않는다.
 function spotMarkerIcon(spot: MapParkingSpot, selected: boolean, naver: Window["naver"]) {
   if (!selected) {
     return {
-      content: `<div style="${SPOT_BADGE_STYLE}">${spot.order}</div>`,
+      content: `<div class="sk-mappin">${spot.order}</div>`,
       anchor: new naver.maps.Point(13, 13),
     };
   }
@@ -107,8 +110,8 @@ function spotMarkerIcon(spot: MapParkingSpot, selected: boolean, naver: Window["
     .join(" · ");
   return {
     content: `<div style="position:relative;">
-      <div style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);${SPOT_BADGE_STYLE}">${spot.order}</div>
-      <div style="position:absolute;left:0;top:-18px;transform:translate(-50%,-100%);background:#111827;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${escapeHtml(label)}</div>
+      <div class="sk-mappin sk-mappin-on" style="position:absolute;left:0;top:0;transform:translate(-50%,-50%);">${spot.order}</div>
+      <div class="sk-maplabel" style="position:absolute;left:0;top:-18px;transform:translate(-50%,-100%);">${escapeHtml(label)}</div>
     </div>`,
     anchor: new naver.maps.Point(0, 0),
   };
@@ -193,7 +196,7 @@ export function NaverMap({
         position: latlng,
         map,
         icon: {
-          content: `<div style="width:18px;height:18px;border-radius:999px;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
+          content: `<div class="sk-mapme"></div>`,
           anchor: new naver.maps.Point(9, 9),
         },
       });
@@ -225,10 +228,10 @@ export function NaverMap({
             map,
             icon: {
               content: `<div style="position:relative;">
-                <div style="position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;">
-                  <div style="background:#111827;color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;">${destinationLabel}</div>
-                  <div style="width:28px;height:28px;border-radius:999px;background:#f5a623;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);">
-                    <div style="width:10px;height:10px;border-radius:999px;background:#fff;"></div>
+                <div style="position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;">
+                  <div class="sk-maplabel">${destinationLabel}</div>
+                  <div class="sk-mappin sk-mappin-on" style="width:28px;height:28px;">
+                    <div style="width:9px;height:9px;border-radius:999px;background:#fff;"></div>
                   </div>
                 </div>
               </div>`,
@@ -246,7 +249,7 @@ export function NaverMap({
             position: originLatLng,
             map,
             icon: {
-              content: `<div style="width:18px;height:18px;border-radius:999px;background:#2563eb;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
+              content: `<div class="sk-mapme"></div>`,
               anchor: new naver.maps.Point(9, 9),
             },
           });

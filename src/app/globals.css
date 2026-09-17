@@ -36,25 +36,901 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 클릭 가능한 요소는 이 앱에서 전부 button 태그라 여기 한 곳으로 전체 적용된다.
-   brightness는 accent-deep("액센트 눌림/호버"용으로 정의만 돼 있고 안 쓰이던 토큰)이
-   민트 버튼에서 실제로 어떻게 보이는지에 맞춘 값 — 흰 배경 버튼에도 같이 먹혀서
-   버튼마다 별도 색을 하드코딩할 필요가 없다. */
-button:not(:disabled) {
-  cursor: pointer;
+/* ============================================================
+   SOCKET v3 — 조형 + 모션 언어 (sk-* 클래스)
+   ------------------------------------------------------------
+   조형 규칙(그대로 유지)
+     1. 인터랙티브 표면은 "트랙(홈) 위에 얹힌 면(face)" 2레이어다.
+     2. 모서리는 우하단만 각지다. 나머지 셋은 둥글다.
+     3. 상태는 색이 아니라 높이다.
+     4. 아이콘·숫자는 원이 아니라 같은 모서리 규칙의 사각 슬롯에 들어간다.
+
+   ── 모션 언어: "트랙은 자석이다" ───────────────────────────
+   면은 트랙 위에 떠 있고, 트랙은 면을 끌어당긴다. 이 앱의 모든 움직임은
+   그 자력(磁力)에서 파생된 네 개의 원자 동작뿐이다.
+
+   SNAP   눌림. 면이 트랙까지 빨려 내려간다(90ms, 가속 곡선) — 놓으면
+          되튀며 올라온다(240ms, 오버슈트). 들어갈 때와 나올 때 곡선이
+          다른 게 핵심이다. 같으면 그냥 이동이고, 다르면 "붙었다 떨어진다".
+          면 안의 내용은 면보다 30ms 늦게 따라 내려가 층이 분리돼 보인다.
+
+   LOCK   선택. 트랙이 왼쪽에서 미끄러져 들어와 면을 붙잡는다
+          (box-shadow의 x가 -7px → 0). 색이 켜지는 게 아니라 "물린다".
+          칩·탭·슬롯·저장 완료가 전부 이 하나를 공유한다.
+
+   SETTLE 등장. 아래에서 올라오되 한 번 지나쳤다가(-3px) 제자리에 앉는다.
+          리스트는 40ms 간격으로 이어지고, 카드 안의 구역도 같은 간격으로
+          머리 → 정보 → 장소 → 액션 순서로 도착한다.
+
+   SWEEP  확정·진행. 면 위를 빛 한 줄이 훑는다. 한 번이면 "됐다"(선택·저장),
+          계속 왕복하면 "하는 중"(로딩). 같은 문법의 1회성/반복형이다.
+
+   속도: press 90 / hover·focus 140 / lock 240 / nav 220 / settle 260
+        stagger 40 / 스캔 루프 2.1s(깜빡이지 않게 느리게)
+
+   [중요] SOCKET 전용 색은 :root의 --sk-* 리터럴로 고정한다.
+   @theme inline의 --color-*는 해당 유틸이 소스에서 안 쓰이면 Tailwind v4가
+   방출하지 않아(트리셰이킹) var()가 비어버린다. 값은 @theme 토큰과 같다.
+
+   [중요] 아래 정의는 @layer components 안에 둔다. 레이어 밖 규칙은 특정도와
+   무관하게 모든 레이어를 이겨서 h-11 / bg-white 같은 유틸로 덮어쓸 수 없다.
+
+   [중요] border 단축 속성은 border-color를 currentColor로 리셋해서
+   :where()로 준 색을 이겨버린다. 반드시 border-width/border-style로 쪼갠다.
+   ============================================================ */
+
+:root {
+  /* --- 선 : 먹색이 아니라 짙은 청록의 알파 3단계 --- */
+  --sk-line-soft: rgba(15, 60, 58, 0.07);
+  --sk-line: rgba(15, 60, 58, 0.13);
+  --sk-line-mid: rgba(15, 60, 58, 0.2);
+
+  /* --- 단(段) : 면 아래에 깔리는 트랙 --- */
+  --sk-track: rgba(15, 60, 58, 0.12);
+  --sk-track-deep: #0d9488;
+  --sk-halo: rgba(13, 148, 136, 0.28);
+  --sk-amb: rgba(15, 60, 58, 0.1);
+
+  --sk-face: #ffffff;
+  --sk-cta: #1ec9b8;
+  --sk-accent: #14b8a6;
+  --sk-accent-deep: #0f9d8f;
+  --sk-mint-bg: #eaf9f7;
+  --sk-mint-soft: #ddf3f1;
+  --sk-mint-mid: #71c7c1;
+  --sk-hairline: #e8ecef;
+  --sk-page: #f8fafa;
+  --sk-muted: #64748b;
+
+  /* 모바일 하단 탭바 높이 — 고정 입력창과 본문 하단 여백이 같이 참조한다 */
+  --sk-dock: 84px;
+
+  --sk-r: 14px;
+  --sk-r-cut: 4px;
+
+  /* --- 모션 곡선 : 들어갈 때와 나올 때가 다르다 --- */
+  --sk-snap-in: 90ms cubic-bezier(0.45, 0, 1, 1);      /* 자석에 붙는다 */
+  --sk-snap-out: 240ms cubic-bezier(0.2, 1.24, 0.34, 1); /* 되튀며 떨어진다 */
+  --sk-glide: 200ms cubic-bezier(0.2, 0.8, 0.2, 1);      /* 미끄러진다 */
+  --sk-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-button:disabled {
-  cursor: not-allowed;
-}
+@layer components {
 
-@media (hover: hover) {
-  button:not(:disabled):hover {
-    filter: brightness(0.97);
+  /* =========================================================
+     면(face) — 버튼·칩의 몸통
+     ========================================================= */
+  .sk {
+    position: relative;
+    border-width: 1px;
+    border-style: solid;
+    box-shadow:
+      0 2px 0 var(--sk-track),
+      0 3px 6px -3px var(--sk-amb);
+    transition:
+      transform var(--sk-snap-out),
+      box-shadow var(--sk-snap-out),
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  :where(.sk) {
+    border-radius: var(--sk-r) var(--sk-r) var(--sk-r-cut) var(--sk-r);
+    border-color: var(--sk-line);
+    background: var(--sk-face);
+  }
+
+  /* 면 안의 내용은 면보다 조금 늦게 따라 움직인다 — 두 겹이 분리돼 보인다 */
+  .sk > * {
+    transition: transform var(--sk-snap-out) 30ms;
+  }
+
+  @media (hover: hover) {
+    .sk:not(:disabled):not([aria-disabled="true"]):hover {
+      transform: translateY(-1px);
+      border-color: var(--sk-line-mid);
+      box-shadow:
+        0 3px 0 var(--sk-track),
+        0 6px 12px -5px var(--sk-amb);
+    }
+  }
+
+  /* SNAP — 바닥까지 빨려 내려간다. 들어갈 땐 빠르게, 나올 땐 되튄다. */
+  .sk:not(:disabled):not([aria-disabled="true"]):active {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 var(--sk-track);
+    transition:
+      transform var(--sk-snap-in),
+      box-shadow var(--sk-snap-in);
+  }
+
+  .sk:not(:disabled):not([aria-disabled="true"]):active > * {
+    transform: translateY(1px);
+    transition: transform var(--sk-snap-in) 30ms;
+  }
+
+  /* 비활성 — 이미 바닥에 앉아 있다. 누를 층이 없다 = 누를 수 없다. */
+  .sk:disabled,
+  .sk[aria-disabled="true"] {
+    transform: translateY(2px);
+    box-shadow: none;
+    background: var(--sk-page);
+    color: var(--sk-muted);
+    border-color: var(--sk-line-soft);
+  }
+
+  /* --- Primary : 핵심 액션. 단 3px + 민트 확산광 --- */
+  .sk-primary {
+    background: linear-gradient(180deg, #23d6c4 0%, var(--sk-cta) 55%, #17bfae 100%);
+    border-color: transparent;
+    color: #ffffff;
+    box-shadow:
+      0 3px 0 var(--sk-track-deep),
+      0 8px 16px -6px var(--sk-halo);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  @media (hover: hover) {
+    .sk-primary:not(:disabled):not([aria-disabled="true"]):hover {
+      background: linear-gradient(180deg, #2ae0cd 0%, #22cfbe 55%, #1bc7b6 100%);
+      border-color: transparent;
+      box-shadow:
+        0 4px 0 var(--sk-track-deep),
+        0 12px 22px -8px var(--sk-halo);
+    }
+  }
+
+  .sk-primary:not(:disabled):not([aria-disabled="true"]):active {
+    transform: translateY(3px);
+    box-shadow:
+      0 0 0 var(--sk-track-deep),
+      0 2px 6px -4px var(--sk-halo);
+  }
+
+  .sk-primary:disabled,
+  .sk-primary[aria-disabled="true"] {
+    background: var(--sk-hairline);
+    color: var(--sk-muted);
+  }
+
+  /* =========================================================
+     LOCK — 선택. 트랙이 왼쪽에서 미끄러져 들어와 면을 붙잡는다.
+     클래스가 붙는 순간에만 재생되므로 해제는 조용히 transition으로 풀린다.
+     ========================================================= */
+  .sk-on {
+    background: var(--sk-mint-bg);
+    border-color: var(--sk-accent);
+    color: var(--sk-accent-deep);
+    box-shadow:
+      0 3px 0 var(--sk-accent),
+      0 6px 12px -6px var(--sk-halo);
+    font-weight: 700;
+    overflow: hidden;
+    animation: sk-lock 240ms var(--sk-ease) 1;
+  }
+
+  /* 물린 직후 면 위를 빛 한 줄이 한 번 훑는다 = "확정됐다" */
+  .sk-on::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.85) 50%, transparent 65%);
+    transform: translateX(-120%);
+    animation: sk-sweep-once 520ms var(--sk-ease) 120ms 1;
+  }
+
+  @media (hover: hover) {
+    .sk-on:not(:disabled):not([aria-disabled="true"]):hover {
+      border-color: var(--sk-accent);
+      box-shadow:
+        0 4px 0 var(--sk-accent),
+        0 9px 16px -7px var(--sk-halo);
+    }
+  }
+
+  .sk-on:not(:disabled):not([aria-disabled="true"]):active {
+    transform: translateY(3px);
+    box-shadow: 0 0 0 var(--sk-accent);
+  }
+
+  /* 이미 끝난 동작(예: "저장됨") — 바닥에 앉았지만 켜진 색은 유지한다 */
+  .sk-on:disabled,
+  .sk-on[aria-disabled="true"] {
+    background: var(--sk-mint-bg);
+    border-color: var(--sk-mint-soft);
+    color: var(--sk-accent-deep);
+    box-shadow: none;
+  }
+
+  /* --- 조용한 보조 : 삭제·해제처럼 눈에 덜 띄어야 하는 버튼 --- */
+  .sk-quiet {
+    box-shadow: none;
+    border-color: var(--sk-line-soft);
+    background: transparent;
+  }
+
+  @media (hover: hover) {
+    .sk.sk-quiet:not(:disabled):not([aria-disabled="true"]):hover {
+      transform: none;
+      background: var(--sk-page);
+      border-color: var(--sk-line);
+      box-shadow: none;
+    }
+  }
+
+  .sk.sk-quiet:not(:disabled):not([aria-disabled="true"]):active {
+    transform: translateY(1px);
+    box-shadow: none;
+  }
+
+  /* =========================================================
+     슬롯 — 아이콘·숫자·순번이 들어가는 사각 홈
+     ========================================================= */
+  .sk-slot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-width: 1px;
+    border-style: solid;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    white-space: nowrap;
+    transition:
+      transform var(--sk-snap-out),
+      box-shadow var(--sk-snap-out),
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  :where(.sk-slot) {
+    background: var(--sk-mint-bg);
+    border-color: transparent;
+    color: var(--sk-accent-deep);
+    width: 2rem;
+    height: 2rem;
+    font-size: 13px;
+    border-radius: 11px 11px var(--sk-r-cut) 11px;
+  }
+
+  /* 슬롯이 켜질 때도 같은 LOCK 문법 — 트랙이 왼쪽에서 들어와 물린다 */
+  .sk-slot-on {
+    background: linear-gradient(180deg, #17c2b1 0%, var(--sk-accent) 100%);
+    border-color: transparent;
+    color: #ffffff;
+    box-shadow:
+      0 3px 0 var(--sk-track-deep),
+      0 6px 12px -6px var(--sk-halo);
+    transform: translateY(-1px);
+    animation: sk-lock-up 260ms var(--sk-ease) 1;
+  }
+
+  button.sk-slot:not(:disabled):active,
+  a.sk-slot:active {
+    transform: translateY(2px);
+    box-shadow: none;
+    transition:
+      transform var(--sk-snap-in),
+      box-shadow var(--sk-snap-in);
+  }
+
+  /* =========================================================
+     태그 — 슬롯이 가로로 늘어난 형태. 선을 쓰지 않고 면으로만 구별한다.
+     ========================================================= */
+  .sk-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  :where(.sk-tag) {
+    background: var(--sk-mint-bg);
+    color: var(--sk-accent-deep);
+    padding: 0.1875rem 0.5rem;
+    font-size: 11px;
+    line-height: 1.35;
+    border-radius: 9px 9px var(--sk-r-cut) 9px;
+  }
+
+  /* 추정값 태그 — 점선 테두리. sk-rail-est와 같은 약속이다. */
+  .sk-tag-est {
+    border-width: 1px;
+    border-style: dashed;
+    border-color: var(--sk-mint-mid);
+    background: transparent;
+    color: var(--sk-muted);
+    padding: calc(0.1875rem - 1px) calc(0.5rem - 1px);
+  }
+
+  .sk-tag-mute {
+    background: var(--sk-page);
+    box-shadow: inset 0 0 0 1px var(--sk-line-soft);
+    color: var(--sk-muted);
+  }
+
+  /* =========================================================
+     입력 — 파인 홈. 포커스에서 홈이 열리고, 옆의 핵심 버튼이 같이 깨어난다.
+     ========================================================= */
+  .sk-input {
+    border-width: 1px;
+    border-style: solid;
+    box-shadow: inset 0 1px 2px rgba(15, 60, 58, 0.05);
+    transition:
+      border-color 140ms ease,
+      box-shadow var(--sk-glide),
+      background-color 140ms ease;
+  }
+
+  :where(.sk-input) {
+    border-radius: var(--sk-r) var(--sk-r) var(--sk-r-cut) var(--sk-r);
+    border-color: var(--sk-line);
+    background: var(--sk-page);
+  }
+
+  @media (hover: hover) {
+    .sk-input:hover {
+      border-color: var(--sk-line-mid);
+    }
+  }
+
+  .sk-input:focus-within,
+  .sk-input:focus {
+    background: var(--sk-face);
+    border-color: var(--sk-accent);
+    box-shadow:
+      inset 0 1px 2px rgba(15, 60, 58, 0.03),
+      0 0 0 3px var(--sk-mint-bg);
+    outline: none;
+  }
+
+  /* 입력이 활성화되면 보낼 버튼이 먼저 반응한다 — 입력창과 버튼이 한 몸이다 */
+  .sk-input:focus-within .sk-primary {
+    transform: translateY(-1px) scale(1.04);
+    box-shadow:
+      0 4px 0 var(--sk-track-deep),
+      0 10px 20px -6px var(--sk-halo);
+  }
+
+  .sk-input:focus-within .sk-primary:active {
+    transform: translateY(3px) scale(1);
+  }
+
+  /* =========================================================
+     패널 — 담는 것. 단을 쓰지 않아 "누르는 것"과 깊이로 갈린다.
+     ========================================================= */
+  .sk-panel {
+    border-width: 1px;
+    border-style: solid;
+    box-shadow:
+      0 1px 2px rgba(15, 60, 58, 0.04),
+      0 10px 20px -16px rgba(15, 60, 58, 0.5);
+    transition:
+      transform var(--sk-snap-out),
+      box-shadow var(--sk-snap-out),
+      border-color 140ms ease;
+  }
+
+  :where(.sk-panel) {
+    border-radius: 18px 18px 6px 18px;
+    border-color: var(--sk-line-soft);
+    background: var(--sk-face);
+  }
+
+  @media (hover: hover) {
+    a.sk-panel:hover,
+    button.sk-panel:hover {
+      transform: translateY(-2px);
+      border-color: var(--sk-line);
+      box-shadow:
+        0 2px 3px rgba(15, 60, 58, 0.05),
+        0 16px 26px -18px rgba(15, 60, 58, 0.55);
+    }
+  }
+
+  a.sk-panel:active,
+  button.sk-panel:active {
+    transform: translateY(1px);
+    transition: transform var(--sk-snap-in);
+  }
+
+  /* =========================================================
+     탭바 — 트랙이 탭 사이를 미끄러져 옮겨간다.
+     ========================================================= */
+  .sk-navrail {
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    height: 3px;
+    pointer-events: none;
+  }
+
+  .sk-navrail > i {
+    display: block;
+    height: 100%;
+    border-radius: 2px 2px 1px 2px;
+    background: linear-gradient(90deg, var(--sk-cta), var(--sk-accent-deep));
+    transition: transform 220ms cubic-bezier(0.2, 0.9, 0.2, 1);
+    will-change: transform;
+  }
+
+  .sk-navitem {
+    position: relative;
+    border-radius: 11px 11px var(--sk-r-cut) 11px;
+    transition:
+      transform var(--sk-glide),
+      background-color 200ms ease,
+      color 200ms ease;
+  }
+
+  .sk-navitem[aria-current="page"] {
+    background: var(--sk-mint-bg);
+    color: var(--sk-accent-deep);
+    transform: translateY(-3px);
+  }
+
+  /* 선택된 탭의 아이콘만 한 번 튀어오른다 */
+  .sk-navitem[aria-current="page"] > :first-child {
+    animation: sk-hop 320ms var(--sk-ease) 1;
+  }
+
+  .sk-navitem:not([aria-current="page"]):active {
+    transform: translateY(2px);
+    transition: transform var(--sk-snap-in);
+  }
+
+  /* =========================================================
+     SWEEP — 진행 중. 느리게 왕복하는 스캔 밴드.
+     "AI가 지금 무언가 보고 있다"는 느낌만 주고 진행률은 만들지 않는다.
+     ========================================================= */
+  .sk-scan {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .sk-scan::after {
+    content: "";
+    position: absolute;
+    inset: -40% -10%;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent 38%,
+      rgba(30, 201, 184, 0.13) 50%,
+      transparent 62%
+    );
+    animation: sk-scan-loop 2.1s ease-in-out infinite;
+  }
+
+  /* 진행 단계 문구가 바뀔 때 — 위로 밀려 올라오며 교체된다 */
+  .sk-swap {
+    animation: sk-swap-in 260ms var(--sk-ease) 1;
+  }
+
+  /* 버튼 자체가 조회 중일 때 */
+  .sk-loading {
+    position: relative;
+    overflow: hidden;
+    color: transparent !important;
+    pointer-events: none;
+  }
+
+  .sk-loading::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.72) 50%, transparent 65%);
+    animation: sk-sweep-loop 1.15s linear infinite;
+  }
+
+  /* 진행 중 점 — 숨쉬고 파문이 번진다 */
+  .sk-dot {
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--sk-accent);
+    animation: sk-breathe 1.6s ease-in-out infinite;
+  }
+
+  :where(.sk-dot) {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+
+  .sk-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--sk-accent);
+    animation: sk-ring 1.6s ease-out infinite;
+  }
+
+  /* 스켈레톤 — 결과와 같은 형태·높이로 둔다 */
+  .sk-skel {
+    display: block;
+    background: linear-gradient(
+      90deg,
+      var(--sk-hairline) 25%,
+      var(--sk-mint-bg) 37%,
+      var(--sk-hairline) 63%
+    );
+    background-size: 400% 100%;
+    animation: sk-shimmer 1.6s ease infinite;
+  }
+
+  :where(.sk-skel) {
+    border-radius: 9px 9px var(--sk-r-cut) 9px;
+  }
+
+  /* --- 이미지 : 패널 안에서 같은 모서리를 반복한다 --- */
+  .sk-thumb {
+    border-width: 1px;
+    border-style: solid;
+    object-fit: cover;
+  }
+
+  :where(.sk-thumb) {
+    border-radius: 11px 11px var(--sk-r-cut) 11px;
+    border-color: var(--sk-line-soft);
+    background: var(--sk-mint-bg);
+  }
+
+  /* =========================================================
+     SETTLE — 등장. 아래에서 올라와 한 번 지나쳤다가 제자리에 앉는다.
+     sk-stagger는 자식들을 40ms 간격으로 이어 보낸다(카드 안 구역도 같은 리듬).
+     fill-mode는 backwards — 끝나면 요소 자신의 스타일로 돌아가야
+     hover/press가 정상 동작한다(both면 transform이 고정돼 버튼이 안 움직인다).
+     ========================================================= */
+  .sk-enter {
+    animation: sk-settle 260ms var(--sk-ease) backwards;
+  }
+
+  .sk-stagger > * {
+    animation: sk-settle 260ms var(--sk-ease) backwards;
+  }
+
+  .sk-stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .sk-stagger > *:nth-child(2) { animation-delay: 40ms; }
+  .sk-stagger > *:nth-child(3) { animation-delay: 80ms; }
+  .sk-stagger > *:nth-child(4) { animation-delay: 120ms; }
+  .sk-stagger > *:nth-child(5) { animation-delay: 160ms; }
+  .sk-stagger > *:nth-child(6) { animation-delay: 200ms; }
+  .sk-stagger > *:nth-child(7) { animation-delay: 240ms; }
+  .sk-stagger > *:nth-child(n + 8) { animation-delay: 280ms; }
+
+  /* 카드 안에 다시 들어 있는 목록은 바깥 구역이 자리 잡은 뒤에 이어 보낸다.
+     위 .sk-stagger > *:nth-child(n) 과 특정도를 맞춰야(둘 다 0,2,0) 뒤에 온
+     이 규칙이 이긴다 — nth-child 없이 쓰면 첫 항목만 0ms로 되돌아간다. */
+  .sk-stagger-late > *:nth-child(1) { animation-delay: 160ms; }
+  .sk-stagger-late > *:nth-child(2) { animation-delay: 200ms; }
+  .sk-stagger-late > *:nth-child(3) { animation-delay: 240ms; }
+  .sk-stagger-late > *:nth-child(4) { animation-delay: 280ms; }
+  .sk-stagger-late > *:nth-child(n + 5) { animation-delay: 320ms; }
+
+  /* 화면 진입 — 같은 SETTLE을 페이지 단위로 한 번 */
+  .sk-page {
+    animation: sk-page-in 280ms var(--sk-ease) backwards;
+  }
+
+  /* =========================================================
+     지도 핀 — 마커는 HTML 문자열로 주입되므로 전역 클래스로 잡는다.
+     default / selected / current 를 형태로 구분하고, 선택 순간 "잡혔다"는
+     pop + settle 과 파문 한 번을 준다. 지도 가독성을 위해 크기는 유지한다.
+     ========================================================= */
+  .sk-mappin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 9px 9px 3px 9px;
+    background: var(--sk-face);
+    color: var(--sk-accent-deep);
+    font-size: 12px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    box-shadow:
+      0 0 0 1px var(--sk-line-mid),
+      0 2px 0 var(--sk-track),
+      0 4px 8px -3px rgba(15, 60, 58, 0.35);
+    transition:
+      transform var(--sk-snap-out),
+      box-shadow var(--sk-snap-out);
+  }
+
+  @media (hover: hover) {
+    .sk-mappin:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 0 0 1px var(--sk-accent),
+        0 4px 0 var(--sk-track),
+        0 8px 14px -4px rgba(15, 60, 58, 0.4);
+    }
+  }
+
+  .sk-mappin-on {
+    background: linear-gradient(180deg, #23d6c4 0%, var(--sk-cta) 100%);
+    color: #ffffff;
+    box-shadow:
+      0 0 0 1px var(--sk-track-deep),
+      0 3px 0 var(--sk-track-deep),
+      0 8px 16px -4px rgba(13, 148, 136, 0.5);
+    animation: sk-grab 340ms var(--sk-ease) 1;
+  }
+
+  /* 잡힌 핀 주변으로 파문이 한 번 번진다 */
+  .sk-mappin-on::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 0 var(--sk-halo);
+    animation: sk-pin-ring 620ms var(--sk-ease) 1;
+    pointer-events: none;
+  }
+
+  .sk-maplabel {
+    background: #0f3c3a;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 10px 10px 3px 10px;
+    white-space: nowrap;
+    box-shadow: 0 4px 10px -3px rgba(15, 60, 58, 0.5);
+    animation: sk-settle 220ms var(--sk-ease) 60ms backwards;
+  }
+
+  /* 내 위치 — 계속 살아 있는 핀이라 파문이 느리게 반복된다 */
+  .sk-mapme {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #2563eb;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+
+  .sk-mapme::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.45);
+    animation: sk-ring 2.2s ease-out infinite;
+  }
+
+  /* =========================================================
+     근거 레일 — 실측 / 추정 / 미확인을 선의 형태로 구분한다
+     ========================================================= */
+  .sk-rail { border-left: 2px solid var(--sk-accent); }
+  .sk-rail-est { border-left: 2px dashed var(--sk-mint-mid); }
+  .sk-rail-none { border-left: 2px solid var(--sk-hairline); }
+
+  :where(.sk-rail, .sk-rail-est, .sk-rail-none) {
+    padding-left: 0.75rem;
+  }
+
+  .sk-cap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sk-cap::before {
+    content: "";
+    flex-shrink: 0;
+    width: 3px;
+    height: 0.875em;
+    border-radius: 2px 2px 0 2px;
+    background: linear-gradient(180deg, var(--sk-cta), var(--sk-accent-deep));
+  }
+
+  /* =========================================================
+     인터랙션 — 전역
+     ========================================================= */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  @media (hover: hover) {
+    button:not(:disabled):not(.sk):not(.sk-slot):not(.sk-navitem):hover {
+      filter: brightness(0.97);
+    }
+  }
+
+  button:not(:disabled):not(.sk):not(.sk-slot):not(.sk-navitem):not(.sk-panel):active,
+  a:not(.sk):not(.sk-slot):not(.sk-navitem):not(.sk-panel):active {
+    transform: translateY(1px);
+  }
+
+  :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--sk-accent);
+    outline-offset: 3px;
   }
 }
 
-button:not(:disabled):active {
-  transform: scale(0.97);
-  filter: brightness(0.94);
+/* --- 키프레임 (레이어 밖) ------------------------------------ */
+
+/* LOCK — 트랙이 왼쪽에서 미끄러져 들어와 면을 붙잡는다 */
+@keyframes sk-lock {
+  0% {
+    box-shadow: -7px 2px 0 var(--sk-accent), 0 4px 10px -6px var(--sk-halo);
+    transform: translateY(0);
+  }
+  48% {
+    box-shadow: 1px 4px 0 var(--sk-accent), 0 9px 16px -6px var(--sk-halo);
+    transform: translateY(-2px);
+  }
+  100% {
+    box-shadow: 0 3px 0 var(--sk-accent), 0 6px 12px -6px var(--sk-halo);
+    transform: translateY(0);
+  }
+}
+
+/* 슬롯용 — 같은 문법이되 -1px에 안착한다 */
+@keyframes sk-lock-up {
+  0% {
+    box-shadow: -7px 2px 0 var(--sk-track-deep), 0 4px 10px -6px var(--sk-halo);
+    transform: translateY(0) scale(0.96);
+  }
+  48% {
+    box-shadow: 1px 4px 0 var(--sk-track-deep), 0 9px 16px -6px var(--sk-halo);
+    transform: translateY(-3px) scale(1.06);
+  }
+  100% {
+    box-shadow: 0 3px 0 var(--sk-track-deep), 0 6px 12px -6px var(--sk-halo);
+    transform: translateY(-1px) scale(1);
+  }
+}
+
+/* SWEEP — 한 번 훑고 끝 */
+@keyframes sk-sweep-once {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+
+/* SWEEP — 반복(버튼 로딩) */
+@keyframes sk-sweep-loop {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* SWEEP — 느린 왕복(패널 스캔). 깜빡이지 않게 멈춤 구간을 둔다. */
+@keyframes sk-scan-loop {
+  0% { transform: translateX(-55%); }
+  55% { transform: translateX(55%); }
+  100% { transform: translateX(55%); }
+}
+
+@keyframes sk-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* SETTLE — 올라와 한 번 지나쳤다가 앉는다 */
+@keyframes sk-settle {
+  0% { opacity: 0; transform: translateY(10px) scale(0.985); }
+  60% { opacity: 1; transform: translateY(-3px) scale(1.004); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes sk-page-in {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* 탭 아이콘이 한 번 튀어오른다 */
+@keyframes sk-hop {
+  0% { transform: translateY(0) scale(1); }
+  35% { transform: translateY(-4px) scale(1.12); }
+  70% { transform: translateY(1px) scale(0.98); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* 핀이 잡힌다 — 눌렸다가 튀어오르고 안착 */
+@keyframes sk-grab {
+  0% { transform: translateY(0) scale(0.82); }
+  40% { transform: translateY(-5px) scale(1.14); }
+  70% { transform: translateY(1px) scale(0.97); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes sk-pin-ring {
+  0% { box-shadow: 0 0 0 0 var(--sk-halo); }
+  100% { box-shadow: 0 0 0 14px rgba(13, 148, 136, 0); }
+}
+
+@keyframes sk-swap-in {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sk-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes sk-ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* 모션 최소화 — 움직임만 끄고 단(段)과 색은 남긴다.
+   상태 구별(선택/비활성/포커스)은 전혀 손상되지 않는다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .sk-enter,
+  .sk-stagger > *,
+  .sk-page,
+  .sk-swap,
+  .sk-maplabel {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .sk-on::after,
+  .sk-scan::after,
+  .sk-loading::after,
+  .sk-dot::after,
+  .sk-mappin-on::after,
+  .sk-mapme::after {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  .sk:hover,
+  .sk:active,
+  .sk > *,
+  .sk-navitem:active,
+  a.sk-panel:hover,
+  button.sk-panel:hover {
+    transform: none;
+  }
 }

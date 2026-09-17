@@ -20,8 +20,8 @@ export function ExternalMapMenu({
   icon = "send",
   className,
   summaryClassName,
-  // 버튼 여러 개가 나란히 있는 좁은 자리(예: CourseCard의 3버튼 줄)에 넣을 땐 메뉴가
-  // 아래로 펼쳐질 공간이 없어 위로 띄운다.
+  // 카드 맨 아래에 붙는 자리(예: CourseCard)에선 아래로 펼쳐질 공간이 없어 메뉴를
+  // 위로 띄운다.
   popupAbove = false,
 }: {
   latitude: number;
@@ -49,7 +49,7 @@ export function ExternalMapMenu({
       <summary
         className={
           summaryClassName ??
-          "flex list-none items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white marker:content-none"
+          "sk sk-primary flex list-none items-center justify-center gap-1.5 px-4 py-3 text-[14px] marker:content-none"
         }
       >
         <Icon name={icon} className="h-4 w-4" />
@@ -58,17 +58,17 @@ export function ExternalMapMenu({
       <div
         className={
           popupAbove
-            ? "absolute right-0 bottom-full z-10 mb-1.5 flex w-32 flex-col gap-1 rounded-2xl bg-white p-1.5 shadow-[0_1px_6px_rgba(17,24,39,0.15)]"
-            : "mt-2 flex flex-col gap-1.5 rounded-2xl bg-white p-2 shadow-[0_1px_3px_rgba(17,24,39,0.08)]"
+            ? "sk-panel absolute right-0 bottom-full z-30 mb-2 flex w-36 flex-col gap-1 p-1.5"
+            : "sk-panel mt-2 flex flex-col gap-1 p-1.5"
         }
       >
-        <button onClick={openNaver} className="rounded-xl py-2.5 text-[13px] font-medium text-ink-soft hover:bg-page">
+        <button onClick={openNaver} className="rounded-[10px_10px_3px_10px] px-3 py-2.5 text-left text-[13px] font-medium text-ink-soft hover:bg-page">
           네이버 지도
         </button>
-        <button onClick={openKakao} className="rounded-xl py-2.5 text-[13px] font-medium text-ink-soft hover:bg-page">
+        <button onClick={openKakao} className="rounded-[10px_10px_3px_10px] px-3 py-2.5 text-left text-[13px] font-medium text-ink-soft hover:bg-page">
           카카오맵
         </button>
-        <button onClick={openGoogle} className="rounded-xl py-2.5 text-[13px] font-medium text-ink-soft hover:bg-page">
+        <button onClick={openGoogle} className="rounded-[10px_10px_3px_10px] px-3 py-2.5 text-left text-[13px] font-medium text-ink-soft hover:bg-page">
           구글 지도
         </button>
       </div>
