@@ -158,6 +158,18 @@ upsert 스크립트로 그대로 넣은 뒤 `next dev`로 검증했다. **이 �
 여부, 분야)이 필요해서 같은 방식으로 무조건 미리 조회하면 안 된다 — 야외 요청에도 매번
 외부 API를 호출하는 손해가 더 크다. 이건 그대로 모델 도구 호출로 남겨뒀다.
 
+## PlaceSchema에서 항상 버려지는 필드 제거 (2026-09-17)
+
+`place-verification.ts`의 `verifyPlace`가 `operatingHours`/`fee`를 **항상** 관광 API
+값으로 덮어쓴다(`return { ...place, operatingHours: match?.operatingHours, fee: match?.fee, ... }`)
+— 매치가 없으면 `undefined`로도 덮어써서, 모델이 이 두 필드를 채워도 100% 버려진다.
+`PlaceSchema`(agent.ts)에서 아예 뺐다. 화면에 보이는 값은 `EnrichedPlace` 타입의 확장
+필드로 그대로 유지되므로(이미 `closedDays`/`visitDuration`이 같은 패턴) 동작 변화 없음.
+
+**실측**: 최종 구조화 출력 호출(3.0~3.5초)이 2필드×3~5장소 정도 줄어든 만큼만 짧아져서,
+Gemini 응답시간 자체의 변동폭(로컬 3.07~3.28초, 프로덕션 3.07~3.39초) 안에 묻혀 단독으로는
+측정이 안 될 만큼 작다. 다만 버려지는 출력을 만드는 것 자체가 낭비이므로 위험 없이 유지.
+
 ## Gemini 무료 티어 쿼터 (제품 제약이다)
 
 429 응답의 `QuotaFailure` 원문 기준:
