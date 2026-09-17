@@ -121,6 +121,43 @@ KorService2는 오퍼레이션마다 지역 파라미터가 다르다(실측):
 지어낸 값에서 검증된 값으로 바뀌었다. **잃은 것**: `spendtime`이 없는 장소(공원·음식점 등
 문화시설이 아닌 곳)는 소요시간이 빈칸이다 — 빈칸이 틀린 값보다 낫다고 판단했다.
 
+## search_daegu_pdf_guides 사전 조회로 왕복 1회 절감 (2026-09-17)
+
+LangSmith 트레이스 4건을 실측하니(2026-09-16~17) `search_daegu_pdf_guides`가 **매번 첫 번째
+도구로 호출**됐다 — 시스템 프롬프트에 "독립적인 도구는 동시에 호출해라"라고 이미 써놨는데도
+`search_culture_events`와 병렬로 부르지 않고 항상 별도 왕복으로 순차 처리했다(Gemini
+function-calling에는 OpenAI의 `parallel_tool_calls` 같은 강제 옵션이 없다 —
+`@langchain/google-genai`에 그런 설정 자체가 없다, 실측 확인).
+
+날씨/대기질(`describeSituation`)과 같은 원리로 대응했다: `createRecommendationRun`이
+대화 전체 텍스트로 `search_daegu_pdf_guides`를 날씨·대기질과 병렬로 미리 조회해
+(`describeGuides()`) 프롬프트에 주입하고, 결과를 `sources` 맵에도 미리 등록해둔다
+(`registerPdfSources`/`formatPdfResults`, `src/lib/tools/pdfGuide.ts`) — 그래야 모델이
+도구를 안 불러도 `sourceIds`로 인용한 출처가 정상적으로 풀린다. 도구 자체는 폴백용으로
+남겨뒀다(프롬프트: "필요한 정보가 여기 있으면 다시 호출하지 마라").
+
+**검증 방법**: 로컬 Laragon DB엔 `rag_chunks`(임베딩 포함)가 비어 있어 이 기능은 로컬로
+의미 있게 테스트할 수 없었다. 프로덕션 서버에서 `RAG_PDF` 소스의 `data_sources`/
+`rag_documents`/`rag_chunks`(620건, 임베딩 포함)를 JSON으로 덤프해(SSH로 Prisma 스크립트
+실행, ca.pem 불필요 — 이 서버 DB는 Aiven이 아니라 서버 로컬 MySQL이다) 로컬로 내려받고
+upsert 스크립트로 그대로 넣은 뒤 `next dev`로 검증했다. **이 방법은 재사용 가능** —
+임베딩이 필요한 다른 로컬 검증에도 PDF 재수집(다운로드+추출+임베딩 API 호출) 대신 이 경로가
+훨씬 싸다.
+
+**실측 결과** (LangSmith, 프로덕션):
+
+| | 이전(3회 왕복 고정) | 이후 |
+|---|---|---|
+| 모델 왕복 | 항상 3회 | culture_events 필요 없으면 1회, 필요하면 2회 |
+| LangGraph 체인 소요 | 5.5~8.6초 | 6.2초(문화행사 호출 포함) |
+
+`sourceIds` 인용도 정상 작동 확인(prefetch로만 얻은 pdf-27/38/12를 모델이 도구 호출 없이
+그대로 인용, `sources` 배열에 documentTitle/page/sourceUrl까지 정상 첨부).
+
+**남은 기회**: `search_culture_events`는 `dtype`(9개 enum) 선택이 모델의 판단(실내 활동
+여부, 분야)이 필요해서 같은 방식으로 무조건 미리 조회하면 안 된다 — 야외 요청에도 매번
+외부 API를 호출하는 손해가 더 크다. 이건 그대로 모델 도구 호출로 남겨뒀다.
+
 ## Gemini 무료 티어 쿼터 (제품 제약이다)
 
 429 응답의 `QuotaFailure` 원문 기준:
