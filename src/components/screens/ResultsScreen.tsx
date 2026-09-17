@@ -26,6 +26,7 @@ import { PlanShareButton } from "@/components/PlanShareButton";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { PlaceMatchRecovery } from "@/components/PlaceMatchRecovery";
 import { NearbyPlaces } from "@/components/NearbyPlaces";
+import { StartTripButton } from "@/components/StartTripButton";
 
 // 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
 // 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
@@ -195,6 +196,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
       </div>
       <div className="flex flex-col gap-3 px-5 pt-3">
         <PlanShareButton recommendation={recommendation} />
+        <StartTripButton recommendation={recommendation} />
         <div className="flex items-center gap-4 rounded-2xl bg-white px-4 py-3.5 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           <span className="flex items-center gap-1.5">
             <Icon name="pin" className="h-[18px] w-[18px] text-muted" />

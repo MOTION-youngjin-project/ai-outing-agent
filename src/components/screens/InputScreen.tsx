@@ -232,6 +232,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           </div>
         )}
 
+        <Link href="/photo" className="self-start rounded-lg border border-accent/30 px-3 py-2 text-sm">참고 사진 선택</Link>
         {errorMessage && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMessage}
