@@ -43,7 +43,7 @@ const SYSTEM_PROMPT =
   "주차 정보는 이 단계에서 미리 찾지 마라 — 사용자가 특정 장소의 주차를 따로 물어볼 때만 " +
   "search_daegu_parking을 써라(대구 외 지역이면 지원하지 않는다고 말해라).\n\n" +
   "최종 응답은 반드시 정해진 구조(JSON)로 출력해야 한다. 지역을 되물어야 하는 경우가 아니면 " +
-  "장소를 3~5개 추천하고, 각 장소마다 알고 있는 정보만 채워라 — 모르는 필드(운영시간, 요금, 이미지 등)는 " +
+  "장소를 3~5개 추천하고, 각 장소마다 알고 있는 정보만 채워라 — 모르는 필드(이미지 등)는 " +
   "지어내지 말고 비워둬라. daeguDistrict는 그 장소가 대구광역시 소속일 때만, 정확한 구/군을 알 때만 채워라.\n\n" +
   // 실재율(추천한 장소가 카카오 로컬 검색에서 실제로 찾아지는 비율)이 56~90%로 들쭉날쭉했고,
   // 실패는 대개 "동성로 카페거리 및 실내 체험 공간"처럼 여러 곳을 묶거나 범위로 뭉뚱그린
@@ -153,8 +153,9 @@ const PlaceSchema = z.object({
   oneLineDescription: z.string().describe("결과 리스트 카드에 보여줄 한 줄 설명"),
   reason: z.string().describe("이 장소를 추천한 이유 (상세 화면용, 여러 문장 가능)"),
   address: z.string().optional().describe("주소 또는 위치 (모르면 비움)"),
-  operatingHours: z.string().optional().describe("운영시간 (모르면 비움)"),
-  fee: z.string().optional().describe("이용요금 (모르면 비움)"),
+  // operatingHours/fee는 스키마에 없다 — verifyPlace가 항상 관광 API 값으로 덮어써서
+  // 모델이 채워도 100% 버려진다(place-verification.ts). 있어봤자 최종 생성 호출의
+  // 출력 토큰(그래서 소요시간)만 늘리는 필드라 아예 뺐다(2026-09-17 실측 기반 정리).
   features: z.array(z.string()).optional().describe("주요 정보/특징 목록 (예: 유모차 대여, 수유실)"),
   imageUrl: z.string().optional().describe("대표 이미지 URL (문화포털 도구가 준 경우만)"),
   daeguDistrict: z.enum(DAEGU_DISTRICTS).optional().describe("대구광역시 소속일 때만 구/군 (주차 정보 조회 가능 여부 판단용)"),
@@ -184,7 +185,7 @@ export const RecommendationSchema = z.object({
   places: z.array(PlaceSchema).optional().describe("needsMoreInfo가 false일 때 추천 장소 3~5개"),
 });
 
-export type Recommendation = Omit<z.infer<typeof RecommendationSchema>, "places"> & { places?: (z.infer<typeof PlaceSchema> & { sources?: RecommendationSource[]; verification?: PlaceVerification; closedDays?: string; visitDuration?: string })[] };
+export type Recommendation = Omit<z.infer<typeof RecommendationSchema>, "places"> & { places?: (z.infer<typeof PlaceSchema> & { sources?: RecommendationSource[]; verification?: PlaceVerification; operatingHours?: string; fee?: string; closedDays?: string; visitDuration?: string })[] };
 function completeRecommendation(value: unknown, sources: Map<string, RecommendationSource>): Recommendation {
   const result = RecommendationSchema.parse(value);
   return { ...result, places: result.places?.map(p => ({ ...p, sources: resolveSources(p.sourceIds, sources) })) };
