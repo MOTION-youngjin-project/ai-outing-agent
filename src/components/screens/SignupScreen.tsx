@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -116,6 +117,7 @@ export function SignupScreen() {
         >
           회원가입
         </button>
+        <SocialLoginButtons callbackUrl={next || "/"} />
       </form>
     </>
   );

@@ -174,7 +174,8 @@ model PlaceLifeInfoCache {
 model User {
   id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
   email         String        @unique @db.VarChar(255)
-  passwordHash  String        @map("password_hash") @db.VarChar(255)
+  // 소셜 로그인(구글/카카오/네이버)으로만 가입한 사용자는 비밀번호가 없다.
+  passwordHash  String?       @map("password_hash") @db.VarChar(255)
   name          String?       @db.VarChar(100)
   // agent.ts의 PLACE_TAGS(실내/야외/데이트/저비용)와 같은 값만 담는다. 값이 4개뿐이라
   // 별도 테이블 없이 JSON 배열 하나로 충분하다고 판단.

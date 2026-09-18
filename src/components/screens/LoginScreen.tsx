@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 
 export function LoginScreen() {
   const router = useRouter();
@@ -88,6 +89,7 @@ export function LoginScreen() {
         >
           아직 계정이 없으신가요? <span className="font-semibold text-accent">회원가입</span>
         </button>
+        <SocialLoginButtons callbackUrl={next || "/mypage"} />
       </form>
     </>
   );
