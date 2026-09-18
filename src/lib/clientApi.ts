@@ -299,8 +299,13 @@ export type RecommendProgressEvent = { type: string; tool?: string };
 
 // 거리(km) 배지 계산용 GPS 좌표. 권한 거부/미지원/타임아웃이면 조용히 null —
 // 배지가 안 뜰 뿐 추천 자체를 막을 이유는 아니다.
+//
+// PositionOptions.timeout만 믿지 않는다 — 권한 프롬프트가 떠 있거나 위치
+// 프로바이더가 응답이 없는 일부 환경에서는 그 타임아웃이 지켜지지 않고
+// getCurrentPosition 콜백이 영영 안 불릴 수 있다(자동화 브라우저에서 45초+
+// 멈추는 걸 실제로 확인함). Promise.race로 앱 쪽에서 별도 하드 타임아웃을 건다.
 export function getCurrentPosition(): Promise<{ latitude: number; longitude: number } | null> {
-  return new Promise((resolve) => {
+  const geo = new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
     if (!navigator.geolocation) {
       resolve(null);
       return;
@@ -311,6 +316,8 @@ export function getCurrentPosition(): Promise<{ latitude: number; longitude: num
       { timeout: 5000 }
     );
   });
+  const hardTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+  return Promise.race([geo, hardTimeout]);
 }
 
 // /api/recommend는 NDJSON(줄바꿈 구분 JSON)을 스트리밍한다 — 도구 호출 시작/종료,
