@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { fetchDrivingDirections, getCurrentPosition, type PlaceWithMeta } from "@/lib/clientApi";
-import { Icon } from "@/components/Icon";
+import { fetchDrivingDirections, type PlaceWithMeta } from "@/lib/clientApi";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { NaverMap } from "@/components/NaverMap";
 import { ExternalMapMenu } from "@/components/ExternalMapMenu";
+import { useOrigin, OriginFallback } from "@/components/OriginFallback";
 
 // "추천 경로"(trafast) 먼저, 있으면 "다른 경로"(tracomfort) 순으로 탭에 건다.
 const OPTION_LABELS: Record<string, string> = { trafast: "추천 경로", tracomfort: "다른 경로" };
@@ -26,10 +26,7 @@ export function DirectionsScreen({
   const placeHref = runId ? `/recommend/${runId}/place/${placeId}` : `/place/${placeId}`;
 
   // TransitScreen과 같은 패턴 — 현재 위치가 없으면 경로 자체를 계산할 방법이 없다.
-  const [origin, setOrigin] = useState<{ latitude: number; longitude: number } | null | undefined>(undefined);
-  useEffect(() => {
-    getCurrentPosition().then(setOrigin);
-  }, []);
+  const { origin, setOrigin, retry } = useOrigin();
 
   const hasDestination = place.latitude != null && place.longitude != null;
   const directionsQuery = useQuery({
@@ -61,21 +58,7 @@ export function DirectionsScreen({
           </div>
         )}
 
-        {origin === null && (
-          <div className="flex items-center gap-2 rounded-2xl bg-mint-bg px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft">
-            <Icon name="info" className="h-4 w-4 shrink-0 text-mint-mid" />
-            <p className="flex-1">현재 위치를 가져올 수 없어요. 위치 권한을 확인한 뒤 다시 시도해주세요.</p>
-            <button
-              onClick={() => {
-                setOrigin(undefined);
-                getCurrentPosition().then(setOrigin);
-              }}
-              className="shrink-0 rounded-full border border-hairline bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-soft"
-            >
-              다시 시도
-            </button>
-          </div>
-        )}
+        {origin === null && <OriginFallback onRetry={retry} onManualSelect={setOrigin} />}
 
         {!hasDestination && (
           <p className="px-1 text-[14px] text-muted">이 장소는 좌표 정보가 없어 길찾기를 할 수 없어요.</p>

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { fetchTransitDirections, getCurrentPosition, type PlaceWithMeta } from "@/lib/clientApi";
+import { fetchTransitDirections, type PlaceWithMeta } from "@/lib/clientApi";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useOrigin, OriginFallback } from "@/components/OriginFallback";
 
 const MODE_ICON: Record<string, string> = {
   BUS: "bus",
@@ -28,11 +28,8 @@ export function TransitScreen({
   const placeHref = runId ? `/recommend/${runId}/place/${placeId}` : `/place/${placeId}`;
 
   // 사용자 현재 위치를 출발지로 쓴다 — 위치 없이는 경로 자체를 계산할 방법이 없어서
-  // (Transitous가 좌표 두 개를 요구함) 권한 거부/미지원이면 안내만 하고 끝낸다.
-  const [origin, setOrigin] = useState<{ latitude: number; longitude: number } | null | undefined>(undefined);
-  useEffect(() => {
-    getCurrentPosition().then(setOrigin);
-  }, []);
+  // (Transitous가 좌표 두 개를 요구함) 권한 거부/미지원이면 재시도·직접 검색으로 구제한다.
+  const { origin, setOrigin, retry } = useOrigin();
 
   const hasDestination = place.latitude != null && place.longitude != null;
   const transitQuery = useQuery({
@@ -54,21 +51,7 @@ export function TransitScreen({
           </div>
         )}
 
-        {origin === null && (
-          <div className="sk-rail-none flex items-center gap-2 py-2 text-[13px] leading-relaxed text-ink-soft">
-            <Icon name="info" className="h-4 w-4 shrink-0 text-mint-mid" />
-            <p className="flex-1">현재 위치를 가져올 수 없어요. 위치 권한을 확인한 뒤 다시 시도해주세요.</p>
-            <button
-              onClick={() => {
-                setOrigin(undefined);
-                getCurrentPosition().then(setOrigin);
-              }}
-              className="shrink-0 rounded-full border border-hairline bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-soft"
-            >
-              다시 시도
-            </button>
-          </div>
-        )}
+        {origin === null && <OriginFallback onRetry={retry} onManualSelect={setOrigin} />}
 
         {!hasDestination && (
           <p className="sk-rail-none py-2 text-[14px] text-muted">이 장소는 좌표 정보가 없어 길찾기를 할 수 없어요.</p>
