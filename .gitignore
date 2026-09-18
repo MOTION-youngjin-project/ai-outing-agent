@@ -49,3 +49,6 @@ next-env.d.ts
 
 # 외부 공공데이터 원본 파일 — 재다운로드 가능, seed 스크립트 주석에 출처 남겨둠
 /data/
+
+# token-optimizer 플러그인 로컬 상태(세션 트랜스크립트 원문 포함) — 공개 저장소에 커밋 금지
+/.token-optimizer/
