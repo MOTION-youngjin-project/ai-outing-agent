@@ -55,9 +55,18 @@ export function TransitScreen({
         )}
 
         {origin === null && (
-          <div className="sk-rail-none flex gap-2 py-2 text-[13px] leading-relaxed text-ink-soft">
-            <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-mint-mid" />
-            <p>현재 위치를 가져올 수 없어요. 브라우저 위치 권한을 확인해주세요.</p>
+          <div className="sk-rail-none flex items-center gap-2 py-2 text-[13px] leading-relaxed text-ink-soft">
+            <Icon name="info" className="h-4 w-4 shrink-0 text-mint-mid" />
+            <p className="flex-1">현재 위치를 가져올 수 없어요. 위치 권한을 확인한 뒤 다시 시도해주세요.</p>
+            <button
+              onClick={() => {
+                setOrigin(undefined);
+                getCurrentPosition().then(setOrigin);
+              }}
+              className="shrink-0 rounded-full border border-hairline bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-soft"
+            >
+              다시 시도
+            </button>
           </div>
         )}
 
