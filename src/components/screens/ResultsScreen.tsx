@@ -79,18 +79,24 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
     },
   });
 
+  const regionsQuery = useQuery({ queryKey: ["regions", "sido"], queryFn: fetchRegions });
+  // 공유 링크로 열거나 새로고침하면 store(regionId)가 빈 값으로 시작한다(영속화 안 함,
+  // 위 정책 참고) — 그럴 땐 추천 결과 자체에 담긴 place.daeguDistrict로 지역을 되찾는다.
+  // 그래야 "계획 공유하기"로 받은 사람도 지역/날씨/대기질 배지를 그대로 볼 수 있다.
+  const fallbackDistrict = recommendation.places?.find((p) => p.daeguDistrict)?.daeguDistrict ?? null;
+  const effectiveRegionId =
+    regionId || (regionsQuery.data ?? []).find((r) => r.name === fallbackDistrict)?.id || "";
+  const regionName = (regionsQuery.data ?? []).find((r) => r.id === effectiveRegionId)?.name ?? fallbackDistrict ?? "";
   const weatherQuery = useQuery({
-    queryKey: ["weather", regionId],
-    queryFn: () => fetchWeather(regionId),
-    enabled: !!regionId,
+    queryKey: ["weather", effectiveRegionId],
+    queryFn: () => fetchWeather(effectiveRegionId),
+    enabled: !!effectiveRegionId,
   });
   const airQualityQuery = useQuery({
-    queryKey: ["air-quality", regionId],
-    queryFn: () => fetchAirQuality(regionId),
-    enabled: !!regionId,
+    queryKey: ["air-quality", effectiveRegionId],
+    queryFn: () => fetchAirQuality(effectiveRegionId),
+    enabled: !!effectiveRegionId,
   });
-  const regionsQuery = useQuery({ queryKey: ["regions", "sido"], queryFn: fetchRegions });
-  const regionName = (regionsQuery.data ?? []).find((r) => r.id === regionId)?.name ?? "";
 
   // 찜 아이콘 — 로그인 상태면 /api/saved-places로 실제 저장까지 한다(로그아웃 상태면
   // 로그인 화면으로 유도).
