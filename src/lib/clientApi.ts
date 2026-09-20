@@ -297,6 +297,15 @@ export function placeResultToMeta(p: PlaceResult): PlaceWithMeta {
 }
 export type RecommendProgressEvent = { type: string; tool?: string };
 
+// 추천 실패 중에서 화면이 다르게 대응해야 하는 것(지금은 한도 초과)만 code로 구분한다.
+// 그 외는 지금까지처럼 메시지만 보여준다.
+export class RecommendError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "RecommendError";
+  }
+}
+
 // 거리(km) 배지 계산용 GPS 좌표. 권한 거부/미지원/타임아웃이면 조용히 null —
 // 배지가 안 뜰 뿐 추천 자체를 막을 이유는 아니다.
 //
@@ -339,7 +348,13 @@ export async function postRecommend(
   } catch {
     throw new Error("요청에 실패했습니다. 잠시 후 다시 시도해주세요.");
   }
-  if (!res.ok || !res.body) throw new Error("알 수 없는 오류가 발생했습니다.");
+  // 한도 초과(402)처럼 서버가 이유를 담아 보낸 응답을 "알 수 없는 오류"로 뭉개면
+  // 사용자가 왜 막혔는지 알 방법이 없다 — 본문의 메시지와 code를 그대로 살려 던진다.
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new RecommendError(data?.error ?? "알 수 없는 오류가 발생했습니다.", data?.code);
+  }
+  if (!res.body) throw new Error("알 수 없는 오류가 발생했습니다.");
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

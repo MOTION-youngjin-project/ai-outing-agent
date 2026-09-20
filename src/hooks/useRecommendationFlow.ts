@@ -9,6 +9,7 @@ import {
   fetchRegions,
   postRecommend,
   postSuggest,
+  RecommendError,
   type Region,
   type RecommendProgressEvent,
 } from "@/lib/clientApi";
@@ -157,6 +158,8 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
 
   const recommendation = lastRecommendation;
   const errorMessage = recommendMutation.error instanceof Error ? recommendMutation.error.message : null;
+  // 한도 초과는 재시도해봐야 소용없고 요금제로 보내야 한다 — 그 한 가지만 구분한다.
+  const quotaExceeded = recommendMutation.error instanceof RecommendError && recommendMutation.error.code === "quota_exceeded";
   const displayedSuggestion =
     recommendMutation.isPending || suggestMutation.isPending
       ? ""
@@ -181,6 +184,7 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
     regionsQuery,
     recommendation,
     errorMessage,
+    quotaExceeded,
     displayedSuggestion,
     showSuggestionChip,
     progressLabel,

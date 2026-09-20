@@ -30,6 +30,7 @@ import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMap
 import { verifyPlace } from "../src/lib/place-verification.ts";
 import { tourismRegionParams } from "../src/lib/external/tour-api-cache.ts";
 import { summarize } from "./place-hit-rate.ts";
+import { FREE_TIER, resolveQuota, periodStartFor } from "../src/lib/billing/plans.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -376,5 +377,20 @@ check("verifyPlace 유모차 '가능'이면 문구를 붙임", strollerOk.featur
 // 근거가 없으면 채우지 않는다 — 빈칸이 지어낸 값보다 낫다.
 check("verifyPlace 근거 없으면 소요시간 비움", verified.visitDuration, undefined);
 check("verifyPlace 근거 없으면 features 원본 유지", verifyPlace({ name: "없는곳", features: ["유모차 대여"] }, []).features, ["유모차 대여"]);
+
+// 과금 한도 판정. 돈이 걸린 규칙이라 경계값(딱 한도에 도달한 순간)을 직접 고정해둔다.
+const guestTier = { limit: 3, window: 'lifetime' } as const;
+const planTier = { limit: 20, window: 'month' } as const;
+check('무료 한도 미소진이면 통과', resolveQuota({ tier: FREE_TIER, used: FREE_TIER.limit - 1, tierName: '무료' }).allowed, true);
+check('무료 한도에 정확히 도달하면 막힘', resolveQuota({ tier: FREE_TIER, used: FREE_TIER.limit, tierName: '무료' }).allowed, false);
+check('남은 횟수는 음수로 안 내려감', resolveQuota({ tier: FREE_TIER, used: FREE_TIER.limit + 5, tierName: '무료' }).remaining, 0);
+check('게스트 체험분 소진', resolveQuota({ tier: guestTier, used: 3, tierName: '체험' }).allowed, false);
+check('구독 한도 내', [resolveQuota({ tier: planTier, used: 12, tierName: '기본', planCode: 'basic' }).allowed, resolveQuota({ tier: planTier, used: 12, tierName: '기본' }).remaining], [true, 8]);
+check('구독 한도 초과', resolveQuota({ tier: planTier, used: 20, tierName: '기본', planCode: 'basic' }).allowed, false);
+// lifetime은 전부 세고(기준 시각 없음), month는 구독 주기 시작이 기준이다.
+const periodStart = new Date('2026-09-05T00:00:00Z');
+check('lifetime은 기준 시각 없음', periodStartFor(FREE_TIER, null, new Date('2026-09-20T00:00:00Z')), null);
+check('구독은 자기 결제 주기가 기준', periodStartFor(planTier, periodStart, new Date('2026-09-20T00:00:00Z')), periodStart);
+check('월간인데 구독 주기가 없으면 이번 달 1일', periodStartFor(planTier, null, new Date(2026, 8, 20)), new Date(2026, 8, 1));
 
 console.log(`✓ self-check 통과 (${passed}건)`);

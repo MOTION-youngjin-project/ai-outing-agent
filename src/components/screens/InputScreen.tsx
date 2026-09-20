@@ -48,6 +48,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
     regions,
     recommendation,
     errorMessage,
+    quotaExceeded,
     displayedSuggestion,
     showSuggestionChip,
     progressLabel,
@@ -250,6 +251,12 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
         {errorMessage && (
           <div className="sk-panel border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {errorMessage}
+            {/* 한도 초과만 갈 곳이 다르다 — 다시 보내봐야 똑같이 막히므로 요금제로 보낸다. */}
+            {quotaExceeded && (
+              <Link href="/billing" className="mt-2 block font-semibold underline underline-offset-2">
+                요금제 보기
+              </Link>
+            )}
           </div>
         )}
 

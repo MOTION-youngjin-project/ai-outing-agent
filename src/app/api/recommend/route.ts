@@ -3,6 +3,7 @@ import { createRecommendationRun, type GeoPoint, type RecommendationProgressEven
 import type { ChatTurn } from "@/lib/agent";
 import { auth } from "@/lib/auth";
 import { GUEST_COOKIE, guestHash, guestToken } from "@/lib/recommendation-owner";
+import { loadQuota, recordUsage } from "@/lib/billing/quota";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,24 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id ?? null;
   const token = userId ? undefined : guestToken(req.cookies.get(GUEST_COOKIE)?.value);
+  const sessionKeyHash = guestHash(token);
+
+  // 쿼터 게이트는 여기 한 곳이다 — 추천 에이전트로 들어가는 유일한 입구이고,
+  // 스트림을 열기 "전"이라 한도 초과는 평범한 JSON 402로 나간다(NDJSON과 안 섞임).
+  const quota = await loadQuota(userId, sessionKeyHash, { renew: true });
+  if (!quota.allowed) {
+    return NextResponse.json(
+      {
+        error: userId
+          ? `이번 ${quota.tierName} 한도(${quota.limit}회)를 다 쓰셨어요. 요금제를 올리면 계속 이용할 수 있어요.`
+          : `체험 ${quota.limit}회를 다 쓰셨어요. 로그인하시면 무료 추천을 더 드려요.`,
+        code: "quota_exceeded",
+        limit: quota.limit,
+        used: quota.used,
+      },
+      { status: 402 }
+    );
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -63,7 +82,13 @@ export async function POST(req: NextRequest) {
         }
       };
       try {
-        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, guestHash(token), conversationId ?? null);
+        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, sessionKeyHash, conversationId ?? null);
+        // 차감은 "장소가 담긴 추천이 실제로 나왔을 때"만. 되묻기(needsMoreInfo)는 places가
+        // 없어서 여기서 자연히 빠지고, 실패는 위 try가 못 오게 막는다. 되묻기를 차감하면
+        // 에이전트가 되물을수록 사용자가 손해라 제품이 스스로를 공격하게 된다.
+        if (result.recommendation.places?.length) {
+          await recordUsage(userId, sessionKeyHash, result.agentRunId);
+        }
         emit({ type: "result", result });
       } catch (err) {
         console.error(err);
