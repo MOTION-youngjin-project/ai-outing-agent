@@ -33,7 +33,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // 이게 없으면 모든 요청이 "UntrustedHost" 에러로 막힌다(2026-09-08 배포 후 실측 확인).
   trustHost: true,
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  pages: { signIn: "/login", error: "/login" },
   providers: [
     Credentials({
       credentials: {
@@ -59,6 +59,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...oauthProviders,
   ],
   callbacks: {
+    // 카카오는 이메일 동의를 안 받으면 email이 없을 수 있다. 우리 스키마는 email을 유니크
+    // 식별 키로 쓰므로 그런 계정은 아예 로그인시키지 않는다 — jwt 콜백에서 걸러도 token.id
+    // 없는 세션이 발급돼 로그인은 된 것처럼 보이고 모든 API가 BigInt(undefined)로 터진다.
+    async signIn({ user, account }) {
+      if (account && account.provider !== "credentials" && !user.email) return false;
+      return true;
+    },
     // trigger === "update"는 클라이언트에서 useSession().update({ name })을 부를 때
     // (앱 설정에서 이름 변경 저장 후) — 재로그인 없이 세션의 이름을 바로 갱신하기 위함.
     async jwt({ token, user, account, trigger, session }) {
