@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import type { AdQuotaState } from "@/lib/ads/quota";
@@ -31,6 +31,22 @@ function AdUnit() {
   );
 }
 
+// Flutter 앱 웹뷰가 있으면 window.NativeAdBridge를 주입해둔다(postMessage로 네이티브
+// AdMob 리워드 광고를 띄우는 채널). 있으면 웹의 타이머·플레이스홀더 대신 이걸 쓴다 —
+// 실제 광고니까 타이머로 시간을 채울 필요가 없다.
+// NativeAdBridge 존재 여부는 페이지가 뜬 뒤로 바뀌지 않는 정적 값이라 구독할 이벤트가
+// 없다 — 그래도 useSyncExternalStore를 쓰는 이유는 SSR에서는 항상 false(서버 스냅숏)로
+// 렌더하고, 하이드레이션 이후에만 실제 값으로 넘어가야 hydration mismatch가 안 나서다.
+function subscribeNoop() {
+  return () => {};
+}
+function getNativeAdBridgeSnapshot(): boolean {
+  return typeof window !== "undefined" && "NativeAdBridge" in window;
+}
+function getServerSnapshot(): boolean {
+  return false;
+}
+
 export function AdsScreen({ quota }: { quota: AdQuotaState }) {
   const router = useRouter();
   const [credits, setCredits] = useState(quota.credits);
@@ -39,7 +55,43 @@ export function AdsScreen({ quota }: { quota: AdQuotaState }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [succeeded, setSucceeded] = useState(false);
+  const isNativeApp = useSyncExternalStore(subscribeNoop, getNativeAdBridgeSnapshot, getServerSnapshot);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 네이티브 광고는 앱이 화면 전체를 덮고, 끝나면 앱이 직접 /api/ads/reward를
+  // 호출한다 — 이 페이지는 그 결과를 모르니, 화면이 다시 보일 때(광고 오버레이가
+  // 닫혔을 때) 잔액을 다시 조회해서 반영한다.
+  useEffect(() => {
+    if (!isNativeApp) return;
+    async function refreshQuota() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/ads/quota");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (typeof data.credits === "number" && data.credits > credits) {
+          setCredits(data.credits);
+          setSucceeded(true);
+        }
+      } catch {
+        // 네트워크 문제면 다음 복귀 때 다시 시도된다 — 조용히 무시.
+      }
+    }
+    document.addEventListener("visibilitychange", refreshQuota);
+    return () => document.removeEventListener("visibilitychange", refreshQuota);
+  }, [isNativeApp, credits]);
+
+  function showNativeAd() {
+    setError("");
+    setSucceeded(false);
+    try {
+      (window as unknown as { NativeAdBridge: { postMessage: (msg: string) => void } }).NativeAdBridge.postMessage(
+        "show"
+      );
+    } catch {
+      setError("광고를 열지 못했어요.");
+    }
+  }
 
   useEffect(() => {
     if (!watching) return;
@@ -113,7 +165,14 @@ export function AdsScreen({ quota }: { quota: AdQuotaState }) {
           </p>
         </div>
 
-        {watching ? (
+        {isNativeApp ? (
+          <button
+            onClick={showNativeAd}
+            className="rounded-full bg-cta py-3 text-[15px] font-semibold text-white"
+          >
+            광고 보고 질문권 받기
+          </button>
+        ) : watching ? (
           <div className="sk-panel px-4 py-4">
             <AdUnit />
             <div className="mt-3">
