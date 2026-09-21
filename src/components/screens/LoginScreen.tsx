@@ -12,7 +12,7 @@ export function LoginScreen() {
   const next = searchParams.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
   // OAuth 실패는 next-auth가 /login?error=... 로 리다이렉트해서 알려준다(pages.error).
   const [error, setError] = useState(
     searchParams.get("error") ? "소셜 로그인에 실패했습니다. 이메일 제공에 동의했는지 확인해 주세요." : "",
