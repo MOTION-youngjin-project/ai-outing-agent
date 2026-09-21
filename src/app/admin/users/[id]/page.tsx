@@ -3,14 +3,13 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
-import { loadBalance } from "@/lib/billing/quota";
-import { FREE_QUESTIONS } from "@/lib/billing/plans";
+import { loadAdQuota } from "@/lib/ads/quota";
 
 export const dynamic = "force-dynamic";
 
 const ACTION_LABEL: Record<string, string> = {
-  grant_credit: "크레딧 무료 지급",
-  clear_billing_key: "카드 등록 해제",
+  grant_ad_credit: "질문권 무료 지급",
+  reset_daily_free: "오늘 무료 초기화",
   delete_account: "계정 영구 삭제",
 };
 
@@ -34,16 +33,15 @@ export default async function AdminUserDetailPage({
     notFound();
   }
 
-  const [user, wallet, usages, payments, actionLogs] = await Promise.all([
+  const [user, usages, payments, actionLogs] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
-    prisma.wallet.findUnique({ where: { userId } }),
     prisma.recommendationUsage.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.payment.findMany({ where: { userId }, orderBy: { requestedAt: "desc" } }),
     prisma.adminActionLog.findMany({ where: { targetUserId: userId }, orderBy: { createdAt: "desc" } }),
   ]);
 
   if (!user) notFound();
-  const balance = await loadBalance(id);
+  const adQuota = await loadAdQuota(id);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10 text-ink">
@@ -65,38 +63,35 @@ export default async function AdminUserDetailPage({
       )}
 
       <section className="flex flex-col gap-3 rounded-lg border border-hairline p-4">
-        <h2 className="font-semibold">크레딧 지갑</h2>
+        <h2 className="font-semibold">광고 질문권</h2>
         <p className="text-sm text-ink-soft">
-          무료 질문 남음: <strong className="text-ink">{balance.freeRemaining}/{FREE_QUESTIONS}</strong> · 크레딧 잔액{" "}
-          <strong className="text-ink">{balance.balanceKrw.toLocaleString()}원</strong>
+          오늘 무료: <strong className="text-ink">{adQuota.freeAvailableToday ? "사용 가능" : "이미 사용함"}</strong> · 보유
+          질문권 <strong className="text-ink">{adQuota.credits}개</strong>
         </p>
-        {wallet && (
-          <p className="text-sm text-ink-soft">{wallet.billingKey ? "카드 등록됨(자동충전 가능)" : "카드 미등록"}</p>
-        )}
 
         <div className="flex flex-wrap items-end gap-3 border-t border-hairline pt-3">
-          <form action={`/api/admin/users/${id}/wallet`} method="POST" className="flex flex-wrap items-end gap-2">
+          <form action={`/api/admin/users/${id}/ad-credit`} method="POST" className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="action" value="grant" />
             <label className="flex flex-col text-xs text-muted">
-              지급액(원)
+              지급 개수
               <input
-                name="amountKrw"
+                name="credits"
                 type="number"
                 min={1}
-                defaultValue={1000}
-                className="w-24 rounded-lg border border-hairline px-2 py-1 text-sm text-ink"
+                defaultValue={3}
+                className="w-20 rounded-lg border border-hairline px-2 py-1 text-sm text-ink"
               />
             </label>
             <button type="submit" className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white">
-              크레딧 무료로 지급
+              질문권 무료로 지급
             </button>
           </form>
 
-          {wallet?.billingKey && (
-            <form action={`/api/admin/users/${id}/wallet`} method="POST">
-              <input type="hidden" name="action" value="clear_billing_key" />
+          {!adQuota.freeAvailableToday && (
+            <form action={`/api/admin/users/${id}/ad-credit`} method="POST">
+              <input type="hidden" name="action" value="reset_free" />
               <button type="submit" className="rounded-lg border border-hairline px-3 py-1.5 text-sm text-ink-soft">
-                카드 등록 해제
+                오늘 무료 초기화
               </button>
             </form>
           )}

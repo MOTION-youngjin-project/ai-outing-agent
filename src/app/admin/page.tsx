@@ -3,18 +3,17 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
-import { loadBalance } from "@/lib/billing/quota";
-import { FREE_QUESTIONS } from "@/lib/billing/plans";
+import { loadAdQuota } from "@/lib/ads/quota";
 
 // Prisma를 직접 조회하는 서버 컴포넌트라 정적 프리렌더를 끈다(billing/page.tsx와 같은 이유).
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
 
-type StatFilter = "has_card" | "usage_today" | "failed_payments";
+type StatFilter = "has_credits" | "usage_today" | "failed_payments";
 
 const FILTER_LABEL: Record<StatFilter, string> = {
-  has_card: "카드 등록된 사용자만",
+  has_credits: "질문권 보유 사용자만",
   usage_today: "오늘 사용한 사용자만",
   failed_payments: "최근 7일 결제 실패 사용자만",
 };
@@ -30,7 +29,7 @@ export default async function AdminUsersPage({
 
   const { q = "", page: pageParam, deleted, filter: filterParam } = await searchParams;
   const filter: StatFilter | null =
-    filterParam === "has_card" || filterParam === "usage_today" || filterParam === "failed_payments" ? filterParam : null;
+    filterParam === "has_credits" || filterParam === "usage_today" || filterParam === "failed_payments" ? filterParam : null;
   const page = Math.max(1, Number(pageParam) || 1);
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -39,8 +38,8 @@ export default async function AdminUsersPage({
   // 통계 카드 클릭 = 그 조건으로 목록을 필터링(드릴다운). 검색어와는 AND로 같이 걸린다.
   const searchWhere = q ? { OR: [{ email: { contains: q } }, { name: { contains: q } }] } : null;
   const filterWhere =
-    filter === "has_card"
-      ? { wallet: { billingKey: { not: null } } }
+    filter === "has_credits"
+      ? { adCredit: { credits: { gt: 0 } } }
       : filter === "usage_today"
         ? { usages: { some: { createdAt: { gte: todayStart } } } }
         : filter === "failed_payments"
@@ -48,16 +47,16 @@ export default async function AdminUsersPage({
           : null;
   const where = searchWhere && filterWhere ? { AND: [searchWhere, filterWhere] } : (searchWhere ?? filterWhere ?? {});
 
-  const [users, total, totalUsers, cardsRegistered, todayUsage, recentFailedPayments] = await Promise.all([
+  const [users, total, totalUsers, usersWithCredits, todayUsage, recentFailedPayments] = await Promise.all([
     prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
     prisma.user.count({ where }),
     prisma.user.count(),
-    prisma.wallet.count({ where: { billingKey: { not: null } } }),
+    prisma.adCredit.count({ where: { credits: { gt: 0 } } }),
     prisma.recommendationUsage.count({ where: { createdAt: { gte: todayStart } } }),
     prisma.payment.count({ where: { status: "failed", requestedAt: { gte: sevenDaysAgo } } }),
   ]);
 
-  const balances = await Promise.all(users.map((u) => loadBalance(u.id.toString())));
+  const adQuotas = await Promise.all(users.map((u) => loadAdQuota(u.id.toString())));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const qs = (overrides: Record<string, string | number | null>) => {
     const params = new URLSearchParams();
@@ -86,7 +85,7 @@ export default async function AdminUsersPage({
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="총 가입자" value={totalUsers} href={qs({ filter: null, page: null })} active={filter === null} />
-        <StatCard label="카드 등록됨" value={cardsRegistered} href={qs({ filter: "has_card", page: null })} active={filter === "has_card"} />
+        <StatCard label="질문권 보유" value={usersWithCredits} href={qs({ filter: "has_credits", page: null })} active={filter === "has_credits"} />
         <StatCard label="오늘 사용 횟수" value={todayUsage} href={qs({ filter: "usage_today", page: null })} active={filter === "usage_today"} />
         <StatCard
           label="최근 7일 결제 실패"
@@ -127,8 +126,8 @@ export default async function AdminUsersPage({
               <th className="px-4 py-2 font-medium">이름</th>
               <th className="px-4 py-2 font-medium">가입일</th>
               <th className="px-4 py-2 font-medium">인증수단</th>
-              <th className="px-4 py-2 font-medium">무료 남음</th>
-              <th className="px-4 py-2 font-medium">크레딧 잔액</th>
+              <th className="px-4 py-2 font-medium">오늘 무료</th>
+              <th className="px-4 py-2 font-medium">질문권</th>
             </tr>
           </thead>
           <tbody>
@@ -142,10 +141,8 @@ export default async function AdminUsersPage({
                 <td className="px-4 py-2 text-ink-soft">{user.name ?? "-"}</td>
                 <td className="px-4 py-2 text-ink-soft">{user.createdAt.toISOString().slice(0, 10)}</td>
                 <td className="px-4 py-2 text-ink-soft">{user.passwordHash ? "이메일" : "소셜"}</td>
-                <td className="px-4 py-2 text-ink-soft">
-                  {balances[i].freeRemaining}/{FREE_QUESTIONS}
-                </td>
-                <td className="px-4 py-2 text-ink-soft">{balances[i].balanceKrw.toLocaleString()}원</td>
+                <td className="px-4 py-2 text-ink-soft">{adQuotas[i].freeAvailableToday ? "가능" : "사용함"}</td>
+                <td className="px-4 py-2 text-ink-soft">{adQuotas[i].credits}개</td>
               </tr>
             ))}
             {users.length === 0 && (
