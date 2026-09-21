@@ -31,6 +31,7 @@ import { verifyPlace } from "../src/lib/place-verification.ts";
 import { tourismRegionParams } from "../src/lib/external/tour-api-cache.ts";
 import { summarize } from "./place-hit-rate.ts";
 import { FREE_QUESTIONS, PRICE_PER_QUESTION_KRW, resolveFreeRemaining, canAffordNext } from "../src/lib/billing/plans.ts";
+import { isFreeAvailable } from "../src/lib/ads/quota.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -385,5 +386,10 @@ check('무료 초과 사용해도 음수로 안 내려감', resolveFreeRemaining
 check('무료 남았으면 잔액 0이어도 결제 가능', canAffordNext({ freeRemaining: 1, balanceKrw: 0 }), true);
 check('무료 소진, 잔액 충분하면 결제 가능', canAffordNext({ freeRemaining: 0, balanceKrw: PRICE_PER_QUESTION_KRW }), true);
 check('무료 소진, 잔액 모자라면 결제 불가', canAffordNext({ freeRemaining: 0, balanceKrw: PRICE_PER_QUESTION_KRW - 1 }), false);
+
+// 광고 기반 하루 무료 판정. 자정을 넘기면(날짜가 바뀌면) 다시 쓸 수 있어야 한다.
+check('오늘 아직 무료 안 썼으면(null) 사용 가능', isFreeAvailable(null, new Date('2026-09-21T10:00:00+09:00')), true);
+check('오늘 이미 썼으면 사용 불가', isFreeAvailable(new Date('2026-09-21T01:00:00+09:00'), new Date('2026-09-21T23:00:00+09:00')), false);
+check('날짜가 바뀌면 다시 사용 가능', isFreeAvailable(new Date('2026-09-20T23:59:00+09:00'), new Date('2026-09-21T00:01:00+09:00')), true);
 
 console.log(`✓ self-check 통과 (${passed}건)`);

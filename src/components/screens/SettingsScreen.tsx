@@ -81,12 +81,12 @@ export function SettingsScreen() {
       <ScreenHeader title="앱 설정" onBack={() => router.back()} />
       <div className="flex flex-col gap-6 px-5">
         <div className="flex flex-col gap-2.5">
-          <h2 className="px-1 text-[13px] font-semibold text-muted">요금제</h2>
+          <h2 className="px-1 text-[13px] font-semibold text-muted">질문권</h2>
           <Link
-            href="/billing"
+            href="/ads"
             className="flex items-center justify-between rounded-full bg-white px-4 py-3 text-[14px] font-medium text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
           >
-            남은 추천 횟수 · 구독 관리
+            남은 질문권 · 광고 보고 받기
             <span className="text-muted">›</span>
           </Link>
         </div>
