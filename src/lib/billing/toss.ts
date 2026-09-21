@@ -64,7 +64,7 @@ export async function issueBillingKey(authKey: string, customerKey: string): Pro
   return data.billingKey;
 }
 
-// 빌링키로 실제 승인. amount는 반드시 호출부가 서버의 PLANS에서 읽은 값이어야 한다 —
+// 빌링키로 실제 승인. amount는 반드시 호출부가 서버의 TOPUP_AMOUNT_KRW에서 읽은 값이어야 한다 —
 // 이 함수는 클라이언트가 보낸 금액을 받을 경로 자체가 없다.
 export async function chargeWithBillingKey(params: {
   billingKey: string;

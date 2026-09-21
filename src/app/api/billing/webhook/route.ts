@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fetchPaymentByOrderId } from "@/lib/billing/toss";
-import { PERIOD_DAYS } from "@/lib/billing/plans";
 
 export const runtime = "nodejs";
 
@@ -37,20 +36,11 @@ export async function POST(req: NextRequest) {
     });
 
     // 승인 호출 응답을 못 받아 pending으로 남아 있던 건을 웹훅이 되살리는 경우 —
-    // 이때 구독 기간도 같이 굴려준다(chargeSubscription이 못 한 뒷정리).
-    if (paid && amountMatches) {
-      const sub = await prisma.subscription.findUnique({ where: { userId: payment.userId } });
-      if (sub && sub.status !== "active") {
-        const start = remote.approvedAt ? new Date(remote.approvedAt) : new Date();
-        await prisma.subscription.update({
-          where: { id: sub.id },
-          data: {
-            status: "active",
-            currentPeriodStart: start,
-            currentPeriodEnd: new Date(start.getTime() + PERIOD_DAYS * 24 * 60 * 60 * 1000),
-          },
-        });
-      }
+    // 이때 크레딧도 같이 반영한다(topUpWallet이 응답을 못 받아서 못 한 뒷정리).
+    // payment.status(갱신 전 값)로 판단해야 한다 — 이미 우리 쪽에서 처리해 balanceKrw에
+    // 반영된 건을 웹훅이 다시 반영하면 이중 충전이 된다.
+    if (paid && amountMatches && payment.status !== "paid") {
+      await prisma.wallet.update({ where: { userId: payment.userId }, data: { balanceKrw: { increment: payment.amount } } });
     }
   } catch (err) {
     console.error("결제 웹훅 동기화 실패:", err);
