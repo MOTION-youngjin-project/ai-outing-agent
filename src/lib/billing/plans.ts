@@ -5,14 +5,9 @@
 // 이 레이어는 모델과 무관하다. 지금은 Gemini 무료 티어(하루 20회, 프로젝트 단위)를
 // 쓰고 있지만 나중에 유료 모델로 갈아끼워도 여기는 안 바뀐다.
 
-// 쿼터를 세는 기간. "lifetime"은 계정(또는 게스트 쿠키) 생성 이후 전부,
-// "month"는 기간 시작 이후만 센다.
+// 쿼터를 세는 기간. "lifetime"은 계정 생성 이후 전부, "month"는 기간 시작 이후만 센다.
 export type QuotaWindow = "lifetime" | "month";
 export type QuotaTier = { limit: number; window: QuotaWindow };
-
-// 비로그인 게스트 체험분. 쿠키(GUEST_COOKIE) 1개당이라 쿠키를 지우면 리셋된다 —
-// 막을 방법이 없어서 막지 않고, 대신 "맛보기" 수준으로만 준다(가입 전환이 목적).
-export const GUEST_TRIAL: QuotaTier = { limit: 3, window: "lifetime" };
 
 // 가입 후 무료분. window를 "month"로 바꾸면 매월 리셋되는 무료 티어가 된다 —
 // 지금 "lifetime"인 이유는 매월 리셋하면 기본 플랜(20회)과의 격차가 10회뿐이라

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { FREE_TIER, GUEST_TRIAL, PLANS, parsePlanCode, periodStartFor, resolveQuota, type QuotaState, type QuotaTier } from "./plans";
+import { FREE_TIER, PLANS, parsePlanCode, periodStartFor, resolveQuota, type QuotaState, type QuotaTier } from "./plans";
 
 import { chargeSubscription } from "./subscription";
 
@@ -13,17 +13,11 @@ export type { QuotaState };
 // 실패 시 삭제하는 예약 방식으로 올린다.
 // renew: 만료된 주기를 이 자리에서 결제할지. 추천 게이트에서만 true다 — 결제 화면을
 // 열어보기만 해도 카드가 긁히면 안 된다.
-export async function loadQuota(userId: string | null, sessionKeyHash: string | null, { renew = false } = {}): Promise<QuotaState> {
+//
+// 로그인이 앱 사용의 전제 조건이 된 뒤로 비로그인 게스트 체험 티어는 없앴다 —
+// userId 없이 이 함수를 부르는 경로 자체가 없다(proxy.ts + 각 API의 401 체크).
+export async function loadQuota(userId: string, { renew = false } = {}): Promise<QuotaState> {
   const now = new Date();
-
-  // 비로그인 게스트 — 쿠키 해시 기준 체험분. 쿠키를 지우면 리셋되는 건 막을 방법이
-  // 없어서 막지 않고, 대신 맛보기 수준으로만 준다.
-  if (!userId) {
-    if (!sessionKeyHash) return resolveQuota({ tier: GUEST_TRIAL, used: 0, tierName: "체험" });
-    const used = await prisma.recommendationUsage.count({ where: { sessionKeyHash } });
-    return resolveQuota({ tier: GUEST_TRIAL, used, tierName: "체험" });
-  }
-
   const userIdBigInt = BigInt(userId);
   const sub = await prisma.subscription.findUnique({ where: { userId: userIdBigInt } });
 
@@ -52,14 +46,10 @@ export async function loadQuota(userId: string | null, sessionKeyHash: string | 
 
 // 차감. 호출부는 "장소가 담긴 추천이 실제로 나왔을 때"만 부른다 — 실패와 되묻기는
 // 여기까지 오지 않는다.
-export async function recordUsage(userId: string | null, sessionKeyHash: string | null, agentRunId: string | null) {
+export async function recordUsage(userId: string, agentRunId: string | null) {
   try {
     await prisma.recommendationUsage.create({
-      data: {
-        userId: userId ? BigInt(userId) : null,
-        sessionKeyHash: userId ? null : sessionKeyHash,
-        agentRunId,
-      },
+      data: { userId: BigInt(userId), agentRunId },
     });
   } catch (err) {
     // 이미 사용자에게 추천을 내려보낸 뒤라 여기서 던지면 정상 응답이 에러로 바뀐다.

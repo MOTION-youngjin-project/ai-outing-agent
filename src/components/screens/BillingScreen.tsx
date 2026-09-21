@@ -14,8 +14,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   charge: "카드는 등록됐지만 결제에 실패했어요. 다른 카드로 다시 시도해주세요.",
 };
 
-// 요금제 화면. quota가 null이면 비로그인 — 플랜만 보여주고 로그인으로 보낸다.
-export function BillingScreen({ quota }: { quota: QuotaState | null }) {
+// 요금제 화면. 이 화면 자체가 proxy.ts 로그인 게이트 뒤에 있어서 항상 로그인 상태다.
+export function BillingScreen({ quota }: { quota: QuotaState }) {
   const router = useRouter();
   const params = useSearchParams();
   const [pending, setPending] = useState<PlanCode | null>(null);
@@ -75,31 +75,19 @@ export function BillingScreen({ quota }: { quota: QuotaState | null }) {
           </div>
         )}
 
-        {quota ? (
-          <div className="sk-panel px-4 py-3.5">
-            <p className="text-[13px] text-muted">현재 이용 중</p>
-            <p className="mt-0.5 text-[16px] font-semibold text-ink">
-              {quota.tierName} · {quota.used}/{quota.limit}회 사용
-            </p>
-            <p className="mt-1 text-[13px] text-muted">
-              {quota.remaining > 0 ? `${quota.remaining}회 남았어요.` : "한도를 다 쓰셨어요. 아래에서 요금제를 골라주세요."}
-            </p>
-          </div>
-        ) : (
-          <div className="sk-panel px-4 py-3.5">
-            <p className="text-[14px] text-muted">로그인하면 무료 추천을 더 드리고, 요금제를 구독할 수 있어요.</p>
-            <button
-              onClick={() => router.push("/login?next=/billing")}
-              className="mt-3 rounded-full bg-cta px-5 py-2.5 text-[14px] font-semibold text-white"
-            >
-              로그인하기
-            </button>
-          </div>
-        )}
+        <div className="sk-panel px-4 py-3.5">
+          <p className="text-[13px] text-muted">현재 이용 중</p>
+          <p className="mt-0.5 text-[16px] font-semibold text-ink">
+            {quota.tierName} · {quota.used}/{quota.limit}회 사용
+          </p>
+          <p className="mt-1 text-[13px] text-muted">
+            {quota.remaining > 0 ? `${quota.remaining}회 남았어요.` : "한도를 다 쓰셨어요. 아래에서 요금제를 골라주세요."}
+          </p>
+        </div>
 
         {(Object.keys(PLANS) as PlanCode[]).map((code) => {
           const plan = PLANS[code];
-          const current = quota?.planCode === code;
+          const current = quota.planCode === code;
           return (
             <div key={code} className="sk-panel px-4 py-4">
               <div className="flex items-baseline justify-between gap-2">

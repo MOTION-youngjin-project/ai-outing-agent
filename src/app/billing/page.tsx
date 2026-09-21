@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function BillingPage() {
   const session = await auth();
-  const userId = session?.user?.id ?? null;
+  // 이 페이지 자체가 proxy.ts 로그인 게이트 뒤에 있어서 userId는 항상 있다.
   // renew는 기본값(false) — 결제 화면을 열어보는 것만으로 카드가 긁히면 안 된다.
-  const quota = userId ? await loadQuota(userId, null) : null;
+  const quota = await loadQuota(session!.user!.id);
   return <BillingScreen quota={quota} />;
 }
