@@ -31,6 +31,7 @@ import { verifyPlace } from "../src/lib/place-verification.ts";
 import { tourismRegionParams } from "../src/lib/external/tour-api-cache.ts";
 import { summarize } from "./place-hit-rate.ts";
 import { FREE_TIER, resolveQuota, periodStartFor } from "../src/lib/billing/plans.ts";
+import { isAdminEmail } from "../src/lib/admin.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -392,5 +393,15 @@ const periodStart = new Date('2026-09-05T00:00:00Z');
 check('lifetime은 기준 시각 없음', periodStartFor(FREE_TIER, null, new Date('2026-09-20T00:00:00Z')), null);
 check('구독은 자기 결제 주기가 기준', periodStartFor(planTier, periodStart, new Date('2026-09-20T00:00:00Z')), periodStart);
 check('월간인데 구독 주기가 없으면 이번 달 1일', periodStartFor(planTier, null, new Date(2026, 8, 20)), new Date(2026, 8, 1));
+
+// 관리자 판별 — 대소문자/공백 차이로 관리자가 로그인 못 하거나, 반대로 허용목록에
+// 없는 계정이 들어가는 사고를 여기서 막는다.
+process.env.ADMIN_EMAILS = "Admin@Example.com, second@example.com";
+check("허용목록 이메일(대소문자 다름)", isAdminEmail("admin@example.com"), true);
+check("허용목록 이메일(앞뒤 공백)", isAdminEmail("  second@example.com  "), true);
+check("허용목록에 없는 이메일", isAdminEmail("outsider@example.com"), false);
+check("빈 이메일", isAdminEmail(""), false);
+process.env.ADMIN_EMAILS = "";
+check("허용목록 자체가 비면 전부 거부", isAdminEmail("admin@example.com"), false);
 
 console.log(`✓ self-check 통과 (${passed}건)`);
