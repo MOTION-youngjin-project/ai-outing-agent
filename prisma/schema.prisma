@@ -784,3 +784,29 @@ model AdCredit {
 
   @@map("ad_credits")
 }
+
+enum AdminActionType {
+  grant_ad_credit
+  reset_daily_free
+  delete_account
+
+  @@map("admin_action_type")
+}
+
+// 관리자 페이지에서 벌어지는 파괴적/과금 관련 조작의 감사 로그. 계정 삭제 같은 액션은
+// 대상 User 행 자체가 사라지므로 targetUserId에 FK를 걸지 않고(삭제 후에도 로그가
+// 남아야 한다) targetEmail을 스냅샷으로 같이 저장한다 — saved_courses가 agent_run_id에
+// FK를 안 거는 것과 같은 이유.
+model AdminActionLog {
+  id           BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  adminEmail   String          @map("admin_email") @db.VarChar(255)
+  action       AdminActionType
+  targetUserId BigInt?         @map("target_user_id") @db.UnsignedBigInt
+  targetEmail  String          @map("target_email") @db.VarChar(255)
+  detail       Json?
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([targetUserId, createdAt])
+  @@index([createdAt])
+  @@map("admin_action_logs")
+}
