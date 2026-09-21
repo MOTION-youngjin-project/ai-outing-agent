@@ -41,7 +41,7 @@ export default async function AdminUserDetailPage({
   ]);
 
   if (!user) notFound();
-  const adQuota = await loadAdQuota(id);
+  const adQuota = await loadAdQuota({ userId: id });
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10 text-ink">

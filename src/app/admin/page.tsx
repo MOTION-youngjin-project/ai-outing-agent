@@ -56,7 +56,7 @@ export default async function AdminUsersPage({
     prisma.payment.count({ where: { status: "failed", requestedAt: { gte: sevenDaysAgo } } }),
   ]);
 
-  const adQuotas = await Promise.all(users.map((u) => loadAdQuota(u.id.toString())));
+  const adQuotas = await Promise.all(users.map((u) => loadAdQuota({ userId: u.id.toString() })));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const qs = (overrides: Record<string, string | number | null>) => {
     const params = new URLSearchParams();
