@@ -763,8 +763,8 @@ model Payment {
 }
 
 enum AdminActionType {
-  grant_subscription
-  cancel_subscription
+  grant_credit
+  clear_billing_key
   delete_account
 
   @@map("admin_action_type")

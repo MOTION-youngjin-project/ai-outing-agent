@@ -2,7 +2,7 @@
 CREATE TABLE `admin_action_logs` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `admin_email` VARCHAR(255) NOT NULL,
-    `action` ENUM('grant_subscription', 'cancel_subscription', 'delete_account') NOT NULL,
+    `action` ENUM('grant_credit', 'clear_billing_key', 'delete_account') NOT NULL,
     `target_user_id` BIGINT UNSIGNED NULL,
     `target_email` VARCHAR(255) NOT NULL,
     `detail` JSON NULL,

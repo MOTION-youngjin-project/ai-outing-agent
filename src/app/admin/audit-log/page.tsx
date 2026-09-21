@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 50;
 
 const ACTION_LABEL: Record<string, string> = {
-  grant_subscription: "구독 무료 지급",
-  cancel_subscription: "구독 해지",
+  grant_credit: "크레딧 무료 지급",
+  clear_billing_key: "카드 등록 해제",
   delete_account: "계정 영구 삭제",
 };
 

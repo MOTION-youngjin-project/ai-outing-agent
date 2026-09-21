@@ -3,21 +3,14 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
-import { loadQuota } from "@/lib/billing/quota";
-import { PLANS } from "@/lib/billing/plans";
+import { loadBalance } from "@/lib/billing/quota";
+import { FREE_QUESTIONS } from "@/lib/billing/plans";
 
 export const dynamic = "force-dynamic";
 
-const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {
-  incomplete: "카드 등록 미완료",
-  active: "활성",
-  past_due: "결제 실패(무료 한도로 전환됨)",
-  canceled: "해지됨",
-};
-
 const ACTION_LABEL: Record<string, string> = {
-  grant_subscription: "구독 무료 지급",
-  cancel_subscription: "구독 해지",
+  grant_credit: "크레딧 무료 지급",
+  clear_billing_key: "카드 등록 해제",
   delete_account: "계정 영구 삭제",
 };
 
@@ -41,16 +34,16 @@ export default async function AdminUserDetailPage({
     notFound();
   }
 
-  const [user, subscription, usages, payments, actionLogs] = await Promise.all([
+  const [user, wallet, usages, payments, actionLogs] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
-    prisma.subscription.findUnique({ where: { userId } }),
+    prisma.wallet.findUnique({ where: { userId } }),
     prisma.recommendationUsage.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.payment.findMany({ where: { userId }, orderBy: { requestedAt: "desc" } }),
     prisma.adminActionLog.findMany({ where: { targetUserId: userId }, orderBy: { createdAt: "desc" } }),
   ]);
 
   if (!user) notFound();
-  const quota = await loadQuota(id);
+  const balance = await loadBalance(id);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10 text-ink">
@@ -72,54 +65,38 @@ export default async function AdminUserDetailPage({
       )}
 
       <section className="flex flex-col gap-3 rounded-lg border border-hairline p-4">
-        <h2 className="font-semibold">구독 · 쿼터</h2>
+        <h2 className="font-semibold">크레딧 지갑</h2>
         <p className="text-sm text-ink-soft">
-          현재 플랜: <strong className="text-ink">{quota.tierName}</strong> · 이번 기간 사용량{" "}
-          <strong className="text-ink">
-            {quota.used}/{quota.limit}
-          </strong>
+          무료 질문 남음: <strong className="text-ink">{balance.freeRemaining}/{FREE_QUESTIONS}</strong> · 크레딧 잔액{" "}
+          <strong className="text-ink">{balance.balanceKrw.toLocaleString()}원</strong>
         </p>
-        {subscription && (
-          <p className="text-sm text-ink-soft">
-            구독 상태: {SUBSCRIPTION_STATUS_LABEL[subscription.status] ?? subscription.status}
-            {subscription.currentPeriodEnd && ` · 기간 만료 ${subscription.currentPeriodEnd.toISOString().slice(0, 10)}`}
-            {subscription.billingKey ? " · 카드 등록됨" : " · 카드 미등록(무료 지급)"}
-          </p>
+        {wallet && (
+          <p className="text-sm text-ink-soft">{wallet.billingKey ? "카드 등록됨(자동충전 가능)" : "카드 미등록"}</p>
         )}
 
         <div className="flex flex-wrap items-end gap-3 border-t border-hairline pt-3">
-          <form action={`/api/admin/users/${id}/subscription`} method="POST" className="flex flex-wrap items-end gap-2">
+          <form action={`/api/admin/users/${id}/wallet`} method="POST" className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="action" value="grant" />
             <label className="flex flex-col text-xs text-muted">
-              플랜
-              <select name="planCode" className="rounded-lg border border-hairline px-2 py-1 text-sm text-ink">
-                {Object.entries(PLANS).map(([code, plan]) => (
-                  <option key={code} value={code}>
-                    {plan.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col text-xs text-muted">
-              기간(일)
+              지급액(원)
               <input
-                name="days"
+                name="amountKrw"
                 type="number"
                 min={1}
-                defaultValue={30}
-                className="w-20 rounded-lg border border-hairline px-2 py-1 text-sm text-ink"
+                defaultValue={1000}
+                className="w-24 rounded-lg border border-hairline px-2 py-1 text-sm text-ink"
               />
             </label>
             <button type="submit" className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white">
-              무료로 지급
+              크레딧 무료로 지급
             </button>
           </form>
 
-          {subscription && subscription.status !== "canceled" && (
-            <form action={`/api/admin/users/${id}/subscription`} method="POST">
-              <input type="hidden" name="action" value="cancel" />
+          {wallet?.billingKey && (
+            <form action={`/api/admin/users/${id}/wallet`} method="POST">
+              <input type="hidden" name="action" value="clear_billing_key" />
               <button type="submit" className="rounded-lg border border-hairline px-3 py-1.5 text-sm text-ink-soft">
-                구독 해지
+                카드 등록 해제
               </button>
             </form>
           )}
@@ -133,7 +110,9 @@ export default async function AdminUserDetailPage({
         ) : (
           <ul className="flex flex-col gap-1 text-sm text-ink-soft">
             {usages.map((u) => (
-              <li key={u.id.toString()}>{u.createdAt.toISOString().replace("T", " ").slice(0, 19)}</li>
+              <li key={u.id.toString()}>
+                {u.createdAt.toISOString().replace("T", " ").slice(0, 19)} · {u.costKrw > 0 ? `${u.costKrw.toLocaleString()}원 차감` : "무료"}
+              </li>
             ))}
           </ul>
         )}
