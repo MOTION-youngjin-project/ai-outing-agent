@@ -7,10 +7,19 @@ import { auth } from "@/lib/auth";
 // 비었다가 리다이렉트되는 걸 막아주는 UX용.
 const PUBLIC_PATHS = new Set(["/login", "/signup", "/privacy", "/account-deletion"]);
 
+// Flutter 앱 셸(webview_flutter)이 기기 기본 UA 뒤에 이 문자열을 붙여서 보낸다. 앱 안에서
+// 결제 진입점(/billing)을 노출하면 Google Play 정책상 인앱결제(Play Billing) 의무 대상이 되므로,
+// 웹뷰 안에서는 이 경로 자체를 서버 단에서 막는다 — 결제는 일반 브라우저(웹)에서만 하게 한다.
+const APP_WEBVIEW_UA_MARKER = "NadeulPlanApp/1.0";
+
 export default auth((req) => {
-  if (PUBLIC_PATHS.has(req.nextUrl.pathname)) return;
+  const { pathname } = req.nextUrl;
+  if (pathname === "/billing" && req.headers.get("user-agent")?.includes(APP_WEBVIEW_UA_MARKER)) {
+    return Response.redirect(new URL("/", req.nextUrl.origin));
+  }
+  if (PUBLIC_PATHS.has(pathname)) return;
   if (!req.auth) {
-    const next = encodeURIComponent(req.nextUrl.pathname);
+    const next = encodeURIComponent(pathname);
     return Response.redirect(new URL(`/login?next=${next}`, req.nextUrl.origin));
   }
 });
