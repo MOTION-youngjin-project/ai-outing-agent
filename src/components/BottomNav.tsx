@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
 import { useAppStore } from "@/lib/store";
+import { noteReplace } from "@/lib/useBack";
 
 // 나들플랜 안드로이드 앱(webview_flutter)이 WebView User-Agent 뒤에 붙이는 식별자.
 // 앱 안에서 열렸을 때는 네이티브 탭바와 중복되는 이 웹 자체 네비를 숨긴다.
@@ -64,6 +65,7 @@ export function BottomNav() {
   useEffect(() => {
     function handleNativeTab(event: Event) {
       const tab = (event as CustomEvent<string>).detail;
+      noteReplace();
       if (tab === "map") goToMap(router.replace);
       else if (tab === "chat") router.replace("/");
       else if (tab === "saved") router.replace("/saved");

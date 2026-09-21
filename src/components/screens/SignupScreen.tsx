@@ -4,9 +4,12 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { noteReplace, useBack } from "@/lib/useBack";
+import { Logo } from "@/components/Logo";
 
 export function SignupScreen() {
   const router = useRouter();
+  const goBack = useBack("/login");
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
   const [name, setName] = useState("");
@@ -35,7 +38,8 @@ export function SignupScreen() {
         router.push(`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`);
         return;
       }
-      router.push(next || "/mypage");
+      noteReplace();
+      router.replace(next || "/mypage");
     } finally {
       setPending(false);
     }
@@ -43,7 +47,13 @@ export function SignupScreen() {
 
   return (
     <>
-      <ScreenHeader title="회원가입" onBack={() => router.back()} />
+      <ScreenHeader title="회원가입" onBack={goBack} />
+      {/* 로그인·가입은 서비스를 처음 마주하는 화면이라 이름을 한 번 보여준다 */}
+      <div className="flex flex-col items-center gap-2 px-5 pb-6 pt-2">
+        <Logo className="h-[30px]" />
+        <p className="text-[13px] text-muted">대구 나들이 코스를 저장하고 다시 꺼내 보세요.</p>
+      </div>
+
       <form
         onSubmit={(e) => {
           e.preventDefault();

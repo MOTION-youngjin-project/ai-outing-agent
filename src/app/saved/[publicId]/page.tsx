@@ -1,16 +1,17 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSavedCourse } from "@/lib/clientApi";
 import { CourseMapView } from "@/components/CourseMapView";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useBack } from "@/lib/useBack";
 
 // "코스 다시 보기" — 저장 시점 스냅샷으로 지도+정류지 목록을 그린다. 추천 런(runId)에
 // 매이지 않으므로 정류지 링크는 단독 장소 상세(/place/[placeId])로 간다.
 export default function SavedCoursePage() {
   const { publicId } = useParams<{ publicId: string }>();
-  const router = useRouter();
+  const goBack = useBack("/saved");
   const query = useQuery({
     queryKey: ["saved-course", publicId],
     queryFn: () => fetchSavedCourse(publicId),
@@ -26,7 +27,7 @@ export default function SavedCoursePage() {
   const saved = query.data;
   return (
     <>
-      <ScreenHeader title={saved.title} onBack={() => router.push("/saved")} />
+      <ScreenHeader title={saved.title} onBack={goBack} />
       <div className="flex flex-col gap-3 px-5">
         <CourseMapView places={saved.course.places ?? []} runId={null} cacheKey={saved.publicId} />
       </div>

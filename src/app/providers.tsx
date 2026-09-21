@@ -22,6 +22,7 @@ function SessionBoundary({ children }: { children: ReactNode }) {
         lastRecommendation: null,
         recommendations: [],
         conversationId: null,
+        queuedTurn: null,
         sidebarOpen: false,
       });
     }

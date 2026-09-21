@@ -73,7 +73,6 @@ export function MyPageScreen() {
     <>
       <ScreenHeader
         title="마이페이지"
-        onBack={() => router.push("/")}
         right={
           <button onClick={() => router.push("/settings")} aria-label="설정" className="p-1 text-ink">
             <Icon name="gear" className="h-[22px] w-[22px]" />

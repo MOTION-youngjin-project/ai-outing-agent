@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { fetchDrivingDirections, type PlaceWithMeta } from "@/lib/clientApi";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useBack } from "@/lib/useBack";
 import { NaverMap } from "@/components/NaverMap";
 import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 import { useOrigin, OriginFallback } from "@/components/OriginFallback";
@@ -22,8 +22,8 @@ export function DirectionsScreen({
   runId: string | null;
   placeId: string;
 }) {
-  const router = useRouter();
   const placeHref = runId ? `/recommend/${runId}/place/${placeId}` : `/place/${placeId}`;
+  const goBack = useBack(placeHref);
 
   // TransitScreen과 같은 패턴 — 현재 위치가 없으면 경로 자체를 계산할 방법이 없다.
   const { origin, setOrigin, retry } = useOrigin();
@@ -48,7 +48,7 @@ export function DirectionsScreen({
 
   return (
     <>
-      <ScreenHeader title={`${place.name} 자동차 길찾기`} onBack={() => router.push(placeHref)} />
+      <ScreenHeader title={`${place.name} 자동차 길찾기`} onBack={goBack} />
 
       <div className="flex flex-col gap-3 px-5">
         {origin === undefined && (

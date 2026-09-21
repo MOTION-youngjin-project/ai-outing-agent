@@ -5,7 +5,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Icon } from "@/components/Icon";
-import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 import { CourseStopList } from "@/components/CourseStopList";
 import { postSavedCourse, type RecommendResult, type WeatherInfo, type AirQualityInfo } from "@/lib/clientApi";
 
@@ -53,8 +52,8 @@ export function CourseCard({
     saveCourseMutation.mutate();
   }
 
-  const firstPlace = places[0];
-  const hasStartCoords = firstPlace?.latitude != null && firstPlace?.longitude != null;
+  // 지도에 찍을 좌표가 하나라도 있어야 지도로 보낼 수 있다.
+  const hasAnyCoords = places.some((p) => p.latitude != null && p.longitude != null);
 
   // 결과를 무조건 "오늘의 추천 코스"라고 부르지 않는다. 실제 데이터로 판별한다.
   //  - 구간 이동시간(네이버 Directions로 채워지는 travelDurationMin)이 있으면
@@ -71,7 +70,15 @@ export function CourseCard({
       : null;
   const detailLabel = isCourse ? "코스 상세" : "목록 상세";
   const saveLabel = isCourse ? "코스 저장" : "저장";
-  const goLabel = isCourse ? "이 코스로 출발" : "길찾기";
+  // "이 코스로 출발"은 예전엔 첫 장소 하나를 외부 지도앱(네이버·카카오·구글)으로
+  // 넘겼다 — 이름은 코스 전체를 시작하는 것처럼 보이는데 앱 밖에서 한 곳만 안내됐다.
+  // 이제 NAPL의 코스 지도로 간다(1번 장소가 선택된 채로). 외부 지도앱 길찾기는 거기
+  // 선택 카드·구간 화면 안의 보조 기능이다. 순서가 없는 목록이면 "지도에서 보기".
+  const goLabel = isCourse ? "이 코스로 출발" : "지도에서 보기";
+  function openOnMap() {
+    queryClient.setQueryData(["recommend", recommendation.agentRunId], recommendation);
+    router.push(`/map/${recommendation.agentRunId}${isCourse ? "?stop=1" : ""}`);
+  }
 
   return (
     // 카드 안이 한꺼번에 나타나지 않는다 — 제목 → 환경 정보 → 요약 → 장소 목록
@@ -109,7 +116,9 @@ export function CourseCard({
       {allTags.length > 0 && (
         <div className="sk-stagger flex flex-wrap gap-1.5 border-t border-[var(--sk-line-soft)] pt-3">
           {allTags.map((t) => (
-            <span key={t} className="sk-tag">
+            // LLM이 만든 태그라 "실내" 같은 낱말일 수도, 한 문장일 수도 있다 —
+            // 길면 줄바꿈되게 둬야 카드 밖으로 밀고 나가지 않는다.
+            <span key={t} className="sk-tag sk-tag-flow">
               {t}
             </span>
           ))}
@@ -119,25 +128,18 @@ export function CourseCard({
       {/* 액션 — 셋을 한 줄에 욱여넣으니 글자가 버튼에 꽉 찼다.
           핵심 액션을 전폭 한 줄로 올리고 보조 둘은 같은 너비 그리드로 맞춘다. */}
       <div className="mt-4 flex flex-col gap-2">
-        {hasStartCoords ? (
-          <ExternalMapMenu
-            latitude={firstPlace.latitude!}
-            longitude={firstPlace.longitude!}
-            name={firstPlace.name}
-            label={goLabel}
-            icon="arrowUpRight"
-            popupAbove
-            summaryClassName="sk sk-primary flex list-none items-center justify-center gap-1.5 px-4 py-3 text-[13px] marker:content-none"
-          />
-        ) : (
-          <button
-            disabled
-            className="sk flex w-full items-center justify-center gap-1.5 px-4 py-3 text-[13px] font-semibold"
-          >
-            <Icon name="arrowUpRight" className="h-4 w-4" />
-            {goLabel}
-          </button>
-        )}
+        <button
+          onClick={openOnMap}
+          disabled={!hasAnyCoords}
+          className={
+            hasAnyCoords
+              ? "sk sk-primary flex w-full items-center justify-center gap-1.5 px-4 py-3 text-[13px]"
+              : "sk flex w-full items-center justify-center gap-1.5 px-4 py-3 text-[13px] font-semibold"
+          }
+        >
+          <Icon name={isCourse ? "arrowUpRight" : "pin"} className="h-4 w-4" />
+          {goLabel}
+        </button>
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={onOpenDetail}

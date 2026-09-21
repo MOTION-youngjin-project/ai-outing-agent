@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDrivingDirections, type PlaceWithMeta } from "@/lib/clientApi";
 import { NaverMap, type MapParkingSpot } from "@/components/NaverMap";
 import { CourseStopList } from "@/components/CourseStopList";
 import { CurrentLegView } from "@/components/CurrentLegView";
+import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 import { Icon } from "@/components/Icon";
 import { extractCategoryLabel } from "@/lib/services/matching";
 import { WALK_DISTANCE_THRESHOLD_M, estimateWalkMinutes } from "@/lib/travelMode";
@@ -25,19 +27,25 @@ export function CourseMapView({
   cacheKey: string;
   listHeading?: string;
 }) {
-  const withCoords = places.filter(
-    (p): p is typeof p & { latitude: number; longitude: number } => p.latitude != null && p.longitude != null
-  );
+  // 핀 id는 "places 안의 순서"로 만든다 — 예전엔 좌표 있는 것만 거른 배열의 순서를
+  // 써서, 좌표 없는 장소가 끼어 있으면 핀과 목록이 한 칸씩 어긋났다.
+  const spotId = (p: PlaceWithMeta, i: number) => p.placeId ?? `${i}`;
+  const withCoords = places
+    .map((p, i) => ({ p, i }))
+    .filter(
+      (x): x is { p: PlaceWithMeta & { latitude: number; longitude: number }; i: number } =>
+        x.p.latitude != null && x.p.longitude != null
+    );
 
   // 코스 구간별 실제 도로 경로(폴리라인)를 정류지 좌표 쌍마다 따로 요청해서 이어붙인다.
   // 서버가 코스 계산 때 구간별 거리/시간(travelDurationMin)은 이미 저장해두지만
   // 좌표 배열(path)까지는 저장하지 않아서(용량 문제, DirectionsScreen 참고) 여기서 새로 받는다.
   const legsQuery = useQuery({
-    queryKey: ["map-route", cacheKey, withCoords.map((p) => p.placeId ?? p.name).join(",")],
+    queryKey: ["map-route", cacheKey, withCoords.map(({ p }) => p.placeId ?? p.name).join(",")],
     queryFn: async () => {
       const legs = await Promise.all(
-        withCoords.slice(0, -1).map((from, i) => {
-          const to = withCoords[i + 1];
+        withCoords.slice(0, -1).map(({ p: from }, i) => {
+          const to = withCoords[i + 1].p;
           return fetchDrivingDirections(
             { latitude: from.latitude, longitude: from.longitude },
             { latitude: to.latitude, longitude: to.longitude }
@@ -50,8 +58,7 @@ export function CourseMapView({
   });
 
   const routePath = (legsQuery.data ?? []).flatMap((leg) => leg?.path ?? []);
-  const spotId = (p: PlaceWithMeta, i: number) => p.placeId ?? `${i}`;
-  const spots: MapParkingSpot[] = withCoords.map((p, i) => ({
+  const spots: MapParkingSpot[] = withCoords.map(({ p, i }) => ({
     id: spotId(p, i),
     name: p.name,
     latitude: p.latitude,
@@ -63,27 +70,67 @@ export function CourseMapView({
   // 지도 위 번호 핀을 탭하면(디자인/지도/장소 핀 선택.png) 전체 목록 대신 그 장소 하나의
   // 카드로 바꿔 보여준다. NaverMap의 selectedId/onSelect는 주차장 목록 화면에서 이미
   // 쓰던 제어형 선택 메커니즘을 그대로 재사용한다.
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selectedIndex = places.findIndex((p, i) => spotId(p, i) === selectedId);
+  //
+  // 선택·현재 구간 상태는 주소(?stop=N, &leg=1)에 둔다 — 로컬 state였을 때는
+  //  - 선택 카드에서 장소 상세로 갔다가 뒤로 오면 선택이 풀려 있었고,
+  //  - "이 코스로 출발"로 1번 장소가 선택된 채 열 방법이 없었고,
+  //  - 현재 구간에서 하드웨어 뒤로를 누르면 지도 탭 자체를 떠났다.
+  // 핀끼리 옮겨 다니는 건 replace(히스토리를 쌓지 않음), 구간 화면에 들어가는 것만
+  // push다 — 그래서 구간 화면의 뒤로는 선택 카드로 한 단계만 돌아간다.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const stop = Number(searchParams.get("stop"));
+  const selectedIndex = Number.isInteger(stop) && stop >= 1 && stop <= places.length ? stop - 1 : -1;
   const selectedPlace = selectedIndex >= 0 ? places[selectedIndex] : null;
   const prevPlace = selectedIndex > 0 ? places[selectedIndex - 1] : null;
+  const selectedId = selectedPlace ? spotId(selectedPlace, selectedIndex) : null;
 
   // "현재 구간 보기"(디자인/지도(현재구간).png)는 핀 선택 카드 위에 얹히는 세 번째 상태다.
   // 이전 장소가 있어야만(맨 처음 장소는 "현재 구간"이 없음) 켤 수 있다.
-  const [legActive, setLegActive] = useState(false);
+  const legActive = searchParams.get("leg") === "1" && !!prevPlace;
+  // 이 화면에서 구간으로 들어간 거면(push) 뒤로 = 브라우저 back. 새로고침 등으로
+  // 구간 주소에서 바로 시작했으면 back할 곳이 없으니 선택 카드 주소로 바꾼다.
+  const pushedLeg = useRef(false);
+
+  function hrefFor(index: number | null, leg = false) {
+    if (index === null) return pathname;
+    return `${pathname}?stop=${index + 1}${leg ? "&leg=1" : ""}`;
+  }
+  function selectIndex(index: number | null) {
+    router.replace(hrefFor(index), { scroll: false });
+  }
+  function selectById(id: string) {
+    const index = places.findIndex((p, i) => spotId(p, i) === id);
+    selectIndex(index >= 0 ? index : null);
+  }
+  function startLeg() {
+    pushedLeg.current = true;
+    router.push(hrefFor(selectedIndex, true), { scroll: false });
+  }
+  function backFromLeg() {
+    if (pushedLeg.current) {
+      pushedLeg.current = false;
+      router.back();
+    } else {
+      router.replace(hrefFor(selectedIndex), { scroll: false });
+    }
+  }
 
   // "전체 코스 보기"는 선택 카드로 한 단계만 돌아가는 게 아니라 목록까지 다 닫는다 —
   // 버튼 이름 그대로 전체 코스를 보여준다.
   function closeLeg() {
-    setLegActive(false);
-    setSelectedId(null);
+    pushedLeg.current = false;
+    router.replace(pathname, { scroll: false });
   }
 
   function advanceLeg() {
     const nextIndex = selectedIndex + 1;
     if (nextIndex < places.length) {
-      setSelectedId(spotId(places[nextIndex], nextIndex));
-      // legActive는 켜진 채로 둔다 — 다음 장소도 이전 장소(방금 도착한 곳)가 있어서 이어진다.
+      // 구간 화면은 켜진 채로 다음 구간으로 — 다음 장소도 이전 장소(방금 도착한 곳)가 있다.
+      // push라서 뒤로(버튼·하드웨어 모두)는 바로 앞 구간으로 한 단계씩 돌아간다.
+      pushedLeg.current = true;
+      router.push(hrefFor(nextIndex, true), { scroll: false });
     } else {
       closeLeg();
     }
@@ -92,17 +139,17 @@ export function CourseMapView({
   return (
     <>
       {withCoords.length === 0 ? (
-        <div className="flex h-64 items-center justify-center rounded-2xl bg-slate-100 text-[13px] text-muted">
+        <div className="sk-panel flex h-64 items-center justify-center text-[13px] text-muted">
           좌표가 확인된 장소가 없어 지도를 표시할 수 없어요.
         </div>
       ) : legActive && selectedPlace && prevPlace ? null : (
         <NaverMap
-          center={{ latitude: withCoords[0].latitude, longitude: withCoords[0].longitude }}
+          center={{ latitude: withCoords[0].p.latitude, longitude: withCoords[0].p.longitude }}
           spots={spots}
           routePath={routePath.length > 1 ? routePath : undefined}
-          className="relative h-72 w-full overflow-hidden rounded-2xl"
+          className="sk-panel relative h-72 w-full overflow-hidden p-0"
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={selectById}
         />
       )}
 
@@ -114,6 +161,7 @@ export function CourseMapView({
           toLabel={`${selectedIndex + 1}번째`}
           advanceLabel={selectedIndex + 1 < places.length ? "다음 장소로" : "코스 마치기"}
           onAdvance={advanceLeg}
+          onBack={backFromLeg}
           onClose={closeLeg}
         />
       ) : selectedPlace ? (
@@ -122,12 +170,12 @@ export function CourseMapView({
           index={selectedIndex}
           prevPlace={prevPlace}
           runId={runId}
-          onClose={() => setSelectedId(null)}
-          onStartLeg={() => setLegActive(true)}
+          onClose={() => selectIndex(null)}
+          onStartLeg={startLeg}
         />
       ) : (
         <>
-          {listHeading && <h2 className="px-1 text-[15px] font-bold text-ink">{listHeading}</h2>}
+          {listHeading && <h2 className="sk-cap text-[15px] font-bold text-ink">{listHeading}</h2>}
           <CourseStopList places={places} runId={runId} />
         </>
       )}
@@ -226,16 +274,33 @@ function SelectedStopCard({
             상세 보기
           </span>
         )}
-        {/* 첫 장소는 "현재 구간"(이전 장소→여기)이 없어서 비활성. */}
-        <button
-          onClick={onStartLeg}
-          disabled={!prevPlace}
-          title={prevPlace ? undefined : "첫 장소예요"}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-2 text-[13px] font-semibold text-white disabled:bg-slate-100 disabled:text-slate-400"
-        >
-          <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
-          현재 구간 보기
-        </button>
+        {/* 첫 장소는 "현재 구간"(이전 장소→여기)이 없다. 예전엔 버튼을 회색으로만
+            두었는데, "이 코스로 출발"이 여기로 오면서 첫 장소가 곧 출발점이 됐다 —
+            여기까지 가는 외부 지도앱 길찾기를 그 자리에 둔다. */}
+        {prevPlace ? (
+          <button
+            onClick={onStartLeg}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-2 text-[13px] font-semibold text-white"
+          >
+            <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
+            현재 구간 보기
+          </button>
+        ) : place.latitude != null && place.longitude != null ? (
+          <ExternalMapMenu
+            latitude={place.latitude}
+            longitude={place.longitude}
+            name={place.name}
+            label="여기까지 길찾기"
+            icon="arrowUpRight"
+            popupAbove
+            className="flex-1"
+            summaryClassName="flex list-none items-center justify-center gap-1.5 rounded-full bg-accent py-2 text-[13px] font-semibold text-white marker:content-none"
+          />
+        ) : (
+          <span className="flex flex-1 items-center justify-center rounded-full bg-slate-100 py-2 text-[13px] font-semibold text-slate-400">
+            위치 정보 없음
+          </span>
+        )}
       </div>
     </div>
   );
