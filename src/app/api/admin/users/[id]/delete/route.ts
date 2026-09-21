@@ -6,8 +6,11 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 
 // 계정 삭제 안내 페이지(account-deletion)가 약속한 "이메일로 요청하면 삭제" 절차의
-// 실제 실행부. User를 지우면 스키마의 onDelete: Cascade로 저장 장소/코스/대화 기록
-// (agent_runs)/구독/결제까지 한 번에 정리된다 — 그 안내 페이지가 나열한 삭제 대상과 일치.
+// 실제 실행부. User onDelete: Cascade가 저장 장소/코스/구독/결제/agent_runs는 지워주지만,
+// agent_runs를 참조하는 tool_calls/recommendation_routes/route_places 등은 FK가
+// RESTRICT라 cascade가 거기서 멈춘다(실제로 사용 이력 있는 계정 삭제 시 P2003으로 확인됨).
+// deleteRecommendation(recommendation-history.ts)이 런 1건에 대해 쓰는 정리 순서를
+// 그대로 유저 전체 런에 적용한다.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!isAdminEmail(session?.user?.email)) {
@@ -36,6 +39,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.redirect(new URL(`/admin/users/${id}?error=confirm_mismatch`, request.url));
   }
 
-  await prisma.user.delete({ where: { id: userId } });
+  await prisma.$transaction(async (tx) => {
+    const runFilter = { agentRun: { userId } };
+    await tx.routeParkingRecommendation.deleteMany({ where: { route: runFilter } });
+    await tx.routePlace.deleteMany({ where: { route: runFilter } });
+    await tx.recommendationRoute.deleteMany({ where: runFilter });
+    await tx.ragRetrieval.deleteMany({ where: { toolCall: runFilter } });
+    await tx.toolCall.deleteMany({ where: runFilter });
+    await tx.placeIngestionEvent.updateMany({ where: runFilter, data: { agentRunId: null } });
+    await tx.user.delete({ where: { id: userId } });
+  });
   return NextResponse.redirect(new URL("/admin?deleted=1", request.url));
 }
