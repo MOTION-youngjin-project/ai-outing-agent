@@ -10,21 +10,42 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
 
+type StatFilter = "active" | "usage_today" | "failed_payments";
+
+const FILTER_LABEL: Record<StatFilter, string> = {
+  active: "활성 구독자만",
+  usage_today: "오늘 사용한 사용자만",
+  failed_payments: "최근 7일 결제 실패 사용자만",
+};
+
 export default async function AdminUsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; deleted?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; deleted?: string; filter?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.email) redirect("/login?next=/admin");
   if (!isAdminEmail(session.user.email)) redirect("/");
 
-  const { q = "", page: pageParam, deleted } = await searchParams;
+  const { q = "", page: pageParam, deleted, filter: filterParam } = await searchParams;
+  const filter: StatFilter | null =
+    filterParam === "active" || filterParam === "usage_today" || filterParam === "failed_payments" ? filterParam : null;
   const page = Math.max(1, Number(pageParam) || 1);
-  const where = q ? { OR: [{ email: { contains: q } }, { name: { contains: q } }] } : {};
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  // 통계 카드 클릭 = 그 조건으로 목록을 필터링(드릴다운). 검색어와는 AND로 같이 걸린다.
+  const searchWhere = q ? { OR: [{ email: { contains: q } }, { name: { contains: q } }] } : null;
+  const filterWhere =
+    filter === "active"
+      ? { subscription: { status: "active" as const } }
+      : filter === "usage_today"
+        ? { usages: { some: { createdAt: { gte: todayStart } } } }
+        : filter === "failed_payments"
+          ? { payments: { some: { status: "failed" as const, requestedAt: { gte: sevenDaysAgo } } } }
+          : null;
+  const where = searchWhere && filterWhere ? { AND: [searchWhere, filterWhere] } : (searchWhere ?? filterWhere ?? {});
 
   const [users, total, totalUsers, activeSubscriptions, todayUsage, recentFailedPayments] = await Promise.all([
     prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
@@ -37,6 +58,17 @@ export default async function AdminUsersPage({
 
   const quotas = await Promise.all(users.map((u) => loadQuota(u.id.toString())));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const qs = (overrides: Record<string, string | number | null>) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (filter) params.set("filter", filter);
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value === null) params.delete(key);
+      else params.set(key, String(value));
+    }
+    const s = params.toString();
+    return s ? `/admin?${s}` : "/admin";
+  };
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-10 text-ink">
@@ -47,23 +79,39 @@ export default async function AdminUsersPage({
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="총 가입자" value={totalUsers} />
-        <StatCard label="활성 구독자" value={activeSubscriptions} />
-        <StatCard label="오늘 사용 횟수" value={todayUsage} />
-        <StatCard label="최근 7일 결제 실패" value={recentFailedPayments} />
+        <StatCard label="총 가입자" value={totalUsers} href={qs({ filter: null, page: null })} active={filter === null} />
+        <StatCard label="활성 구독자" value={activeSubscriptions} href={qs({ filter: "active", page: null })} active={filter === "active"} />
+        <StatCard label="오늘 사용 횟수" value={todayUsage} href={qs({ filter: "usage_today", page: null })} active={filter === "usage_today"} />
+        <StatCard
+          label="최근 7일 결제 실패"
+          value={recentFailedPayments}
+          href={qs({ filter: "failed_payments", page: null })}
+          active={filter === "failed_payments"}
+        />
       </div>
 
-      <form className="flex gap-2" action="/admin">
-        <input
-          name="q"
-          defaultValue={q}
-          placeholder="이메일 또는 이름으로 검색"
-          className="w-full max-w-xs rounded-lg border border-hairline px-3 py-2 text-sm outline-none focus:border-accent"
-        />
-        <button type="submit" className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white">
-          검색
-        </button>
-      </form>
+      <div className="flex flex-wrap items-center gap-2">
+        <form className="flex gap-2" action="/admin">
+          {filter && <input type="hidden" name="filter" value={filter} />}
+          <input
+            name="q"
+            defaultValue={q}
+            placeholder="이메일 또는 이름으로 검색"
+            className="w-full max-w-xs rounded-lg border border-hairline px-3 py-2 text-sm outline-none focus:border-accent"
+          />
+          <button type="submit" className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white">
+            검색
+          </button>
+        </form>
+        {filter && (
+          <p className="flex items-center gap-2 text-sm text-ink-soft">
+            {FILTER_LABEL[filter]}만 보는 중
+            <Link href={qs({ filter: null, page: null })} className="text-accent-deep hover:underline">
+              필터 해제
+            </Link>
+          </p>
+        )}
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-hairline">
         <table className="w-full min-w-[720px] text-left text-sm">
@@ -110,7 +158,7 @@ export default async function AdminUsersPage({
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
             <Link
               key={p}
-              href={`/admin?q=${encodeURIComponent(q)}&page=${p}`}
+              href={qs({ page: p })}
               className={`rounded-lg px-3 py-1 ${p === page ? "bg-accent text-white" : "border border-hairline text-ink-soft"}`}
             >
               {p}
@@ -122,11 +170,16 @@ export default async function AdminUsersPage({
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value, href, active }: { label: string; value: number; href: string; active: boolean }) {
   return (
-    <div className="rounded-lg border border-hairline bg-white px-4 py-3">
+    <Link
+      href={href}
+      className={`rounded-lg border px-4 py-3 transition-colors ${
+        active ? "border-accent bg-mint-bg" : "border-hairline bg-white hover:border-accent"
+      }`}
+    >
       <p className="text-xs text-muted">{label}</p>
       <p className="text-lg font-bold text-ink">{value}</p>
-    </div>
+    </Link>
   );
 }
