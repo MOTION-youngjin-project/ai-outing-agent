@@ -767,15 +767,20 @@ model Payment {
 // 봐야 한다(무제한 — 사업자등록 전까지는 돈을 받을 방법이 없어서 이 방식으로 간다).
 // billing/* 테이블·코드는 나중에 사업자등록되면 다시 쓸 수 있게 그대로 둔다.
 model AdCredit {
-  id     BigInt @id @default(autoincrement()) @db.UnsignedBigInt
-  userId BigInt @unique @map("user_id") @db.UnsignedBigInt
+  id     BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  // 로그인 사용자는 userId, 비로그인 게스트는 sessionKeyHash로 구분한다(agent_runs와
+  // 같은 소유자 표현). 둘 중 하나만 채워진다 — MySQL unique 인덱스는 NULL을 여러 개
+  // 허용하므로 둘 다 nullable+unique로 둬도 게스트 행이 여러 개 있어도 문제없다.
+  userId         BigInt? @unique @map("user_id") @db.UnsignedBigInt
+  sessionKeyHash String? @unique @map("session_key_hash") @db.VarChar(64)
   // 광고를 봐서 쌓인 질문권. 하루 무료 1건과 별개로 소진 전까지 계속 쓸 수 있다.
   credits Int @default(0)
   // 오늘 무료 1건을 이미 썼는지는 "오늘 날짜와 같은가"로 판정한다 — 자정 지나면 자동으로
-  // 다시 하루치가 찬다(별도 리셋 배치 필요 없음).
+  // 다시 하루치가 찬다(별도 리셋 배치 필요 없음). 게스트(sessionKeyHash)는 계정이 없어
+  // 쿠키만 지우면 무한 리셋되므로 이 하루 무료를 아예 안 준다 — quota.ts에서 막는다.
   lastFreeAt DateTime? @map("last_free_at") @db.Timestamp(0)
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ad_credits")
 }
