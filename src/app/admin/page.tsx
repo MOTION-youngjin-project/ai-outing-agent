@@ -72,7 +72,12 @@ export default async function AdminUsersPage({
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-10 text-ink">
-      <h1 className="text-xl font-bold">관리자 · 계정 관리</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">관리자 · 계정 관리</h1>
+        <Link href="/admin/audit-log" className="text-sm text-accent-deep hover:underline">
+          관리자 작업 이력 →
+        </Link>
+      </div>
 
       {deleted === "1" && (
         <p className="rounded-lg bg-mint-bg px-4 py-2 text-sm text-ink-soft">계정을 삭제했습니다.</p>

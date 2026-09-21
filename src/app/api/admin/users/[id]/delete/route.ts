@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdminEmail, logAdminAction } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -13,7 +13,8 @@ export const runtime = "nodejs";
 // 그대로 유저 전체 런에 적용한다.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!isAdminEmail(session?.user?.email)) {
+  const adminEmail = session?.user?.email;
+  if (!isAdminEmail(adminEmail)) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 
@@ -49,5 +50,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await tx.placeIngestionEvent.updateMany({ where: runFilter, data: { agentRunId: null } });
     await tx.user.delete({ where: { id: userId } });
   });
+  await logAdminAction({ adminEmail: adminEmail!, action: "delete_account", targetUserId: userId, targetEmail: user.email });
   return NextResponse.redirect(new URL("/admin?deleted=1", request.url));
 }

@@ -15,6 +15,12 @@ const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {
   canceled: "해지됨",
 };
 
+const ACTION_LABEL: Record<string, string> = {
+  grant_subscription: "구독 무료 지급",
+  cancel_subscription: "구독 해지",
+  delete_account: "계정 영구 삭제",
+};
+
 export default async function AdminUserDetailPage({
   params,
   searchParams,
@@ -35,11 +41,12 @@ export default async function AdminUserDetailPage({
     notFound();
   }
 
-  const [user, subscription, usages, payments] = await Promise.all([
+  const [user, subscription, usages, payments, actionLogs] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId } }),
     prisma.subscription.findUnique({ where: { userId } }),
     prisma.recommendationUsage.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 20 }),
     prisma.payment.findMany({ where: { userId }, orderBy: { requestedAt: "desc" } }),
+    prisma.adminActionLog.findMany({ where: { targetUserId: userId }, orderBy: { createdAt: "desc" } }),
   ]);
 
   if (!user) notFound();
@@ -157,6 +164,22 @@ export default async function AdminUserDetailPage({
               ))}
             </tbody>
           </table>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2 rounded-lg border border-hairline p-4">
+        <h2 className="font-semibold">이 계정에 대한 관리자 작업 이력</h2>
+        {actionLogs.length === 0 ? (
+          <p className="text-sm text-muted">기록이 없습니다.</p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm text-ink-soft">
+            {actionLogs.map((log) => (
+              <li key={log.id.toString()}>
+                {log.createdAt.toISOString().replace("T", " ").slice(0, 19)} · {log.adminEmail} ·{" "}
+                {ACTION_LABEL[log.action] ?? log.action}
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

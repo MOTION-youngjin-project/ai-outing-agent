@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { auth } from "@/lib/auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdminEmail, logAdminAction } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { parsePlanCode } from "@/lib/billing/plans";
 
@@ -13,7 +13,8 @@ export const runtime = "nodejs";
 // 청구를 시도하므로 없어도 기간 동안은 정상적으로 그 플랜 한도를 받는다).
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!isAdminEmail(session?.user?.email)) {
+  const adminEmail = session?.user?.email;
+  if (!isAdminEmail(adminEmail)) {
     return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
   }
 
@@ -25,11 +26,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "잘못된 사용자 id입니다." }, { status: 400 });
   }
 
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  if (!target) return NextResponse.redirect(new URL("/admin", request.url));
+
   const form = await request.formData();
   const action = form.get("action");
 
   if (action === "cancel") {
     await prisma.subscription.updateMany({ where: { userId }, data: { status: "canceled" } });
+    await logAdminAction({ adminEmail: adminEmail!, action: "cancel_subscription", targetUserId: userId, targetEmail: target.email });
   } else if (action === "grant") {
     const planCode = parsePlanCode(form.get("planCode"));
     const days = Math.max(1, Math.trunc(Number(form.get("days"))) || 30);
@@ -41,6 +46,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { userId },
       create: { userId, planCode, status: "active", customerKey: randomUUID(), currentPeriodStart: now, currentPeriodEnd },
       update: { planCode, status: "active", currentPeriodStart: now, currentPeriodEnd },
+    });
+    await logAdminAction({
+      adminEmail: adminEmail!,
+      action: "grant_subscription",
+      targetUserId: userId,
+      targetEmail: target.email,
+      detail: { planCode, days },
     });
   } else {
     return NextResponse.json({ error: "알 수 없는 동작입니다." }, { status: 400 });
