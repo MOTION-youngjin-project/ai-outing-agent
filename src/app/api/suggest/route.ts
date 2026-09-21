@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { suggestNextMessage, type ChatTurn } from "@/lib/agent";
+import { followUpSuggestion } from "@/lib/follow-up-suggestion";
 import { auth } from "@/lib/auth";
 import { loadAdQuota, type Owner } from "@/lib/ads/quota";
 import { GUEST_COOKIE, guestHash } from "@/lib/recommendation-owner";
 
 export async function POST(req: NextRequest) {
-  const { history } = await req.json();
+  const body = await req.json().catch(() => null);
+  const history = body?.history;
 
-  if (!Array.isArray(history)) {
+  if (!Array.isArray(history) || history.length > 50 || history.some(h => !h || !["user", "assistant"].includes(h.role) || typeof h.content !== "string" || h.content.length > 10000)) {
     return NextResponse.json({ error: "history가 필요합니다." }, { status: 400 });
   }
 
   try {
-    // 이 라우트도 모델을 태운다. 차감은 하지 않지만(추천이 아니라 보조 기능이다) 오늘
-    // 무료도 없고 질문권도 없는 사용자가 계속 모델을 태우는 건 막는다. 비로그인
-    // 게스트도 쓸 수 있다 — 아직 광고 한 번도 안 본 게스트는 쿠키가 없어서 자연히 통과.
+    // 제안은 이제 로컬 규칙이라 모델을 태우지 않지만, 기존 게이트(오늘 무료도 질문권도
+    // 없으면 빈 제안)는 그대로 둔다 — 차감은 하지 않는다.
     const session = await auth();
     const userId = session?.user?.id;
     const sessionKeyHash = userId ? null : guestHash(req.cookies.get(GUEST_COOKIE)?.value);
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const quota = await loadAdQuota(owner);
     if (!quota.freeAvailableToday && quota.credits <= 0) return NextResponse.json({ suggestion: "" });
 
-    const suggestion = await suggestNextMessage(history as ChatTurn[]);
+    const suggestion = followUpSuggestion(history);
     return NextResponse.json({ suggestion });
   } catch {
     // 보조 기능이라 실패해도 200으로 빈 제안을 돌려준다.
