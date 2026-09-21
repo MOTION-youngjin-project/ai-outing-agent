@@ -187,6 +187,7 @@ model User {
   usages        RecommendationUsage[]
   wallet        Wallet?
   payments      Payment[]
+  adCredit      AdCredit?
 
   @@map("users")
 }
@@ -762,9 +763,26 @@ model Payment {
   @@map("payments")
 }
 
+// 결제(billing/*) 대신 광고 기반 무료 한도. 하루 1건은 그냥 무료고, 그 이상은 광고를
+// 봐야 한다(무제한 — 사업자등록 전까지는 돈을 받을 방법이 없어서 이 방식으로 간다).
+// billing/* 테이블·코드는 나중에 사업자등록되면 다시 쓸 수 있게 그대로 둔다.
+model AdCredit {
+  id     BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  userId BigInt @unique @map("user_id") @db.UnsignedBigInt
+  // 광고를 봐서 쌓인 질문권. 하루 무료 1건과 별개로 소진 전까지 계속 쓸 수 있다.
+  credits Int @default(0)
+  // 오늘 무료 1건을 이미 썼는지는 "오늘 날짜와 같은가"로 판정한다 — 자정 지나면 자동으로
+  // 다시 하루치가 찬다(별도 리셋 배치 필요 없음).
+  lastFreeAt DateTime? @map("last_free_at") @db.Timestamp(0)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ad_credits")
+}
+
 enum AdminActionType {
-  grant_credit
-  clear_billing_key
+  grant_ad_credit
+  reset_daily_free
   delete_account
 
   @@map("admin_action_type")
