@@ -127,10 +127,6 @@ export function AdsScreen({ quota }: { quota: AdQuotaState }) {
     try {
       const res = await fetch("/api/ads/reward", { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        router.push("/login?next=/ads");
-        return;
-      }
       if (!res.ok) throw new Error(data.error ?? "질문권을 받지 못했어요.");
       setCredits(data.credits ?? credits + 1);
       setSucceeded(true);

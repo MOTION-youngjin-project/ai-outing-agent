@@ -1,5 +1,7 @@
+import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
-import { loadAdQuota } from "@/lib/ads/quota";
+import { loadAdQuota, type Owner } from "@/lib/ads/quota";
+import { GUEST_COOKIE, guestHash } from "@/lib/recommendation-owner";
 import { AdsScreen } from "@/components/screens/AdsScreen";
 
 // Prisma를 직접 조회하는 서버 컴포넌트 — 정적 프리렌더를 시도하면 빌드 시 DB가 없는
@@ -8,7 +10,9 @@ export const dynamic = "force-dynamic";
 
 export default async function AdsPage() {
   const session = await auth();
-  // 이 페이지 자체가 proxy.ts 로그인 게이트 뒤에 있어서 userId는 항상 있다.
-  const quota = await loadAdQuota(session!.user!.id);
+  const userId = session?.user?.id;
+  const sessionKeyHash = userId ? null : guestHash((await cookies()).get(GUEST_COOKIE)?.value);
+  const owner: Owner = userId ? { userId } : { sessionKeyHash: sessionKeyHash ?? "" };
+  const quota = await loadAdQuota(owner);
   return <AdsScreen quota={quota} />;
 }
