@@ -21,6 +21,8 @@ export function BillingScreen({ balance }: { balance: BalanceState }) {
   const params = useSearchParams();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  // 실제로 카드가 긁히는 버튼이라 한 번 더 확인받는다 — 잘못 눌러도 바로 결제되지 않게.
+  const [confirmingTopUp, setConfirmingTopUp] = useState(false);
 
   const redirectError = params.get("error");
   const succeeded = params.get("ok") === "1";
@@ -58,6 +60,7 @@ export function BillingScreen({ balance }: { balance: BalanceState }) {
 
   async function topUp() {
     setError("");
+    setConfirmingTopUp(false);
     setPending(true);
     try {
       const res = await fetch("/api/billing/topup", { method: "POST" });
@@ -108,13 +111,32 @@ export function BillingScreen({ balance }: { balance: BalanceState }) {
                 등록된 카드로 {TOPUP_AMOUNT_KRW.toLocaleString("ko-KR")}원을 충전해요. 크레딧이 모자라면 질문할 때
                 자동으로도 충전돼요.
               </p>
-              <button
-                onClick={topUp}
-                disabled={pending}
-                className="mt-3 w-full rounded-full bg-cta py-2.5 text-[14px] font-semibold text-white disabled:bg-muted/30 disabled:text-muted"
-              >
-                {pending ? "충전 중..." : `${TOPUP_AMOUNT_KRW.toLocaleString("ko-KR")}원 충전하기`}
-              </button>
+              {confirmingTopUp ? (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => setConfirmingTopUp(false)}
+                    disabled={pending}
+                    className="flex-1 rounded-full border border-hairline py-2.5 text-[14px] font-semibold text-ink-soft"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={topUp}
+                    disabled={pending}
+                    className="flex-1 rounded-full bg-cta py-2.5 text-[14px] font-semibold text-white disabled:bg-muted/30 disabled:text-muted"
+                  >
+                    {pending ? "충전 중..." : "정말 충전할까요? 확인"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmingTopUp(true)}
+                  disabled={pending}
+                  className="mt-3 w-full rounded-full bg-cta py-2.5 text-[14px] font-semibold text-white disabled:bg-muted/30 disabled:text-muted"
+                >
+                  {`${TOPUP_AMOUNT_KRW.toLocaleString("ko-KR")}원 충전하기`}
+                </button>
+              )}
             </>
           ) : (
             <>

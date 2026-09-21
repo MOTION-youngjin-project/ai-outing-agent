@@ -14,9 +14,9 @@ export const FREE_QUESTIONS = 3;
 // 손해가 안 난다(100 - 44.6 > 0) — 팀 확정값.
 export const PRICE_PER_QUESTION_KRW = 100;
 
-// 자동/수동 충전 1회 금액. 너무 작은 금액은 일부 카드사가 소액결제로 거절하는
-// 경우가 있어 이 정도로 잡았다 — 이 값도 미확정.
-export const TOPUP_AMOUNT_KRW = 5000;
+// 자동/수동 충전 1회 금액. 100원/건 기준 20건 분량 — 너무 작은 금액은 일부
+// 카드사가 소액결제로 거절하는 경우가 있어 그 아래로는 안 내렸다. 사용자 확정.
+export const TOPUP_AMOUNT_KRW = 2000;
 
 export type BalanceState = {
   // 이번 요청이 무료인지, 유료라면 단가가 얼마인지(항상 PRICE_PER_QUESTION_KRW).
