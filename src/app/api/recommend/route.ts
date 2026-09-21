@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRecommendationRun, type GeoPoint, type RecommendationProgressEvent } from "@/lib/services/recommendations";
 import type { ChatTurn } from "@/lib/agent";
 import { auth } from "@/lib/auth";
-import { loadQuota, recordUsage } from "@/lib/billing/quota";
+import { ensureAffordable, recordUsage } from "@/lib/billing/quota";
 
 export const runtime = "nodejs";
 
@@ -51,14 +51,16 @@ export async function POST(req: NextRequest) {
 
   // 쿼터 게이트는 여기 한 곳이다 — 추천 에이전트로 들어가는 유일한 입구이고,
   // 스트림을 열기 "전"이라 한도 초과는 평범한 JSON 402로 나간다(NDJSON과 안 섞임).
-  const quota = await loadQuota(userId, { renew: true });
-  if (!quota.allowed) {
+  // 무료분이 남아있지 않으면 여기서 등록된 카드로 자동충전까지 시도한다.
+  const affordability = await ensureAffordable(userId, session.user.email);
+  if (!affordability.allowed) {
     return NextResponse.json(
       {
-        error: `이번 ${quota.tierName} 한도(${quota.limit}회)를 다 쓰셨어요. 요금제를 올리면 계속 이용할 수 있어요.`,
+        error:
+          affordability.reason === "no_billing_key"
+            ? "무료 질문을 다 쓰셨어요. 카드를 등록하면 계속 이용할 수 있어요."
+            : "충전에 실패했어요. 카드 정보를 확인해주세요.",
         code: "quota_exceeded",
-        limit: quota.limit,
-        used: quota.used,
       },
       { status: 402 }
     );
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
         // 없어서 여기서 자연히 빠지고, 실패는 위 try가 못 오게 막는다. 되묻기를 차감하면
         // 에이전트가 되물을수록 사용자가 손해라 제품이 스스로를 공격하게 된다.
         if (result.recommendation.places?.length) {
-          await recordUsage(userId, result.agentRunId);
+          await recordUsage(userId, result.agentRunId, affordability.cost);
         }
         emit({ type: "result", result });
       } catch (err) {
