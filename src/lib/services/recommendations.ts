@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { loadPreferenceContext } from "../recommendation-preferences";
+import { recentPlaceNames, diversityContext, removeRepeatedPlaces } from "../recommendation-diversity";
 import { prisma } from "@/lib/prisma";
 import { normalizeSido } from "@/lib/region";
 import { runAgentStream, type AgentProgressEvent, type ChatTurn, type GuideContext, type Recommendation } from "@/lib/agent";
@@ -53,7 +55,8 @@ export async function createRecommendationRun(
   origin?: GeoPoint | null,
   userId?: string | null,
   sessionKeyHash?: string | null,
-  conversationId?: string | null
+  conversationId?: string | null,
+  preferenceSnapshot?: { context: string | undefined }
 ): Promise<RecommendationRunResult> {
   const regionName = normalizeSido(history.map((h) => h.content).join(" "));
   const region = regionName ? await findOrCreateSidoRegion(regionName) : null;
@@ -67,14 +70,25 @@ export async function createRecommendationRun(
   // 캐시 서비스라 대부분 DB 조회로 끝나고, 실패하면 넣지 않는다(그때는 도구가 남아 있다).
   // search_daegu_pdf_guides도 같은 원리 — 2026-09-17 LangSmith 실측 4/4 요청에서 매번
   // 첫 도구로 호출됐다. 서로 의존하지 않으니 날씨/대기질과 병렬로 미리 조회한다.
-  const [situation, guideContext] = await Promise.all([
+  const [situation, guideContext, preferences, recentRuns] = await Promise.all([
     regionName ? describeSituation(regionName) : Promise.resolve(undefined),
-    describeGuides(history.map((h) => h.content).join(" ")),
+    describeGuides(history.filter(h => h.role === "user").map(h => h.content).join(" ")),
+    preferenceSnapshot ? Promise.resolve(preferenceSnapshot.context) : loadPreferenceContext(userIdBigInt, history, async id => {
+      const user = await prisma.user.findUnique({ where: { id }, select: { preferredTags: true } });
+      return user?.preferredTags;
+    }),
+    userIdBigInt === undefined ? Promise.resolve([]) : prisma.agentRun.findMany({
+      where: { userId: userIdBigInt, status: { in: ["completed", "partial"] },
+        startedAt: { gte: new Date(Date.now() - 7 * 24 * 3600_000) } },
+      orderBy: { startedAt: "desc" }, take: 5, select: { recommendationJson: true },
+    }).catch(() => []),
   ]);
+  const excluded = recentPlaceNames(recentRuns.map(run => run.recommendationJson), history);
+  const recommendationContext = [preferences, diversityContext(excluded)].filter(Boolean).join("\n") || undefined;
 
   let recommendation: Recommendation;
   try {
-    recommendation = await runAgentStream(history, onProgress, situation, guideContext);
+    recommendation = removeRepeatedPlaces(await runAgentStream(history, onProgress, situation, guideContext, recommendationContext), excluded);
   } catch (err) {
     await prisma.agentRun.create({
       data: {
@@ -327,7 +341,7 @@ async function describeSituation(regionName: string): Promise<string | undefined
 // 실패하면 조용히 비워두고, 그때는 에이전트가 기존처럼 도구로 직접 검색한다.
 async function describeGuides(query: string): Promise<GuideContext> {
   try {
-    const results = await searchPdfGuides(query);
+    const results = await searchPdfGuides(query, 3);
     return { text: formatPdfResults(results), results };
   } catch {
     return { text: null, results: [] };

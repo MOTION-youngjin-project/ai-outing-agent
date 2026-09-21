@@ -1,3 +1,5 @@
+import { acquireRecommendationRequest, recommendationRequestKey } from "@/lib/recommendation-request-lock";
+import { readRecommendationCache, storeRecommendationCache } from "@/lib/services/recommendation-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { createRecommendationRun, type GeoPoint, type RecommendationProgressEvent } from "@/lib/services/recommendations";
 import type { ChatTurn } from "@/lib/agent";
@@ -52,53 +54,76 @@ export async function POST(req: NextRequest) {
   // 쿼터 게이트는 여기 한 곳이다 — 추천 에이전트로 들어가는 유일한 입구이고,
   // 스트림을 열기 "전"이라 한도 초과는 평범한 JSON 402로 나간다(NDJSON과 안 섞임).
   // 무료분이 남아있지 않으면 여기서 등록된 카드로 자동충전까지 시도한다.
-  const affordability = await ensureAffordable(userId, session.user.email);
-  if (!affordability.allowed) {
-    return NextResponse.json(
-      {
-        error:
-          affordability.reason === "no_billing_key"
-            ? "무료 질문을 다 쓰셨어요. 카드를 등록하면 계속 이용할 수 있어요."
-            : "충전에 실패했어요. 카드 정보를 확인해주세요.",
-        code: "quota_exceeded",
-      },
-      { status: 402 }
-    );
+  const lock = acquireRecommendationRequest(recommendationRequestKey(userId, history, validOrigin, conversationId ?? null));
+  if (!lock.acquired) {
+    return NextResponse.json({
+      error: lock.reason === "duplicate" ? "같은 추천을 생성 중입니다. 진행 중인 요청을 기다려 주세요." : "요청이 많습니다. 잠시 후 다시 시도해 주세요.",
+      code: lock.reason === "duplicate" ? "recommendation_in_progress" : "recommendation_busy",
+    }, { status: lock.reason === "duplicate" ? 409 : 503, headers: { "Cache-Control": "private, no-store" } });
   }
+  try {
+    const cache = await readRecommendationCache(userId, history, validOrigin, conversationId ?? null);
+    if (cache.result) {
+      lock.release();
+      return new NextResponse(toLine({ type: "result", result: cache.result }), { headers: {
+        "Content-Type": "application/x-ndjson", "Cache-Control": "private, no-store", "X-Recommendation-Cache": "hit",
+      } });
+    }
+    const affordability = await ensureAffordable(userId, session.user.email);
+    if (!affordability.allowed) {
+      lock.release();
+      return NextResponse.json(
+        {
+          error:
+            affordability.reason === "no_billing_key"
+              ? "무료 질문을 다 쓰셨어요. 카드를 등록하면 계속 이용할 수 있어요."
+              : "충전에 실패했어요. 카드 정보를 확인해주세요.",
+          code: "quota_exceeded",
+        },
+        { status: 402 }
+      );
+    }
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      let closed = false;
-      // runAgentStream의 도구 호출 리스너는 fire-and-forget이라, 최종 결과를 보내고
-      // 컨트롤러를 닫은 뒤에도 뒤늦게 tool_end 이벤트가 들어올 수 있다 — 닫힌 컨트롤러에
-      // enqueue하면 예외가 나므로 조용히 무시한다(클라이언트는 이미 응답을 다 받은 뒤라 영향 없음).
-      const emit = (event: Parameters<typeof toLine>[0]) => {
-        if (closed) return;
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        let closed = false;
+        // runAgentStream의 도구 호출 리스너는 fire-and-forget이라, 최종 결과를 보내고
+        // 컨트롤러를 닫은 뒤에도 뒤늦게 tool_end 이벤트가 들어올 수 있다 — 닫힌 컨트롤러에
+        // enqueue하면 예외가 나므로 조용히 무시한다(클라이언트는 이미 응답을 다 받은 뒤라 영향 없음).
+        const emit = (event: Parameters<typeof toLine>[0]) => {
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(toLine(event)));
+          } catch {
+            // 컨트롤러가 그 사이 닫혔어도 무시
+          }
+        };
         try {
-          controller.enqueue(encoder.encode(toLine(event)));
-        } catch {
-          // 컨트롤러가 그 사이 닫혔어도 무시
+          const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, null, conversationId ?? null,
+            cache.key ? { context: cache.preferences } : undefined);
+          // 차감은 "장소가 담긴 추천이 실제로 나왔을 때"만. 되묻기(needsMoreInfo)는 places가
+          // 없어서 여기서 자연히 빠지고, 실패는 위 try가 못 오게 막는다. 되묻기를 차감하면
+          // 에이전트가 되물을수록 사용자가 손해라 제품이 스스로를 공격하게 된다.
+          if (result.recommendation.places?.length) {
+            await recordUsage(userId, result.agentRunId, affordability.cost);
+          }
+          storeRecommendationCache(cache.key, result);
+          emit({ type: "result", result });
+        } catch (err) {
+          console.error(err);
+          emit({ type: "error", message: err instanceof Error ? err.message : "추천 생성 중 오류가 발생했습니다." });
+        } finally {
+          closed = true;
+          lock.release();
+          try { controller.close(); } catch { /* Client already disconnected. */ }
         }
-      };
-      try {
-        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, null, conversationId ?? null);
-        // 차감은 "장소가 담긴 추천이 실제로 나왔을 때"만. 되묻기(needsMoreInfo)는 places가
-        // 없어서 여기서 자연히 빠지고, 실패는 위 try가 못 오게 막는다. 되묻기를 차감하면
-        // 에이전트가 되물을수록 사용자가 손해라 제품이 스스로를 공격하게 된다.
-        if (result.recommendation.places?.length) {
-          await recordUsage(userId, result.agentRunId, affordability.cost);
-        }
-        emit({ type: "result", result });
-      } catch (err) {
-        console.error(err);
-        emit({ type: "error", message: err instanceof Error ? err.message : "추천 생성 중 오류가 발생했습니다." });
-      } finally {
-        closed = true;
-        controller.close();
-      }
-    },
-  });
+      },
+    });
 
-  return new NextResponse(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "private, no-store" } });
+    return new NextResponse(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "private, no-store", "X-Recommendation-Cache": "miss" } });
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
 }
