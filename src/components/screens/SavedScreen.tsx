@@ -1,4 +1,5 @@
 "use client";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -148,27 +149,20 @@ export function SavedScreen() {
               </p>
             )}
             {places.map((p, i) => (
-              <Link
+              <div
                 key={p.placeId}
-                href={`/place/${p.placeId}`}
+
                 className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? "border-t border-hairline" : ""}`}
               >
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                  <img src={p.imageUrl} alt={p.name} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
-                ) : (
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
-                    <Icon name="pin" className="h-5 w-5 text-mint-mid" />
-                  </div>
-                )}
+                <PlacePhoto placeId={p.placeId} name={p.name} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[16px] font-bold text-ink">{p.name}</div>
+                  <Link href={`/place/${p.placeId}`} className="block truncate text-[16px] font-bold text-ink">{p.name}</Link>
                   <div className="mt-0.5 truncate text-[13px] text-muted">
                     {extractCategoryLabel(p.categorySummary ?? null) ?? p.roadAddress ?? ""}
                   </div>
                 </div>
                 <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />
-              </Link>
+              </div>
             ))}
           </div>
         )}

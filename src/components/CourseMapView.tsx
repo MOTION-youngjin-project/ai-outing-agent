@@ -1,4 +1,5 @@
 "use client";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -158,14 +159,7 @@ function SelectedStopCard({
     <div className="rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(17,24,39,0.06)]">
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
-          {place.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-            <img src={place.imageUrl} alt={place.name} className="h-16 w-16 rounded-xl object-cover" />
-          ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-mint-soft">
-              <Icon name="pin" className="h-6 w-6 text-mint-mid" />
-            </div>
-          )}
+          <PlacePhoto placeId={place.placeId} name={place.name} />
           <span className="absolute -left-1 -top-1 rounded-full bg-cta px-1.5 py-0.5 text-[10px] font-bold text-white">
             {index + 1}번째 코스
           </span>

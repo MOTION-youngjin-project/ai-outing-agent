@@ -1,4 +1,5 @@
 "use client";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -302,21 +303,14 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
               className="sk-panel sk-enter flex overflow-hidden"
               style={{ animationDelay: `${Math.min(idx, 6) * 45}ms` }}
             >
-              <button onClick={() => openDetail(p)} className="relative w-[132px] shrink-0">
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                  <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full min-h-[120px] w-full items-center justify-center bg-mint-soft">
-                    <Icon name="pin" className="h-7 w-7 text-mint-mid" />
-                  </div>
-                )}
+              <div className="relative w-[132px] shrink-0">
+                <PlacePhoto placeId={p.placeId} name={p.name} className="w-full" imageClassName="h-[120px] w-full" />
                 {extractCategoryLabel(p.category ?? null) && (
                   <span className="sk-tag absolute left-2 top-2 bg-white">
                     {extractCategoryLabel(p.category ?? null)}
                   </span>
                 )}
-              </button>
+              </div>
               <div className="flex min-w-0 flex-1 flex-col p-3">
                 <div className="flex items-start justify-between gap-2">
                   <button onClick={() => openDetail(p)} className="min-w-0 flex-1 text-left">
