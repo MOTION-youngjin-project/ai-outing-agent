@@ -175,7 +175,11 @@ export async function createRecommendationRun(
       // p.imageUrl은 문화포털 도구가 준 경우만 있다 — 일반 장소(박물관/공원 등)는
       // 카카오로 실제 Place를 찾은 뒤에야 TourAPI 사진(ensurePlaceImage가 이미 캐시해둔
       // 것)을 붙일 수 있다. 문화포털 값이 있으면 그걸 우선한다.
-      const imageUrl = p.imageUrl ?? (resolved ? (await getPlaceImageUrl(resolved.id)) ?? undefined : undefined);
+      // LLM 구조화 출력은 zod string().optional()이라 "필드 생략"이 아니라 빈 문자열
+      // ""을 내놓을 수 있다 — ??는 ""를 "값 있음"으로 쳐서 폴백을 막아버린다(실측:
+      // 대구미술관이 위키백과 사진까지 캐시됐는데도 화면엔 안 붙던 원인). ||로 빈
+      // 문자열도 없는 값 취급한다.
+      const imageUrl = p.imageUrl || (resolved ? (await getPlaceImageUrl(resolved.id)) ?? undefined : undefined);
       return {
         ...verified,
         imageUrl,

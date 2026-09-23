@@ -70,7 +70,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       latitude: cached.latitude,
       longitude: cached.longitude,
       daeguDistrict: cached.daeguDistrict ?? original.daeguDistrict,
-      imageUrl: original.imageUrl ?? cached.imageUrl ?? undefined,
+      // original.imageUrl은 과거에 저장된 스냅샷이라 ""(recommendations.ts의 빈 문자열
+      // 버그, 2026-09-23 수정)로 남아있을 수 있다 — ||로 빈 문자열도 없는 값 취급한다.
+      imageUrl: original.imageUrl || cached.imageUrl || undefined,
     };
     const updatedPlaces = places.map((place, index) => index === placeIndex ? resolved : place);
     await prisma.agentRun.update({
