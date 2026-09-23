@@ -72,10 +72,9 @@ export const airQualityTool = tool(
     const input = region ?? query;
     if (!input) return "지역 정보가 없어 대기질을 조회할 수 없습니다.";
 
-    const sidoName = normalizeSido(input);
-    if (!sidoName) {
-      return `"${input}"은(는) 대기질 조회가 가능한 시/도 단위 지역명이 아닙니다. 서울, 부산, 대구 같은 시/도 이름으로 다시 물어봐 주세요.`;
-    }
+    // 이 앱은 대구 전용이라 "중구"처럼 시/도 없이 구/군만 언급되면(대구 외 지역과
+    // 이름이 겹칠 수 있어) normalizeSido가 못 잡는다 — 대구로 간주한다.
+    const sidoName = normalizeSido(input) ?? "대구";
 
     try {
       const { pm10, grade, stationCount } = await fetchAirQuality(sidoName);
