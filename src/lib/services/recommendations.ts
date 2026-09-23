@@ -5,7 +5,7 @@ import { runAgentStream, type AgentProgressEvent, type ChatTurn, type GuideConte
 import { searchPdfGuides, formatPdfResults } from "@/lib/tools/pdfGuide";
 import { getCachedWeather } from "./weather";
 import { getCachedAirQuality } from "./airQuality";
-import { resolvePlaceByName, resolveDaeguDistrict } from "./places";
+import { resolvePlaceByName, resolveDaeguDistrict, getPlaceImageUrl } from "./places";
 import { fetchDrivingRoute } from "./naverDirections";
 import { findOrCreateSidoRegion } from "./shared";
 import { inferEnvironmentMode, extractCategoryLabel, computeDistanceKm } from "./matching";
@@ -172,8 +172,13 @@ export async function createRecommendationRun(
         } catch { /* 정보 미조회 시 변동 정보는 숨기고 추천을 유지한다. */ }
       }
       const verified = verifyPlace({ ...p, address: resolved?.roadAddress ?? p.address }, evidence);
+      // p.imageUrl은 문화포털 도구가 준 경우만 있다 — 일반 장소(박물관/공원 등)는
+      // 카카오로 실제 Place를 찾은 뒤에야 TourAPI 사진(ensurePlaceImage가 이미 캐시해둔
+      // 것)을 붙일 수 있다. 문화포털 값이 있으면 그걸 우선한다.
+      const imageUrl = p.imageUrl ?? (resolved ? (await getPlaceImageUrl(resolved.id)) ?? undefined : undefined);
       return {
         ...verified,
+        imageUrl,
         category: extractCategoryLabel(resolved?.categorySummary ?? null),
         distanceKm: computeDistanceKm(origin ?? null, resolvedPoint),
         placeId: resolved?.publicId ?? null,

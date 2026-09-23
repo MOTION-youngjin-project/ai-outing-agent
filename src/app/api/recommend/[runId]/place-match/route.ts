@@ -70,6 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       latitude: cached.latitude,
       longitude: cached.longitude,
       daeguDistrict: cached.daeguDistrict ?? original.daeguDistrict,
+      imageUrl: original.imageUrl ?? cached.imageUrl ?? undefined,
     };
     const updatedPlaces = places.map((place, index) => index === placeIndex ? resolved : place);
     await prisma.agentRun.update({

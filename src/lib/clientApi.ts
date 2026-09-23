@@ -18,6 +18,7 @@ export type PlaceResult = {
   daeguDistrict: string | null;
   latitude: number;
   longitude: number;
+  imageUrl: string | null;
 };
 export type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; url: string; imageUrl: string };
 export type SavedPlaceResult = {

@@ -79,6 +79,14 @@ export interface CachedPlace {
   phone: string | null;
   websiteUrl: string | null;
   daeguDistrict: (typeof DAEGU_DISTRICTS)[number] | null;
+  imageUrl: string | null;
+}
+
+// ensurePlaceImage가 채워둔 대표 이미지를 꺼내온다 — saved-places/route.ts가 이미 쓰던
+// thumbnailUrl 우선, 없으면 originalUrl 패턴을 여기로 모아서 다른 호출부도 같이 쓴다.
+export async function getPlaceImageUrl(placeId: bigint): Promise<string | null> {
+  const image = await prisma.placeImage.findFirst({ where: { placeId } });
+  return image?.thumbnailUrl ?? image?.originalUrl ?? null;
 }
 
 // 대구광역시 구/군 소속 여부를 region 부모 체인(= 카카오 주소 매칭 결과)으로 판단한다.
@@ -104,6 +112,7 @@ async function toCachedPlace(place: Place): Promise<CachedPlace> {
     phone: place.phone,
     websiteUrl: place.websiteUrl,
     daeguDistrict: await resolveDaeguDistrict(place.regionId),
+    imageUrl: await getPlaceImageUrl(place.id),
   };
 }
 
