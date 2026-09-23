@@ -53,7 +53,7 @@ export function SavedCourseCard({
       </div>
 
       {/* 정류지 가로 스트립 — 구간 사이에 도보/차량 이동시간을 끼워 넣는다. */}
-      <div className="mt-3 flex items-start gap-1 overflow-x-auto pb-1">
+      <div className="sk-reel mt-3 items-start gap-1 pb-2">
         {places.map((p, i) => (
           <div key={i} className="flex shrink-0 items-start gap-1">
             {i > 0 && (

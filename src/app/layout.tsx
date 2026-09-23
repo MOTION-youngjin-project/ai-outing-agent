@@ -14,9 +14,18 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const DESCRIPTION = "대구 날씨·대기질·행사·주차를 함께 확인해서 지금 나가기 좋은 곳을 추천해요.";
+
+// 탭 아이콘은 src/app/icon.png를 Next가 자동으로 집어간다(별도 설정 불필요).
 export const metadata: Metadata = {
-  title: "오늘의 나들이",
-  description: "대구 날씨·대기질·행사·주차를 함께 확인해서 지금 나가기 좋은 곳을 추천해요.",
+  title: "NAPL · 나들플랜",
+  description: DESCRIPTION,
+  applicationName: "NAPL",
+  openGraph: {
+    title: "NAPL · 나들플랜",
+    description: DESCRIPTION,
+    images: ["/napl-logo.png"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

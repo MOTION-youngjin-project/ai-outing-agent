@@ -15,7 +15,14 @@ export async function GET() {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  const where = { userId: BigInt(session.user.id), userQuery: { not: null }, expiresAt: { gt: new Date() } } as const;
+  // [2026-09-21] expiresAt(생성 + 24시간) 필터를 뺐다.
+  // 그 값은 "이 추천 결과를 아직 유효하다고 볼 기간"을 표시하려고 둔 것인데, 여기에
+  // 걸어두면 하루만 지나도 대화가 사이드바에서 통째로 사라진다 — 행은 DB에 그대로
+  // 남아 있고 마이페이지에서도 보이는데 채팅 기록 창에서만 없어져서, 기록이 지워진
+  // 것처럼 보였다(사용자 신고: 지난주 같은 계정 대화가 안 뜸).
+  // 대화 목록은 "지난 일의 기록"이지 "유효기간 있는 결과"가 아니라서 시간으로 거르지
+  // 않는다. 개수는 아래 RECENT_LIMIT으로 이미 제한된다.
+  const where = { userId: BigInt(session.user.id), userQuery: { not: null } } as const;
   const [runs, totalCount] = await Promise.all([
     prisma.agentRun.findMany({
       where,

@@ -98,10 +98,18 @@ function escapeHtml(text: string): string {
 // sk-maplabel을 쓴다 — 나머지 UI와 같은 조형(사각 슬롯 + 우하단 각진 모서리)과
 // 같은 모션(선택 시 pop + settle + 파문 한 번)을 공유한다. 크기는 26px 그대로라
 // anchor 좌표와 지도 가독성은 바뀌지 않는다.
-function spotMarkerIcon(spot: MapParkingSpot, selected: boolean, naver: Window["naver"]) {
+// entering=true는 지도에 핀을 "처음 꽂을 때"만 준다 — 핀이 순서대로 위에서 떨어진다.
+// 선택이 바뀔 때마다(setIcon) 다시 주면 누를 때마다 지도 전체가 다시 쏟아져서 산만하다.
+function spotMarkerIcon(
+  spot: MapParkingSpot,
+  selected: boolean,
+  naver: Window["naver"],
+  entering = false
+) {
   if (!selected) {
+    const drop = entering ? ` sk-mappin-drop" style="--i:${Math.max(spot.order - 1, 0)}` : "";
     return {
-      content: `<div class="sk-mappin">${spot.order}</div>`,
+      content: `<div class="sk-mappin${drop}">${spot.order}</div>`,
       anchor: new naver.maps.Point(13, 13),
     };
   }
@@ -289,7 +297,7 @@ export function NaverMap({
           const marker = new naver.maps.Marker({
             position,
             map,
-            icon: spotMarkerIcon(spot, false, naver),
+            icon: spotMarkerIcon(spot, false, naver, true),
           });
           markers.push({ marker, spot });
           naver.maps.Event.addListener(marker, "click", () => selectSpot(spot.id));

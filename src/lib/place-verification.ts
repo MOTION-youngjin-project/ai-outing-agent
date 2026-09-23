@@ -53,10 +53,23 @@ export function verifyPlace<T extends { name: string; address?: string; operatin
   };
 }
 
+// 조회 시각은 사람이 읽는 문구다 — 예전엔 ISO 문자열을 그대로 이어붙여서 카드에
+// "관광정보 자료 조회: 2026-09-18T00:26:30.000Z"가 그대로 찍혔다. 한국 시간 기준으로
+// 고정해서 서버·클라이언트가 같은 문자열을 만들게 한다(하이드레이션 불일치 방지).
+function formatFetchedAt(iso: string | null): string {
+  if (!iso) return "조회 시각 미확인";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "조회 시각 미확인";
+  return `${at.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul", month: "long", day: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  })} 조회`;
+}
+
 export function verificationText(value?: PlaceVerification) {
   if (!value) return "자료 조회 시각 미확인 · 방문 전 확인 필요";
   const stale = value.stale || (!!value.expiresAt && Date.parse(value.expiresAt) <= Date.now());
-  const origin = value.source === "tour_api" ? `관광정보 자료 조회: ${value.fetchedAt}${stale ? " · 유효기간이 지난 자료" : ""}`
+  const origin = value.source === "tour_api" ? `관광정보 ${formatFetchedAt(value.fetchedAt)}${stale ? " · 유효기간이 지난 자료" : ""}`
     : value.source === "pdf" ? "PDF 참고 자료 · 현재 영업정보 미확인" : "영업정보 출처 미확인";
   const missing = [!value.fields.operatingHours && "운영시간", !value.fields.fee && "가격", !value.fields.closedDays && "휴무"].filter(Boolean);
   return `${origin}${missing.length ? ` · ${missing.join("·")} 미확인` : ""} · 방문 전 확인 필요`;
