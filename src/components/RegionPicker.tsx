@@ -88,8 +88,15 @@ export function RegionPicker({
             aria-label="지역 고르기"
             className="sk-panel sk-drop absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden p-1.5"
           >
-            {/* 목록이 화면을 다 덮지 않도록 높이를 잘라 안에서만 스크롤한다 */}
-            <div className="max-h-[min(46vh,320px)] overflow-y-auto overscroll-contain">
+            {/* 목록이 화면을 다 덮지 않도록 높이를 잘라 안에서만 스크롤한다.
+                바깥 .sk-drop 패널에 열릴 때 애니메이션(transform)이 걸려 있는데, 이런
+                조합(애니메이션 걸린 조상 + overflow-y-auto 자식)에서 모바일 브라우저가
+                터치 스크롤을 못 잡는 경우가 있다 — -webkit-overflow-scrolling/touch-action을
+                명시해서 방어한다. */}
+            <div
+              className="max-h-[min(46vh,320px)] overflow-y-auto overscroll-contain"
+              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+            >
               {regions.map((region) => {
                 const active = region.id === value;
                 return (

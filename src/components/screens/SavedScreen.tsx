@@ -111,7 +111,9 @@ export function SavedScreen() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex flex-1 items-center gap-2 rounded-full bg-white px-4 py-2.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+          {/* min-w-0 없으면 이 flex 아이템의 기본 최소폭(auto)이 내용물 크기로 잡혀서,
+              좁은 화면에서 옆의 select(shrink-0, "최근 저장순")가 화면 밖으로 밀려난다. */}
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 py-2.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
             <Icon name="search" className="h-4 w-4 shrink-0 text-muted" />
             <input
               value={keyword}
