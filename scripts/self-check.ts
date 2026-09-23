@@ -405,13 +405,23 @@ check('오늘 아직 무료 안 썼으면(null) 사용 가능', isFreeAvailable(
 check('오늘 이미 썼으면 사용 불가', isFreeAvailable(new Date('2026-09-21T01:00:00+09:00'), new Date('2026-09-21T23:00:00+09:00')), false);
 check('날짜가 바뀌면 다시 사용 가능', isFreeAvailable(new Date('2026-09-20T23:59:00+09:00'), new Date('2026-09-21T00:01:00+09:00')), true);
 
-// AdMob SSV — 서명 대상 문자열 자르기(signature 파라미터 앞까지만, key_id는 자연히 제외)
+// AdMob SSV — 서명 대상 문자열 재구성(signature/key_id 제외, 나머지 값은 URL 디코딩).
+// 2026-09-23 실제로 이걸 원문(퍼센트 인코딩 유지)째로 붙여서 AdMob 콘솔 "URL 확인"이
+// 계속 400으로 실패했었다 — reward_item 같은 비ASCII 값이 있으면 디코딩 안 하면 항상
+// 서명이 안 맞는다. 그 실제 콜백 예시를 그대로 재발 방지 테스트로 남긴다.
 check(
-  "ssvSignedContent signature 앞까지만",
+  "ssvSignedContent signature/key_id 제외하고 재조립",
   ssvSignedContent("a=1&b=2&signature=abcd&key_id=1"),
   "a=1&b=2"
 );
-check("ssvSignedContent signature 없으면 원문 그대로", ssvSignedContent("a=1&b=2"), "a=1&b=2");
+check(
+  "ssvSignedContent 비ASCII 값은 디코딩해서 붙인다(2026-09-23 실제 400 원인)",
+  ssvSignedContent(
+    "ad_network=5450213213286189855&ad_unit=1234567890&reward_amount=1&reward_item=%EC%A7%88%EB%AC%B8%EA%B6%8C&timestamp=1790129356635&transaction_id=123456789&signature=abcd&key_id=1"
+  ),
+  "ad_network=5450213213286189855&ad_unit=1234567890&reward_amount=1&reward_item=질문권&timestamp=1790129356635&transaction_id=123456789"
+);
+check("ssvSignedContent signature 없으면 그대로(디코딩만)", ssvSignedContent("a=1&b=2"), "a=1&b=2");
 
 // parseSsvOwner — 앱이 실어 보내는 custom_data 포맷 파싱. 형식이 안 맞으면 크레딧을
 // 아무한테도 못 주게 null이어야 한다(엉뚱한 사용자에게 잘못 지급되는 것보다 안전).
@@ -430,19 +440,22 @@ check("parseSsvOwner null", parseSsvOwner(null), null);
 // 그대로 흉내내서 왕복 검증한다. 위조된 서명/변조된 쿼리는 반드시 거부해야 한다
 // (여기서 통과되면 광고 안 본 사람도 질문권을 받을 수 있다).
 const ssvKeys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-const ssvContent = "ad_network=1&transaction_id=tx1&custom_data=user%3A1";
-const ssvSig = sign("sha256", Buffer.from(ssvContent), ssvKeys.privateKey).toString("base64url");
+// 구글은 값을 디코딩한 상태로 서명한다 — custom_data=user:1(디코딩)이 서명 대상이고,
+// 쿼리스트링에는 URL 인코딩된 user%3A1로 실려 온다.
+const ssvDecodedContent = "ad_network=1&transaction_id=tx1&custom_data=user:1";
+const ssvRawQuery = "ad_network=1&transaction_id=tx1&custom_data=user%3A1";
+const ssvSig = sign("sha256", Buffer.from(ssvDecodedContent), ssvKeys.privateKey).toString("base64url");
 const ssvPem = ssvKeys.publicKey.export({ type: "spki", format: "pem" }).toString();
 check(
-  "verifySsvSignature 정상 서명 통과",
-  verifySsvSignature(`${ssvContent}&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
+  "verifySsvSignature 정상 서명 통과(인코딩된 쿼리 vs 디코딩해서 서명한 값)",
+  verifySsvSignature(`${ssvRawQuery}&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
   true
 );
 check(
   "verifySsvSignature 변조된 쿼리는 거부",
-  verifySsvSignature(`${ssvContent}&tampered=1&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
+  verifySsvSignature(`${ssvRawQuery}&tampered=1&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
   false
 );
-check("verifySsvSignature 잘못된 서명값은 거부", verifySsvSignature(`${ssvContent}&signature=bad&key_id=1`, "bad", ssvPem), false);
+check("verifySsvSignature 잘못된 서명값은 거부", verifySsvSignature(`${ssvRawQuery}&signature=bad&key_id=1`, "bad", ssvPem), false);
 
 console.log(`✓ self-check 통과 (${passed}건)`);

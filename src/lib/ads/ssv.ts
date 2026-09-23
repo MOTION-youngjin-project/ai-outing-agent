@@ -2,11 +2,18 @@ import { verify } from "node:crypto";
 import type { Owner } from "./quota";
 
 // AdMob 리워드 광고 서버 측 검증(SSV). 구글 서버가 광고 시청 완료 시 이 파라미터들을
-// GET 쿼리스트링으로 우리 콜백에 실어 보낸다. 서명 대상은 "signature" 파라미터 앞까지의
-// 쿼리스트링 원문이다(공식 스펙) — key_id는 signature 뒤에 오므로 자연히 제외된다.
+// GET 쿼리스트링으로 우리 콜백에 실어 보낸다. 서명 대상은 signature/key_id를 뺀 나머지
+// 파라미터를 원래 순서 그대로 "key=값"으로 잇되, 값은 URL 디코딩된 상태여야 한다 —
+// 원문 그대로(퍼센트 인코딩 유지) 붙이면 한글 등 비ASCII 값이 있을 때 검증이 항상
+// 실패한다(실제 AdMob 콘솔의 "URL 확인" 테스트로 재현·확인함).
 export function ssvSignedContent(rawQuery: string): string {
-  const idx = rawQuery.indexOf("&signature=");
-  return idx === -1 ? rawQuery : rawQuery.slice(0, idx);
+  const params = new URLSearchParams(rawQuery);
+  const pairs: string[] = [];
+  for (const [key, value] of params) {
+    if (key === "signature" || key === "key_id") continue;
+    pairs.push(`${key}=${value}`);
+  }
+  return pairs.join("&");
 }
 
 export function verifySsvSignature(rawQuery: string, signatureB64Url: string, publicKeyPem: string): boolean {
