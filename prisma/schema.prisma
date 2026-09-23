@@ -785,6 +785,17 @@ model AdCredit {
   @@map("ad_credits")
 }
 
+// AdMob 서버 측 리워드 검증(SSV) 콜백의 재전송/리플레이 방지. 서명된 콜백 URL이
+// 그대로 다시 호출돼도(구글의 재시도든, 가로챈 URL 재사용이든) transaction_id가
+// 이미 있으면 크레딧을 또 주지 않는다.
+model AdSsvTransaction {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  transactionId String   @unique @map("transaction_id") @db.VarChar(64)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@map("ad_ssv_transactions")
+}
+
 enum AdminActionType {
   grant_ad_credit
   reset_daily_free

@@ -4,6 +4,7 @@
 // 새 테스트 프레임워크는 추가하지 않음 — node:assert면 충분.
 // 실행: node --experimental-strip-types scripts/self-check.ts
 import assert from "node:assert/strict";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
 import { formatPlannedDate, todayIso } from "../src/lib/textFormat.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
@@ -33,6 +34,7 @@ import { summarize } from "./place-hit-rate.ts";
 import { FREE_QUESTIONS, PRICE_PER_QUESTION_KRW, resolveFreeRemaining, canAffordNext } from "../src/lib/billing/plans.ts";
 import { isAdminEmail } from "../src/lib/admin.ts";
 import { isFreeAvailable } from "../src/lib/ads/quota.ts";
+import { ssvSignedContent, parseSsvOwner, verifySsvSignature } from "../src/lib/ads/ssv.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -402,5 +404,45 @@ check("허용목록 자체가 비면 전부 거부", isAdminEmail("admin@example
 check('오늘 아직 무료 안 썼으면(null) 사용 가능', isFreeAvailable(null, new Date('2026-09-21T10:00:00+09:00')), true);
 check('오늘 이미 썼으면 사용 불가', isFreeAvailable(new Date('2026-09-21T01:00:00+09:00'), new Date('2026-09-21T23:00:00+09:00')), false);
 check('날짜가 바뀌면 다시 사용 가능', isFreeAvailable(new Date('2026-09-20T23:59:00+09:00'), new Date('2026-09-21T00:01:00+09:00')), true);
+
+// AdMob SSV — 서명 대상 문자열 자르기(signature 파라미터 앞까지만, key_id는 자연히 제외)
+check(
+  "ssvSignedContent signature 앞까지만",
+  ssvSignedContent("a=1&b=2&signature=abcd&key_id=1"),
+  "a=1&b=2"
+);
+check("ssvSignedContent signature 없으면 원문 그대로", ssvSignedContent("a=1&b=2"), "a=1&b=2");
+
+// parseSsvOwner — 앱이 실어 보내는 custom_data 포맷 파싱. 형식이 안 맞으면 크레딧을
+// 아무한테도 못 주게 null이어야 한다(엉뚱한 사용자에게 잘못 지급되는 것보다 안전).
+check("parseSsvOwner 로그인 사용자", parseSsvOwner("user:12345"), { userId: "12345" });
+check(
+  "parseSsvOwner 게스트",
+  parseSsvOwner("guest:" + "a".repeat(64)),
+  { sessionKeyHash: "a".repeat(64) }
+);
+check("parseSsvOwner 숫자 아닌 userId 거부", parseSsvOwner("user:abc"), null);
+check("parseSsvOwner 형식 아닌 해시 거부", parseSsvOwner("guest:short"), null);
+check("parseSsvOwner 알 수 없는 포맷", parseSsvOwner("nonsense"), null);
+check("parseSsvOwner null", parseSsvOwner(null), null);
+
+// verifySsvSignature — 실제 EC 키쌍으로 구글의 서명 방식(SHA256withECDSA, DER 인코딩)을
+// 그대로 흉내내서 왕복 검증한다. 위조된 서명/변조된 쿼리는 반드시 거부해야 한다
+// (여기서 통과되면 광고 안 본 사람도 질문권을 받을 수 있다).
+const ssvKeys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+const ssvContent = "ad_network=1&transaction_id=tx1&custom_data=user%3A1";
+const ssvSig = sign("sha256", Buffer.from(ssvContent), ssvKeys.privateKey).toString("base64url");
+const ssvPem = ssvKeys.publicKey.export({ type: "spki", format: "pem" }).toString();
+check(
+  "verifySsvSignature 정상 서명 통과",
+  verifySsvSignature(`${ssvContent}&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
+  true
+);
+check(
+  "verifySsvSignature 변조된 쿼리는 거부",
+  verifySsvSignature(`${ssvContent}&tampered=1&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
+  false
+);
+check("verifySsvSignature 잘못된 서명값은 거부", verifySsvSignature(`${ssvContent}&signature=bad&key_id=1`, "bad", ssvPem), false);
 
 console.log(`✓ self-check 통과 (${passed}건)`);

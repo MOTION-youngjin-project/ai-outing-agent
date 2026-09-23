@@ -61,9 +61,11 @@ export async function consumeQuestion(owner: Owner, source: "daily_free" | "ad_c
   }
 }
 
-// 광고 시청 완료 후 질문권 +1. ponytail: 지금은 클라이언트가 "다 봤다"고 부르면 그대로
-// 믿는다 — AdMob 리워드 광고를 실제로 붙이면 SSV(서버 검증 콜백)로 바꿔서 위조 신고를
-// 막아야 한다(토스 웹훅과 같은 이유로, 클라이언트 신고를 신뢰 경계 밖으로 봐야 함).
+// 광고 시청 완료 후 질문권 +1. 네이티브 앱(AdMob)은 구글의 SSV 콜백(app/api/ads/ssv)만
+// 이 함수를 불러야 신뢰할 수 있다 — 앱이 광고 종료 후 이 자리를 직접 부르게 두면(과거
+// 방식) 조작된 클라이언트가 광고 없이도 호출할 수 있다. 웹의 AdSense 타이머 경로
+// (app/api/ads/reward)는 검증 수단이 없는 플레이스홀더라 클라이언트 신고를 그대로 믿는다
+// — 실제 광고 계정이 붙기 전까지는 감수하는 한계다.
 export async function grantAdCredit(owner: Owner) {
   await prisma.adCredit.upsert({
     where: ownerWhere(owner),
