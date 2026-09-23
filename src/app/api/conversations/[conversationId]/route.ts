@@ -19,7 +19,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: {
       userId: BigInt(session.user.id),
       userQuery: { not: null },
-      expiresAt: { gt: new Date() },
+      // expiresAt 필터 없음 — 사이드바 목록(recent-questions)과 짝을 맞춘다.
+      // 목록에는 뜨는데 누르면 "만료되었습니다"가 나오면 더 나쁘다.
       status: { in: ["completed", "partial"] },
       // conversationId 도입 전 대화는 행 자체가 하나뿐이고, 그 행의 id를 그룹 키로 썼다
       // (recent-questions와 동일한 규칙) — 그래서 conversationId가 null이면서 id가
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   });
 
   if (runs.length === 0) {
-    return NextResponse.json({ error: "대화를 찾을 수 없거나 만료되었습니다." }, { status: 404 });
+    return NextResponse.json({ error: "대화를 찾을 수 없습니다." }, { status: 404 });
   }
 
   const turns = runs

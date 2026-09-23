@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { fetchRecentQuestions, fetchConversation, type RecentQuestion } from "@/lib/clientApi";
+import { Logo, LogoMark } from "@/components/Logo";
 import { summarize } from "@/hooks/useRecommendationFlow";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
@@ -126,8 +127,9 @@ export function Sidebar() {
           sidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
       >
+        {/* 사이드바 맨 위는 서비스 이름 자리다 — "대화 기록"은 아래 목록의 제목으로 옮겼다 */}
         <div className="flex items-center justify-between px-5 pt-5">
-          <h1 className="text-[20px] font-bold text-ink">대화 기록</h1>
+          <Logo className="h-[22px]" />
           <button onClick={closeSidebar} aria-label="닫기" className="p-1 text-ink lg:hidden">
             <Icon name="close" className="h-5 w-5" />
           </button>
@@ -179,8 +181,10 @@ export function Sidebar() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pt-4">
+          <h2 className="sk-cap pb-2 text-[13px] font-bold text-ink">대화 기록</h2>
           {!authed ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <LogoMark className="h-9 opacity-40" />
               <p className="text-[13px] leading-relaxed text-muted">
                 로그인하면
                 <br />
@@ -195,7 +199,31 @@ export function Sidebar() {
             </div>
           ) : (
             <>
-              {groups.length === 0 && (
+              {/* 불러오는 중에는 "없다"고 단정하지 않는다 — 로그아웃했다 다시
+                  로그인하면 캐시가 비어 있어 매번 이 문구가 먼저 떴고, 기록이
+                  사라진 것처럼 보였다. 실패했을 때도 마찬가지로 구분해서 알린다. */}
+              {recentQuestionsQuery.isPending && (
+                <div role="status" aria-label="대화 기록 불러오는 중" className="sk-scan flex flex-col gap-2.5 py-2">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex flex-col gap-1.5">
+                      <span className="sk-skel h-[14px] w-4/5" />
+                      <span className="sk-skel h-[11px] w-24" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {recentQuestionsQuery.isError && (
+                <p role="alert" className="sk-rail-none py-6 text-center text-[13px] text-ink-soft">
+                  기록을 불러오지 못했어요.{" "}
+                  <button
+                    onClick={() => recentQuestionsQuery.refetch()}
+                    className="font-semibold text-accent underline underline-offset-2"
+                  >
+                    다시 시도
+                  </button>
+                </p>
+              )}
+              {recentQuestionsQuery.isSuccess && groups.length === 0 && (
                 <p className="py-6 text-center text-[13px] text-muted">
                   {search ? "검색 결과가 없어요." : "아직 질문 기록이 없어요."}
                 </p>

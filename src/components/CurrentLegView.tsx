@@ -7,6 +7,8 @@ import { haversineMeters } from "@/lib/tools/parking";
 import { useAppStore } from "@/lib/store";
 import { NaverMap, type MapParkingSpot } from "@/components/NaverMap";
 import { Icon } from "@/components/Icon";
+import { ExternalMapMenu } from "@/components/ExternalMapMenu";
+import { WALK_DISTANCE_THRESHOLD_M } from "@/lib/travelMode";
 
 // 디자인/지도(현재구간).png의 실시간 도보 내비게이션. 턴바이턴 안내문구는 Tmap
 // 보행자 경로안내로만 가능하다(docs/research/turn-by-turn-navigation-and-congestion-data-sources.md
@@ -19,6 +21,7 @@ export function CurrentLegView({
   toLabel,
   onAdvance,
   advanceLabel,
+  onBack,
   onClose,
 }: {
   from: PlaceWithMeta;
@@ -27,8 +30,16 @@ export function CurrentLegView({
   toLabel: string;
   onAdvance: () => void;
   advanceLabel: string;
+  // 헤더의 뒤로 — 선택 카드로 한 단계 돌아간다(하드웨어 뒤로와 같다).
+  onBack: () => void;
+  // "전체 코스 보기" — 선택까지 풀고 코스 전체로.
   onClose: () => void;
 }) {
+  // 걸어갈 거리인지 — 코스 목록의 도보/차량 구분(CourseStopList)과 같은 기준이다.
+  // 예전엔 차량 30분 구간에서도 도보 경로와 걷기 턴 안내를 띄웠다. 멀면 도보 안내 대신
+  // 차량 기준 요약과 외부 지도앱 길찾기를 보여준다.
+  const isWalk = to.travelDistanceM != null && to.travelDistanceM < WALK_DISTANCE_THRESHOLD_M;
+  const hasCoords = from.latitude != null && from.longitude != null && to.latitude != null && to.longitude != null;
   const regionId = useAppStore((s) => s.regionId);
   const weatherQuery = useQuery({
     queryKey: ["weather", regionId],
@@ -43,7 +54,7 @@ export function CurrentLegView({
         { latitude: from.latitude!, longitude: from.longitude! },
         { latitude: to.latitude!, longitude: to.longitude! }
       ),
-    enabled: from.latitude != null && from.longitude != null && to.latitude != null && to.longitude != null,
+    enabled: isWalk && hasCoords,
   });
   const route = routeQuery.data;
   // 다음 useEffect 콜백(geolocation watch)에서 매번 재구독하지 않고도 최신 route를
@@ -60,7 +71,8 @@ export function CurrentLegView({
   const [userPos, setUserPos] = useState<{ latitude: number; longitude: number } | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    // 도보 턴 안내가 있을 때만 위치를 계속 따라간다.
+    if (!isWalk || !navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const p = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
@@ -82,7 +94,7 @@ export function CurrentLegView({
       { enableHighAccuracy: true, maximumAge: 5000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [isWalk]);
 
   // 구간(from/to)이 바뀌면 진행 스텝을 처음으로 되돌린다 — 렌더 중 비교로 처리해서
   // (InputScreen.tsx의 prevRecommendation 패턴과 동일) 이펙트 안에서 setState 안 함.
@@ -112,7 +124,7 @@ export function CurrentLegView({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <button onClick={onClose} aria-label="뒤로가기" className="-ml-1 p-1 text-ink">
+        <button onClick={onBack} aria-label="뒤로가기" className="-ml-1 p-1 text-ink">
           <Icon name="back" className="h-6 w-6" />
         </button>
         <h2 className="text-[17px] font-bold text-ink">현재 구간</h2>
@@ -126,9 +138,33 @@ export function CurrentLegView({
         className="relative h-64 w-full overflow-hidden rounded-2xl"
       />
 
-      {routeQuery.isLoading && <p className="px-1 text-[13px] text-muted">도보 경로 조회 중...</p>}
-      {!routeQuery.isLoading && !route && (
+      {isWalk && routeQuery.isLoading && <p className="px-1 text-[13px] text-muted">도보 경로 조회 중...</p>}
+      {isWalk && !routeQuery.isLoading && !route && (
         <p className="px-1 text-[13px] text-muted">도보 경로를 불러오지 못했어요.</p>
+      )}
+
+      {/* 걸어가기 먼 구간 — 도보 안내 대신 차량 기준 정보와 외부 지도앱 길찾기 */}
+      {!isWalk && (
+        <div className="flex flex-col gap-2 rounded-2xl bg-mint-bg px-4 py-3.5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-white">
+              <Icon name="car" className="h-4 w-4" />
+            </span>
+            <p className="min-w-0 flex-1 text-[14px] font-medium text-ink">
+              {to.travelDurationMin != null ? `차량으로 약 ${to.travelDurationMin}분 걸리는 구간이에요` : "걸어가기엔 먼 구간이에요"}
+            </p>
+          </div>
+          {to.latitude != null && to.longitude != null && (
+            <ExternalMapMenu
+              latitude={to.latitude}
+              longitude={to.longitude}
+              name={to.name}
+              label={`${to.name}까지 길찾기`}
+              icon="arrowUpRight"
+              summaryClassName="flex list-none items-center justify-center gap-1.5 rounded-full bg-white py-2.5 text-[13px] font-semibold text-ink-soft marker:content-none"
+            />
+          )}
+        </div>
       )}
 
       {route && (
@@ -146,7 +182,7 @@ export function CurrentLegView({
       )}
 
       <p className="px-1 text-[13px] text-muted">
-        지금은 {fromLabel}에서 {toLabel}으로 이동 중이에요.
+        {fromLabel} 장소 → {toLabel} 장소 구간이에요.
       </p>
 
       {remaining && (

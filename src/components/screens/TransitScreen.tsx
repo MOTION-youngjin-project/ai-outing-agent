@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { fetchTransitDirections, type PlaceWithMeta } from "@/lib/clientApi";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useBack } from "@/lib/useBack";
 import { useOrigin, OriginFallback } from "@/components/OriginFallback";
 
 const MODE_ICON: Record<string, string> = {
@@ -24,8 +24,8 @@ export function TransitScreen({
   runId: string | null;
   placeId: string;
 }) {
-  const router = useRouter();
   const placeHref = runId ? `/recommend/${runId}/place/${placeId}` : `/place/${placeId}`;
+  const goBack = useBack(placeHref);
 
   // 사용자 현재 위치를 출발지로 쓴다 — 위치 없이는 경로 자체를 계산할 방법이 없어서
   // (Transitous가 좌표 두 개를 요구함) 권한 거부/미지원이면 재시도·직접 검색으로 구제한다.
@@ -41,7 +41,7 @@ export function TransitScreen({
 
   return (
     <>
-      <ScreenHeader title={`${place.name} 대중교통 길찾기`} onBack={() => router.push(placeHref)} />
+      <ScreenHeader title={`${place.name} 대중교통 길찾기`} onBack={goBack} />
 
       <div className="sk-stagger flex flex-col gap-3 px-5">
         {origin === undefined && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
@@ -14,6 +14,8 @@ import { extractCategoryLabel } from "@/lib/services/matching";
 type Tab = "course" | "place";
 type SortKey = "recent" | "name";
 
+const savedTabMemory: { tab: Tab } = { tab: "course" };
+
 // 디자인/저장.png — "코스"/"장소" 토글 + 검색 + 정렬. 검색/정렬은 이미 받아온 목록을
 // 그대로 거르는 클라이언트 처리다(저장 개수가 많지 않아 서버 쿼리까지 갈 이유가 없음).
 export function SavedScreen() {
@@ -22,7 +24,13 @@ export function SavedScreen() {
   const queryClient = useQueryClient();
   const authed = auth.status === "authenticated";
 
-  const [tab, setTab] = useState<Tab>("course");
+  // 장소 탭에서 장소를 열었다가 뒤로 오면 다시 장소 탭이어야 한다 — 로컬 state만
+  // 두면 돌아올 때마다 "코스" 탭으로 초기화됐다. 앱 안에서만 유지하면 되는 값이라
+  // 모듈 변수에 둔다(새로고침하면 기본값으로).
+  const [tab, setTab] = useState<Tab>(() => savedTabMemory.tab);
+  useEffect(() => {
+    savedTabMemory.tab = tab;
+  }, [tab]);
   const [keyword, setKeyword] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
 

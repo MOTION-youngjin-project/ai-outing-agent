@@ -4,6 +4,8 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
   const paths: Record<string, React.ReactNode> = {
     back: <path d="M15 5l-7 7 7 7" />,
     next: <path d="M9 5l7 7-7 7" />,
+    down: <path d="M5 9l7 7 7-7" />,
+    filter: <path d="M3.5 5.5h17l-6.6 7.6V19l-3.8 1.8v-8.7L3.5 5.5z" />,
     gear: (
       <>
         <circle cx="12" cy="12" r="3.2" />
@@ -12,7 +14,10 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
     ),
     heart: <path d="M20.8 8.6c0 5-8.8 10-8.8 10s-8.8-5-8.8-10a5 5 0 018.8-3.2A5 5 0 0120.8 8.6z" />,
     check: <path d="M5 12.5l4.5 4.5L19 7" />,
-    sparkle: <path d="M12 3l2.1 5.4L19.5 10l-5.4 1.6L12 17l-2.1-5.4L4.5 10l5.4-1.6L12 3z" />,
+    // 예전 path는 세로 범위가 y 3~17이라 24 뷰박스의 중심(12)보다 2 위에 그려졌다 —
+    // 슬롯·버튼 안에 넣으면 아이콘만 위로 붙어 보였다. y를 2 내려 4각의 중심을
+    // 뷰박스 중심(12,12)에 맞춘다(가로는 x 4.5~19.5로 이미 중심).
+    sparkle: <path d="M12 5l2.1 5.4L19.5 12l-5.4 1.6L12 19l-2.1-5.4L4.5 12l5.4-1.6L12 5z" />,
     star: <path d="M12 3.5l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6-4.4-4.2 6-.8L12 3.5z" fill="currentColor" strokeWidth="1" />,
     pin: (
       <>
@@ -112,6 +117,18 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
       </>
     ),
     close: <path d="M5 5l14 14M19 5L5 19" />,
+    edit: (
+      <>
+        <path d="M4 20h4L19 9l-4-4L4 16v4z" />
+        <path d="M13.5 6.5l4 4" />
+      </>
+    ),
+    retry: (
+      <>
+        <path d="M19.5 12a7.5 7.5 0 11-2.2-5.3" />
+        <path d="M19.5 4.5v4h-4" />
+      </>
+    ),
     exit: (
       <>
         <path d="M14 4.5h3a2 2 0 012 2v11a2 2 0 01-2 2h-3" />

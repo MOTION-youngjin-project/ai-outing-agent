@@ -3,12 +3,14 @@
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useBack } from "@/lib/useBack";
 import { Icon } from "@/components/Icon";
 import { fetchSavedPlaces, putPlannedVisit } from "@/lib/clientApi";
 import { formatPlannedDate, todayIso } from "@/lib/textFormat";
 
 export function PlannedVisitsScreen() {
   const router = useRouter();
+  const goBack = useBack("/mypage");
   const queryClient = useQueryClient();
 
   const plannedQuery = useQuery({
@@ -28,7 +30,7 @@ export function PlannedVisitsScreen() {
 
   return (
     <>
-      <ScreenHeader title="방문 예정" onBack={() => router.push("/mypage")} />
+      <ScreenHeader title="방문 예정" onBack={goBack} />
 
       <div className="sk-stagger flex flex-col gap-3 px-5">
         {plannedQuery.isLoading && (

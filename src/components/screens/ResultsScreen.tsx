@@ -1,27 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import type { ChatTurn } from "@/lib/agent";
 import {
   fetchRegions,
   fetchWeather,
   fetchAirQuality,
   fetchParking,
-  postRecommend,
   type RecommendResult,
   type PlaceWithMeta,
 } from "@/lib/clientApi";
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { splitHeadline } from "@/lib/textFormat";
-import { extractCategoryLabel } from "@/lib/services/matching";
+import { extractCategoryLabel, shortRegionName } from "@/lib/services/matching";
 import { FILTER_LABELS } from "@/lib/placeTags";
-import { summarize } from "@/hooks/useRecommendationFlow";
+import { ANOTHER_PLACE_TEXT, summarize } from "@/hooks/useRecommendationFlow";
+import { canGoBackInApp, noteReplace, useBack } from "@/lib/useBack";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
-import { SidebarToggleButton } from "@/components/SidebarToggleButton";
+import { ScreenHeader } from "@/components/ScreenHeader";
+import { FilterMenu } from "@/components/FilterMenu";
 import { PlanShareButton } from "@/components/PlanShareButton";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { PlaceMatchRecovery } from "@/components/PlaceMatchRecovery";
@@ -48,7 +48,17 @@ function ParkingCongestionBadge({ district, placeName }: { district: string; pla
 }
 
 export function ResultsScreen({ recommendation, runId }: { recommendation: RecommendResult; runId: string }) {
-  const { regionId, history, setHistory, setLastRecommendation } = useAppStore();
+  const {
+    regionId,
+    history,
+    setHistory,
+    setLastRecommendation,
+    recommendations,
+    setRecommendations,
+    setConversationId,
+    setInput,
+    setQueuedTurn,
+  } = useAppStore();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -61,23 +71,31 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
   // 새로고침/직링크로 들어오면 history가 비어있다 — 그럴 땐 지어내지 말고 사용자 버블을 생략한다.
   const lastUserMessage = [...history].reverse().find((t) => t.role === "user")?.content ?? null;
 
-  // "다른 곳 추천": 홈으로 이동하지 않고 이 화면에서 바로 재요청한다(디자인/추천 결과.png).
-  // 새로고침 등으로 history가 비어있으면 지금 보고 있는 추천 결과를 요약해 맥락으로 삼는다.
-  const regenerateMutation = useMutation({
-    mutationFn: async () => {
-      const baseHistory: ChatTurn[] =
-        history.length > 0 ? history : [{ role: "assistant", content: summarize(recommendation) }];
-      const historyWithUser: ChatTurn[] = [...baseHistory, { role: "user", content: "다른 곳으로 추천해줘" }];
-      const rec = await postRecommend(historyWithUser);
-      return { rec, historyWithUser };
-    },
-    onSuccess: ({ rec, historyWithUser }) => {
-      setHistory([...historyWithUser, { role: "assistant", content: summarize(rec) }]);
-      setLastRecommendation(rec);
-      queryClient.setQueryData(["recommend", rec.agentRunId], rec);
-      router.replace(`/recommend/${rec.agentRunId}`);
-    },
-  });
+  // "다른 곳 추천".
+  // 예전엔 이 화면에서 직접 재요청했다 — 그런데 history에만 턴을 덧붙이고 채팅의
+  // recommendations는 갱신하지 않아서, 채팅으로 돌아가면 답 없는 "다른 곳으로
+  // 추천해줘" 말풍선이 남았고 새 결과는 별도 대화로 저장됐다. 이제는 채팅으로
+  // 돌아가서 같은 입구(useRecommendationFlow.sendTurn)로 보낸다 — 진행 단계와 새
+  // 카드가 대화 안에 쌓이고, 지금 보던 결과도 위에 그대로 남는다.
+  const goBack = useBack("/");
+  function requestAnotherInChat() {
+    const inChat = recommendations.some((r) => r?.agentRunId === runId);
+    if (!inChat) {
+      // 채팅에 없는 결과(기록·직링크로 연 경우) — 이 결과를 맥락으로 새 대화를 연다.
+      // 지어낸 사용자 질문을 넣지 않으려고 AI 요약만 앞에 둔다.
+      setHistory([{ role: "assistant", content: summarize(recommendation) }]);
+      setRecommendations([]);
+      setLastRecommendation(recommendation);
+      setConversationId(null);
+    }
+    setQueuedTurn(ANOTHER_PLACE_TEXT);
+    if (inChat && canGoBackInApp()) {
+      router.back();
+    } else {
+      noteReplace();
+      router.replace("/");
+    }
+  }
 
   const regionsQuery = useQuery({ queryKey: ["regions", "sido"], queryFn: fetchRegions });
   // 공유 링크로 열거나 새로고침하면 store(regionId)가 빈 값으로 시작한다(영속화 안 함,
@@ -124,6 +142,16 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
     .filter(
       ({ p }) => !activeFilter || (p.tags as readonly string[] | undefined)?.includes(activeFilter) || p.category === activeFilter
     );
+
+  // 홈(채팅)의 "새 질문"과 같은 초기화 — 그쪽과 한 글자도 다르지 않게 맞춘다.
+  function startNewQuestion() {
+    setHistory([]);
+    setInput("");
+    setLastRecommendation(null);
+    setRecommendations([]);
+    setConversationId(null);
+    router.push("/");
+  }
 
   function openDetail(place: PlaceWithMeta) {
     if (!place.placeId) return;
@@ -185,33 +213,42 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
 
   return (
     <>
-      <div className="flex items-center justify-between px-5 pb-1 pt-5">
-        <SidebarToggleButton />
-        {/* 디자인/추천 결과(정보 상세보기).png 원문 그대로는 "장소 상세 보기"인데, 이
-            화면은 이 코스로 들어온 사람이 "코스 상세 보기"를 눌러 오는 목록 화면이라
-            트리거 버튼과 맞춰 이 문구를 쓴다. */}
-        <h1 className="text-[17px] font-bold text-ink">코스 상세 보기</h1>
-        <button
-          onClick={() => router.push("/")}
-          aria-label="새 질문"
-          className="sk sk-slot h-9 w-9 bg-white text-ink"
-        >
-          <Icon name="plus" className="h-4 w-4" />
-        </button>
-      </div>
+      {/* 이 화면은 채팅에서 "코스 상세"를 눌러 들어오는 하위 화면이다 — 돌아갈 곳이
+          분명한데도 왼쪽이 사이드바(기록) 버튼이라 나가는 길이 안 보였다. 대중교통·
+          주차 화면과 같은 ScreenHeader(뒤로 + 제목)를 써서 형태를 맞춘다.
+          오른쪽 +는 "새 질문"이라는 이름대로 대화를 비우고 홈으로 간다 — 예전엔 홈으로
+          이동만 해서 뒤로가기와 하는 일이 똑같았다. */}
+      <ScreenHeader
+        title="코스 상세 보기"
+        onBack={goBack}
+        right={
+          <button
+            onClick={startNewQuestion}
+            aria-label="새 질문"
+            className="sk sk-slot h-9 w-9 bg-white text-ink"
+          >
+            <Icon name="plus" className="h-4 w-4" />
+          </button>
+        }
+      />
       {/* 화면 진입 시 구역이 순서대로 도착한다 — 공유 버튼 → 환경 정보 → 질문 →
           AI 코멘트 → 필터 → 결과 목록 → 다시 추천. 결과 카드는 그 안에서 다시
           40ms씩 이어진다(카드마다 inline animationDelay). */}
       <div className="sk-stagger flex flex-col gap-3 px-5 pt-3">
         <PlanShareButton recommendation={recommendation} />
-        <div className="sk-panel sk-enter flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 text-[13px]">
+        {/* 지역·대기질·날씨 세 조각이 한 줄에 겨우 안 들어가 "25°C · 흐림"만 두 번째
+            줄로 떨어졌다 — 간격을 줄이고 지역명을 홈 화면 배지와 같은 짧은 표기로
+            맞추면 한 줄에 앉는다(대구광역시 → 대구). */}
+        <div className="sk-panel sk-enter flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 text-[13px]">
           <span className="flex items-center gap-1.5">
             <Icon name="pin" className="h-[18px] w-[18px] text-muted" />
-            <span className="font-medium text-ink-soft">{regionName || "-"}</span>
+            <span className="font-medium text-ink-soft">{shortRegionName(regionName) || "-"}</span>
           </span>
           {airQualityQuery.data && (
+            // 아이콘 하나만 28px 슬롯에 담겨 있어서 줄이 넘쳐 두 줄로 접혔다 —
+            // 옆의 지역·날씨와 같은 맨 아이콘으로 맞추면 한 줄에 들어간다.
             <span className="flex items-center gap-1.5">
-              <span className="sk-slot h-7 w-7"><Icon name="dust" className="h-[16px] w-[16px]" /></span>
+              <Icon name="dust" className="h-[18px] w-[18px] text-mint-mid" />
               <span className="text-muted">미세먼지</span>
               <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
             </span>
@@ -252,136 +289,128 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
         {/* ponytail: 정류지 간 이동시간(자동차)은 네이버 Directions로 채워서 카드 사이에
             표시함. 코스 합산 시간/비용은 여전히 API 미제공이라 비워둠. */}
 
-        <div className="sk-stagger flex gap-2 overflow-x-auto pb-2.5 pt-1">
-          {categoryTags.length > 0 && (
-            <select
-              value={categoryTags.includes(activeFilter ?? "") ? (activeFilter as string) : categoryTags[0]}
-              onChange={(e) => setActiveFilter(e.target.value)}
-              className="sk-input shrink-0 px-3 py-1.5 text-[13px] font-medium text-ink-soft outline-none"
-            >
-              {categoryTags.map((tag) => (
-                <option key={tag} value={tag}>
-                  {tag}
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            onClick={() => setActiveFilter(null)}
-            className={
-              activeFilter === null
-                ? "sk sk-on flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px]"
-                : "sk shrink-0 px-3.5 py-1.5 text-[13px] font-medium text-muted"
-            }
-          >
-            전체
-          </button>
-          {FILTER_LABELS.map((label) => (
-            <button
-              key={label}
-              onClick={() => setActiveFilter(activeFilter === label ? null : label)}
-              className={
-                activeFilter === label
-                  ? "sk sk-on flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px]"
-                  : "sk shrink-0 px-3.5 py-1.5 text-[13px] font-medium text-muted"
-              }
-            >
-              {label}
-            </button>
-          ))}
+        {/* 조건 고르기 — 옆으로 미는 칩 줄을 버튼 하나로 접었다. 조건이 한 줄에
+            다 안 들어가서 뒤쪽은 밀어봐야 있는 줄 알 수 있었고, 지금 뭘로 걸러져
+            있는지도 줄을 끝까지 봐야 했다. 이제 버튼이 선택을 그대로 보여주고,
+            누르면 아래로 창이 펴지며 모든 조건이 한눈에 들어온다. */}
+        <div className="pb-1 pt-1">
+          <FilterMenu
+            groups={[
+              { label: "장소 종류", options: categoryTags },
+              { label: "분위기", options: FILTER_LABELS },
+            ]}
+            value={activeFilter}
+            onChange={setActiveFilter}
+            resultCount={filteredPlaces.length}
+          />
         </div>
 
         <div className="flex flex-col gap-3">
           {filteredPlaces.length === 0 && (
-            <div className="py-6 text-center text-[13px] text-muted">해당 조건에 맞는 장소가 없어요.</div>
+            <div className="sk-panel sk-enter flex flex-col items-center gap-2 px-4 py-7 text-center">
+              <span className="sk-slot h-9 w-9">
+                <Icon name="search" className="h-4 w-4 text-mint-mid" />
+              </span>
+              <p className="text-[13px] text-muted">이 조건에 맞는 장소가 없어요.</p>
+              <button
+                onClick={() => setActiveFilter(null)}
+                className="sk sk-quiet px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft"
+              >
+                전체 보기
+              </button>
+            </div>
           )}
           {filteredPlaces.map(({ p, i }, idx) => (
             // display:contents로 레이아웃엔 안 끼고, 카드+이동시간 줄 두 형제를 한 key 아래 묶기만 한다.
             <div key={i} className="contents">
+            {/* 카드 구조를 바꿨다. 예전엔 132px 이미지가 세로 전체를 차지하고 그 옆
+                230px짜리 좁은 칸에 이름·설명·출처·배지·버튼을 전부 욱여넣어서, 긴 문장이
+                서너 글자씩 끊겨 읽혔다. 이제 위 줄만 [작은 썸네일 + 이름·설명]으로 두고,
+                출처·배지·버튼은 카드 전체 폭을 쓴다. 보여주는 정보와 순서는 그대로다. */}
             <div
-              className="sk-panel sk-enter flex overflow-hidden"
+              className="sk-panel sk-enter flex flex-col p-3"
               style={{ animationDelay: `${Math.min(idx, 6) * 45}ms` }}
             >
-              <button onClick={() => openDetail(p)} className="relative w-[132px] shrink-0">
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                  <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full min-h-[120px] w-full items-center justify-center bg-mint-soft">
-                    <Icon name="pin" className="h-7 w-7 text-mint-mid" />
-                  </div>
-                )}
-                {extractCategoryLabel(p.category ?? null) && (
-                  <span className="sk-tag absolute left-2 top-2 bg-white">
-                    {extractCategoryLabel(p.category ?? null)}
-                  </span>
-                )}
-              </button>
-              <div className="flex min-w-0 flex-1 flex-col p-3">
-                <div className="flex items-start justify-between gap-2">
-                  <button onClick={() => openDetail(p)} className="min-w-0 flex-1 text-left">
-                    <div className="truncate text-[16px] font-bold text-ink">{p.name}</div>
-                    <div className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-muted">
-                      {p.oneLineDescription}
-                    </div>
-                  </button>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      onClick={() => openDetail(p)}
-                      disabled={!p.placeId}
-                      aria-label="상세 보기"
-                      className="sk sk-primary sk-slot h-7 w-7"
-                    >
-                      <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
+              <div className="flex gap-3">
+                <button onClick={() => openDetail(p)} aria-label={`${p.name} 상세 보기`} className="shrink-0">
+                  {p.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                    <img src={p.imageUrl} alt={p.name} className="sk-thumb h-[76px] w-[76px]" />
+                  ) : (
+                    <span className="sk-slot h-[76px] w-[76px]">
+                      <Icon name="pin" className="h-6 w-6 text-mint-mid" />
+                    </span>
+                  )}
+                </button>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex items-start gap-2">
+                    <button onClick={() => openDetail(p)} className="min-w-0 flex-1 text-left">
+                      <div className="truncate text-[16px] font-bold leading-snug text-ink">{p.name}</div>
+                      <div className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-muted">
+                        {p.oneLineDescription}
+                      </div>
                     </button>
+                    {/* 상세로 가는 길은 썸네일·제목·아래 "상세 보기" 버튼까지 이미 셋이다.
+                        네 번째였던 ↗ 아이콘 버튼은 빼고 찜하기만 남긴다. */}
                     <button
                       onClick={() => toggleFavorite(p, i)}
                       disabled={!!session && !p.placeId}
                       title={session && !p.placeId ? "저장할 수 없는 장소입니다" : undefined}
-                      aria-label="찜하기"
+                      aria-label={favoriteIndexes.has(i) ? "저장 해제" : "저장하기"}
+                      aria-pressed={favoriteIndexes.has(i)}
                       className={
                         favoriteIndexes.has(i)
-                          ? "sk-slot sk-slot-on h-7 w-7"
-                          : "sk-slot h-7 w-7 border-[var(--sk-line)] bg-white text-muted"
+                          ? "sk-slot sk-slot-on h-8 w-8"
+                          : "sk-slot h-8 w-8 border-[var(--sk-line)] bg-white text-muted"
                       }
                     >
-                      <Icon name={favoriteIndexes.has(i) ? "check" : "checkCircle"} className="h-3.5 w-3.5" />
+                      <Icon name={favoriteIndexes.has(i) ? "check" : "checkCircle"} className="h-4 w-4" />
                     </button>
                   </div>
+                  {/* 종류·구·거리·주차 혼잡도를 이름 바로 아래 한 줄로 모은다 —
+                      카테고리는 예전엔 빈 민트색 썸네일 위에 떠 있어서 붙을 곳이 없었다. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
+                    {extractCategoryLabel(p.category ?? null) && (
+                      <span className="sk-tag">{extractCategoryLabel(p.category ?? null)}</span>
+                    )}
+                    {(p.daeguDistrict || p.distanceKm != null) && (
+                      <span className="flex items-center gap-1">
+                        <Icon name="pin" className="h-3.5 w-3.5" />
+                        {[p.daeguDistrict, p.distanceKm != null ? `${p.distanceKm}km` : null]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    )}
+                    {p.daeguDistrict && <ParkingCongestionBadge district={p.daeguDistrict} placeName={p.name} />}
+                  </div>
                 </div>
-                <RecommendationSources sources={p.sources} verification={p.verification} closedDays={p.closedDays} />
-                <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-[11px] text-muted">
-                  {(p.daeguDistrict || (p.distanceKm !== null && p.distanceKm !== undefined)) && (
-                    <span className="flex items-center gap-1">
-                      <Icon name="pin" className="h-3.5 w-3.5" />
-                      {[p.daeguDistrict, p.distanceKm != null ? `${p.distanceKm}km` : null]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  )}
-                  {p.daeguDistrict && <ParkingCongestionBadge district={p.daeguDistrict} placeName={p.name} />}
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => openDetail(p)}
-                    disabled={!p.placeId}
-                    className="sk sk-quiet flex-1 py-1.5 text-[12px] font-semibold text-muted"
-                  >
-                    상세 보기
-                  </button>
-                  <button
-                    onClick={() => viewParkingFor(p)}
-                    disabled={!p.daeguDistrict || !p.placeId}
-                    className="sk flex-1 py-1.5 text-[12px] font-bold text-accent-deep"
-                  >
-                    주차 정보
-                  </button>
-                </div>
-                {!p.placeId && (
-                  <PlaceMatchRecovery runId={runId} placeIndex={i} placeName={p.name} readOnly={readOnly}
-                    onResolved={place => applyResolvedPlace(i, place)} />
-                )}
               </div>
+
+              {/* 출처·휴무는 카드 폭을 그대로 쓴다 — 여기가 제일 긴 문장이 들어오는 자리다 */}
+              <div className="mt-3 border-t border-[var(--sk-line-soft)] pt-2.5">
+                <RecommendationSources sources={p.sources} verification={p.verification} closedDays={p.closedDays} />
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => openDetail(p)}
+                  disabled={!p.placeId}
+                  className="sk sk-quiet py-2 text-[13px] font-semibold text-muted"
+                >
+                  상세 보기
+                </button>
+                <button
+                  onClick={() => viewParkingFor(p)}
+                  disabled={!p.daeguDistrict || !p.placeId}
+                  className="sk py-2 text-[13px] font-bold text-accent-deep"
+                >
+                  주차 정보
+                </button>
+              </div>
+              {!p.placeId && (
+                <PlaceMatchRecovery runId={runId} placeIndex={i} placeName={p.name} readOnly={readOnly}
+                  onResolved={place => applyResolvedPlace(i, place)} />
+              )}
             </div>
             <NearbyPlaces name={p.name} category={p.category} latitude={p.latitude} longitude={p.longitude} exclude={(recommendation.places ?? []).map((place) => place.name)} />
             {/* 필터링 중엔 화면상 인접 카드가 실제 코스 순서상 인접이 아닐 수 있어 — 전체
@@ -389,8 +418,13 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             {activeFilter === null &&
               idx < filteredPlaces.length - 1 &&
               filteredPlaces[idx + 1].p.travelDurationMin != null && (
-                <div className="px-1 text-[12px] font-medium text-muted">
-                  차로 {filteredPlaces[idx + 1].p.travelDurationMin}분 이동
+                // 코스 목록(CourseStopList)의 이동 구간과 같은 태그 조형을 쓴다 —
+                // 채팅 카드와 이 화면이 같은 것을 다르게 그리고 있었다.
+                <div className="flex items-center gap-2 px-1">
+                  <span className="sk-tag sk-tag-mute">
+                    <Icon name="car" className="h-3 w-3" />차량 {filteredPlaces[idx + 1].p.travelDurationMin}분
+                  </span>
+                  <span aria-hidden className="h-px flex-1 border-t border-dashed border-[var(--sk-line)]" />
                 </div>
               )}
             </div>
@@ -404,18 +438,15 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
         ) : (
         <div className="sk-panel sk-enter mt-2 flex items-center gap-2 py-1.5 pl-4 pr-1.5">
           <Icon name="sparkle" className="h-4 w-4 shrink-0 text-accent" />
-          <span className="flex-1 truncate text-[13px] text-ink-soft">다른 분위기로 다시 추천해보세요</span>
+          {/* 버튼까지 한 줄이라 여기서 잘리면 안 된다 — 문구를 버튼 폭에 맞게 줄였다 */}
+          <span className="flex-1 truncate text-[13px] text-ink-soft">다른 분위기로 찾아볼까요?</span>
           <button
-            onClick={() => regenerateMutation.mutate()}
-            disabled={regenerateMutation.isPending}
-            className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2 text-[13px] ${regenerateMutation.isPending ? "sk-loading" : ""}`}
+            onClick={requestAnotherInChat}
+            className="sk sk-primary shrink-0 whitespace-nowrap px-4 py-2 text-[13px]"
           >
-            {regenerateMutation.isPending ? "추천 중..." : "다른 곳 추천"}
+            다른 곳 추천
           </button>
         </div>
-        )}
-        {regenerateMutation.isError && (
-          <p className="px-1 text-[12px] text-red-500">다시 추천하지 못했어요. 잠시 후 다시 시도해주세요.</p>
         )}
       </div>
     </>

@@ -7,6 +7,7 @@ import { fetchParking, type ParkingSpotWithDistance, type PlaceWithMeta } from "
 import { occupancyLabel } from "@/lib/parkingDisplay";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useBack } from "@/lib/useBack";
 import { NaverMap } from "@/components/NaverMap";
 
 // 시트 상단이 컨테이너 높이에서 차지하는 비율. 드래그하면 이 범위에서 자유롭게 움직이다가
@@ -36,6 +37,7 @@ export function ParkingScreen({
   const search = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(search.get("selected"));
   const placeHref = runId ? `/recommend/${runId}/place/${placeId}` : `/place/${placeId}`;
+  const goBack = useBack(placeHref);
 
   const parkingQuery = useQuery({
     queryKey: ["parking", place.daeguDistrict, place.name, place.latitude, place.longitude],
@@ -115,7 +117,7 @@ export function ParkingScreen({
 
   return (
     <>
-      <ScreenHeader title={`${place.name} 주차 정보`} onBack={() => router.push(placeHref)} />
+      <ScreenHeader title={`${place.name} 주차 정보`} onBack={goBack} />
 
       {parkingQuery.isLoading && (
         <div className="flex items-center gap-2 px-5">

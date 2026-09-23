@@ -16,6 +16,7 @@ import { extractCategoryLabel } from "@/lib/services/matching";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useBack } from "@/lib/useBack";
 import { NaverMap } from "@/components/NaverMap";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { buildSharePlanText } from "@/lib/share-plan";
@@ -37,6 +38,8 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const router = useRouter();
+  // 직링크일 때만 쓰는 한 단계 위 — 평소엔 들어온 화면(채팅·지도·저장·코스 상세)으로 돌아간다.
+  const goBack = useBack(runId ? `/recommend/${runId}` : "/");
   const pathname = usePathname();
   const [savePending, setSavePending] = useState(false);
   const [shareNotice, setShareNotice] = useState("");
@@ -119,7 +122,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
       {shareNotice && <p role="status" className="px-5 pt-2 text-sm text-muted">{shareNotice}</p>}
       <ScreenHeader
         title="상세 보기"
-        onBack={() => router.push(runId ? `/recommend/${runId}` : "/")}
+        onBack={goBack}
         right={
           <div className="flex items-center gap-3">
             {(
@@ -275,7 +278,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
                 <span className="text-[12px] font-medium text-muted">더보기 ›</span>
               )}
             </div>
-            <div className="flex gap-2.5 overflow-x-auto">
+            <div className="sk-reel gap-2.5 pb-1">
               {p.reviews.slice(0, 2).map((r, i) => (
                 <div key={i} className="w-[calc(50%-5px)] shrink-0 rounded-xl border border-hairline p-3">
                   <div className="flex items-center gap-2">

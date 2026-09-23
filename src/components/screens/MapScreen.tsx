@@ -31,20 +31,26 @@ export function MapScreen({ recommendation, runId }: { recommendation: Recommend
 
   return (
     <>
-      <div className="flex items-center justify-between px-5 pb-1 pt-5">
+      {/* 오른쪽은 "새 질문(+)"이 아니라 "채팅으로 돌아가기"다 — 지도는 챗에서 만든
+          코스를 펼쳐 보는 곳이라, 여기서 필요한 건 새로 시작이 아니라 원래 대화로
+          돌아가는 길이다. 스토어(history)를 건드리지 않고 홈으로만 가므로 하던
+          대화가 그대로 이어진다. */}
+      <div className="sk-bar">
         <SidebarToggleButton />
         <h1 className="text-[17px] font-bold text-ink">오늘의 코스 지도</h1>
         <button
           onClick={() => router.push("/")}
-          aria-label="새 질문"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+          aria-label="채팅으로 돌아가기"
+          className="sk sk-slot h-9 w-9 bg-white text-ink"
         >
-          <Icon name="plus" className="h-4 w-4" />
+          <Icon name="chat" className="h-[18px] w-[18px]" />
         </button>
       </div>
-      <div className="flex flex-col gap-3 px-5">
+      <div className="flex flex-col gap-3 px-5 pb-2">
         {(regionName || weatherQuery.data || airQualityQuery.data) && (
-          <div className="flex items-center gap-4 overflow-x-auto rounded-2xl bg-white px-4 py-3 text-[13px] shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+          // 다른 화면의 환경 정보 줄과 같은 조형(sk-panel)으로 맞춘다 — 여기만
+          // 옛날 흰 카드라 지도 탭에 들어오면 다른 앱처럼 보였다.
+          <div className="sk-panel sk-reel sk-enter items-center gap-4 px-4 py-3 text-[13px]">
             {regionName && (
               <span className="flex shrink-0 items-center gap-1.5">
                 <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
@@ -69,12 +75,14 @@ export function MapScreen({ recommendation, runId }: { recommendation: Recommend
             )}
           </div>
         )}
-        <CourseMapView
-          places={recommendation.places ?? []}
-          runId={runId}
-          cacheKey={runId}
-          listHeading="오늘의 추천 코스"
-        />
+        <div className="sk-enter flex flex-col gap-3">
+          <CourseMapView
+            places={recommendation.places ?? []}
+            runId={runId}
+            cacheKey={runId}
+            listHeading="오늘의 추천 코스"
+          />
+        </div>
       </div>
     </>
   );

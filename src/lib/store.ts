@@ -20,6 +20,10 @@ interface AppState {
   // 턴도 null로 자리를 채워서 인덱스가 history의 사용자 턴과 항상 맞게 유지한다 —
   // 성공한 턴만 push하면 실패 이후 턴부터 인덱스가 영구히 어긋난다.
   recommendations: (RecommendResult | null)[];
+  // 다른 화면(코스 상세)에서 "이 대화에 보내 달라"고 맡겨둔 질문 한 줄. 채팅 화면이
+  // 열리면서 한 번 꺼내 보내고 비운다(useRecommendationFlow).
+  queuedTurn: string | null;
+  setQueuedTurn: (text: string | null) => void;
   setInput: (input: string) => void;
   setHistory: (history: ChatTurn[]) => void;
   setConversationId: (conversationId: string | null) => void;
@@ -43,6 +47,8 @@ export const useAppStore = create<AppState>((set) => ({
   sidebarOpen: false,
   lastRecommendation: null,
   recommendations: [],
+  queuedTurn: null,
+  setQueuedTurn: (queuedTurn) => set({ queuedTurn }),
   setInput: (input) => set({ input }),
   setHistory: (history) => set({ history }),
   setConversationId: (conversationId) => set({ conversationId }),

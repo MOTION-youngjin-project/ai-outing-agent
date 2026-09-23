@@ -5,6 +5,7 @@ import { occupancyLabel } from "@/lib/parkingDisplay";
 import type { ParkingSpotWithDistance } from "@/lib/clientApi";
 import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
+import { useBack } from "@/lib/useBack";
 import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 
 export function ParkingDetailScreen({
@@ -20,6 +21,7 @@ export function ParkingDetailScreen({
   const occ = occupancyLabel(spot);
   const hasCoords = spot.latitude !== null && spot.longitude !== null;
   const parkingListHref = (runId ? `/recommend/${runId}/place/${placeId}/parking` : `/place/${placeId}/parking`) + `?selected=${encodeURIComponent(spot.id)}`;
+  const goBack = useBack(parkingListHref);
 
   function share() {
     if (typeof navigator === "undefined" || !navigator.share) return;
@@ -32,7 +34,7 @@ export function ParkingDetailScreen({
     <>
       <ScreenHeader
         title={spot.name}
-        onBack={() => router.push(parkingListHref)}
+        onBack={goBack}
         right={
           typeof navigator !== "undefined" &&
           !!navigator.share && (

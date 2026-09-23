@@ -60,8 +60,13 @@ export function CourseStopList({
               {(categoryLabel || p.visitDuration || p.fee) && (
                 <div className="mt-2 flex flex-wrap items-center gap-1">
                   {categoryLabel && <span className="sk-tag">{categoryLabel}</span>}
-                  {p.visitDuration && <span className="sk-tag sk-tag-mute">{p.visitDuration}</span>}
-                  {p.fee && <span className="sk-tag sk-tag-mute">{p.fee}</span>}
+                  {/* 머무는 시간·요금은 LLM이 준 문장이라 길이를 보장할 수 없다
+                      ("[개인] - 성인 1,000원 · 청소년 / 대학생 / …") — 줄바꿈을 허용해야
+                      태그 하나가 카드보다 넓어져 화면을 가로로 밀지 않는다. */}
+                  {p.visitDuration && (
+                    <span className="sk-tag sk-tag-mute sk-tag-flow">{p.visitDuration}</span>
+                  )}
+                  {p.fee && <span className="sk-tag sk-tag-mute sk-tag-flow">{p.fee}</span>}
                 </div>
               )}
             </div>
@@ -74,14 +79,30 @@ export function CourseStopList({
             <div className="flex gap-3">
               <div className="flex w-7 shrink-0 flex-col items-center">
                 {ordered ? (
-                  <span className="sk-slot sk-slot-on h-7 w-7 text-[12px]">{i + 1}</span>
+                  // 번호는 순서대로 하나씩 물린다(sk-slot-on의 LOCK이 재생되는 시점을
+                  // 어긋나게 준다) — 세 개가 동시에 켜지면 "순서"가 안 읽힌다.
+                  <span
+                    className="sk-slot sk-slot-on h-7 w-7 text-[12px]"
+                    style={late ? { animationDelay: `${200 + i * 90}ms` } : undefined}
+                  >
+                    {i + 1}
+                  </span>
                 ) : (
                   <span className="sk-slot h-7 w-7">
                     <Icon name="pin" className="h-3.5 w-3.5" />
                   </span>
                 )}
                 {!isLast && (
-                  <span className="mt-1.5 w-px flex-1 border-l border-dashed border-[var(--sk-line)]" />
+                  // 코스가 "만들어지는" 순간 — 점선이 위에서 아래로 그어진다.
+                  // 위 번호 슬롯이 앉는 시점(sk-stagger-late 기준 160ms + 40ms씩)
+                  // 바로 뒤에 이어지도록 지연을 맞춰서, 번호 → 선 → 다음 번호 순으로
+                  // 읽힌다. 카드 안(late)일 때만 장면이고, 그 밖에서는 조용히 있는다.
+                  <span
+                    className={`mt-1.5 w-px flex-1 border-l border-dashed border-[var(--sk-line)] ${
+                      late ? "sk-draw" : ""
+                    }`}
+                    style={late ? { animationDelay: `${260 + i * 90}ms` } : undefined}
+                  />
                 )}
               </div>
 
