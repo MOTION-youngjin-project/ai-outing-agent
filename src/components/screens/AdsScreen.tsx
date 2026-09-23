@@ -47,7 +47,7 @@ function getServerSnapshot(): boolean {
   return false;
 }
 
-export function AdsScreen({ quota }: { quota: AdQuotaState }) {
+export function AdsScreen({ quota, customData }: { quota: AdQuotaState; customData: string | null }) {
   const router = useRouter();
   const [credits, setCredits] = useState(quota.credits);
   const [watching, setWatching] = useState(false);
@@ -81,12 +81,19 @@ export function AdsScreen({ quota }: { quota: AdQuotaState }) {
     return () => document.removeEventListener("visibilitychange", refreshQuota);
   }, [isNativeApp, credits]);
 
+  // 앱은 이 문자열을 그대로 AdMob의 serverSideVerificationOptions.customData로 실어
+  // 보낸다(app/api/ads/ssv의 parseSsvOwner와 포맷 일치) — 계산은 여기(서버 컴포넌트가
+  // 내려준 값)서 하고 앱은 포워딩만 한다.
   function showNativeAd() {
     setError("");
     setSucceeded(false);
+    if (!customData) {
+      setError("잠시 후 다시 시도해주세요.");
+      return;
+    }
     try {
       (window as unknown as { NativeAdBridge: { postMessage: (msg: string) => void } }).NativeAdBridge.postMessage(
-        "show"
+        customData
       );
     } catch {
       setError("광고를 열지 못했어요.");
