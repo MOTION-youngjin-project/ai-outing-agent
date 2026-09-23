@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRecommendationRun, type GeoPoint, type RecommendationProgressEvent } from "@/lib/services/recommendations";
 import type { ChatTurn } from "@/lib/agent";
 import { auth } from "@/lib/auth";
+import { ensureQuestionAllowed, consumeQuestion, type Owner } from "@/lib/ads/quota";
 import { GUEST_COOKIE, guestHash, guestToken } from "@/lib/recommendation-owner";
 
 export const runtime = "nodejs";
@@ -44,8 +45,22 @@ export async function POST(req: NextRequest) {
   }
   const validOrigin = parseOrigin(origin);
   const session = await auth();
-  const userId = session?.user?.id ?? null;
+  const userId = session?.user?.id;
+  // 비로그인 게스트도 쓸 수 있다 — 로그인 사용자만 하루 무료 1건이 추가로 있고,
+  // 게스트는 광고 시청으로 쌓은 질문권만 쓴다(quota.ts가 구분).
   const token = userId ? undefined : guestToken(req.cookies.get(GUEST_COOKIE)?.value);
+  const sessionKeyHash = userId ? null : guestHash(token);
+  const owner: Owner = userId ? { userId } : { sessionKeyHash: sessionKeyHash! };
+
+  // 쿼터 게이트는 여기 한 곳이다 — 추천 에이전트로 들어가는 유일한 입구이고,
+  // 스트림을 열기 "전"이라 한도 초과는 평범한 JSON 402로 나간다(NDJSON과 안 섞임).
+  const affordability = await ensureQuestionAllowed(owner);
+  if (!affordability.allowed) {
+    return NextResponse.json(
+      { error: "오늘 무료 질문을 다 쓰셨어요. 광고를 보면 질문권을 더 받을 수 있어요.", code: "quota_exceeded" },
+      { status: 402 }
+    );
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -63,7 +78,20 @@ export async function POST(req: NextRequest) {
         }
       };
       try {
-        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin, userId, guestHash(token), conversationId ?? null);
+        const result = await createRecommendationRun(
+          history as ChatTurn[],
+          emit,
+          validOrigin,
+          userId ?? null,
+          sessionKeyHash,
+          conversationId ?? null
+        );
+        // 차감은 "장소가 담긴 추천이 실제로 나왔을 때"만. 되묻기(needsMoreInfo)는 places가
+        // 없어서 여기서 자연히 빠지고, 실패는 위 try가 못 오게 막는다. 되묻기를 차감하면
+        // 에이전트가 되물을수록 사용자가 손해라 제품이 스스로를 공격하게 된다.
+        if (result.recommendation.places?.length) {
+          await consumeQuestion(owner, affordability.source);
+        }
         emit({ type: "result", result });
       } catch (err) {
         console.error(err);
@@ -76,6 +104,6 @@ export async function POST(req: NextRequest) {
   });
 
   const response = new NextResponse(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "private, no-store" } });
-  if (token) response.cookies.set(GUEST_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 86400 });
+  if (token) response.cookies.set(GUEST_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365 });
   return response;
 }

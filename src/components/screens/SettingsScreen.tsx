@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { useBack } from "@/lib/useBack";
 
@@ -28,17 +29,22 @@ export function SettingsScreen() {
     setNameError("");
     setNameSaved(false);
     setNamePending(true);
+
     try {
       const res = await fetch("/api/account", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ name }),
       });
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setNameError(data.error ?? "저장에 실패했습니다.");
         return;
       }
+
       const data = await res.json();
       await update({ name: data.name ?? null });
       setNameSaved(true);
@@ -50,22 +56,32 @@ export function SettingsScreen() {
   async function savePassword() {
     setPasswordError("");
     setPasswordSaved(false);
+
     if (newPassword !== confirmPassword) {
       setPasswordError("새 비밀번호가 서로 일치하지 않습니다.");
       return;
     }
+
     setPasswordPending(true);
+
     try {
       const res = await fetch("/api/account", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
       });
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setPasswordError(data.error ?? "변경에 실패했습니다.");
         return;
       }
+
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -78,9 +94,23 @@ export function SettingsScreen() {
   return (
     <>
       <ScreenHeader title="앱 설정" onBack={goBack} />
+
       <div className="flex flex-col gap-6 px-5">
         <div className="flex flex-col gap-2.5">
+          <h2 className="px-1 text-[13px] font-semibold text-muted">질문권</h2>
+
+          <Link
+            href="/ads"
+            className="flex items-center justify-between rounded-full bg-white px-4 py-3 text-[14px] font-medium text-ink shadow-[0_1px_3px_rgba(17,24,39,0.05)]"
+          >
+            남은 질문권 · 광고 보고 받기
+            <span className="text-muted">›</span>
+          </Link>
+        </div>
+
+        <div className="flex flex-col gap-2.5">
           <h2 className="px-1 text-[13px] font-semibold text-muted">이름</h2>
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -97,6 +127,7 @@ export function SettingsScreen() {
               placeholder="이름"
               className={`min-w-0 flex-1 ${inputClass}`}
             />
+
             <button
               type="submit"
               disabled={namePending}
@@ -105,12 +136,21 @@ export function SettingsScreen() {
               저장
             </button>
           </form>
-          {nameError && <p className="px-1 text-[13px] text-rose-500">{nameError}</p>}
-          {nameSaved && <p className="px-1 text-[13px] text-accent">저장했습니다.</p>}
+
+          {nameError && (
+            <p className="px-1 text-[13px] text-rose-500">{nameError}</p>
+          )}
+
+          {nameSaved && (
+            <p className="px-1 text-[13px] text-accent">저장했습니다.</p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2.5">
-          <h2 className="px-1 text-[13px] font-semibold text-muted">비밀번호 변경</h2>
+          <h2 className="px-1 text-[13px] font-semibold text-muted">
+            비밀번호 변경
+          </h2>
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -129,6 +169,7 @@ export function SettingsScreen() {
               placeholder="현재 비밀번호"
               className={inputClass}
             />
+
             <input
               type="password"
               required
@@ -141,6 +182,7 @@ export function SettingsScreen() {
               placeholder="새 비밀번호 (8자 이상)"
               className={inputClass}
             />
+
             <input
               type="password"
               required
@@ -152,8 +194,17 @@ export function SettingsScreen() {
               placeholder="새 비밀번호 확인"
               className={inputClass}
             />
-            {passwordError && <p className="px-1 text-[13px] text-rose-500">{passwordError}</p>}
-            {passwordSaved && <p className="px-1 text-[13px] text-accent">비밀번호를 변경했습니다.</p>}
+
+            {passwordError && (
+              <p className="px-1 text-[13px] text-rose-500">{passwordError}</p>
+            )}
+
+            {passwordSaved && (
+              <p className="px-1 text-[13px] text-accent">
+                비밀번호를 변경했습니다.
+              </p>
+            )}
+
             <button
               type="submit"
               disabled={passwordPending}

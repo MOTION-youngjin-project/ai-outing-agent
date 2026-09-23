@@ -30,6 +30,9 @@ import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMap
 import { verifyPlace } from "../src/lib/place-verification.ts";
 import { tourismRegionParams } from "../src/lib/external/tour-api-cache.ts";
 import { summarize } from "./place-hit-rate.ts";
+import { FREE_QUESTIONS, PRICE_PER_QUESTION_KRW, resolveFreeRemaining, canAffordNext } from "../src/lib/billing/plans.ts";
+import { isAdminEmail } from "../src/lib/admin.ts";
+import { isFreeAvailable } from "../src/lib/ads/quota.ts";
 
 let passed = 0;
 // Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
@@ -376,5 +379,28 @@ check("verifyPlace 유모차 '가능'이면 문구를 붙임", strollerOk.featur
 // 근거가 없으면 채우지 않는다 — 빈칸이 지어낸 값보다 낫다.
 check("verifyPlace 근거 없으면 소요시간 비움", verified.visitDuration, undefined);
 check("verifyPlace 근거 없으면 features 원본 유지", verifyPlace({ name: "없는곳", features: ["유모차 대여"] }, []).features, ["유모차 대여"]);
+
+// 과금 판정(종량제). 돈이 걸린 규칙이라 경계값(딱 소진된 순간)을 직접 고정해둔다.
+check('무료 미소진이면 남은 횟수 양수', resolveFreeRemaining(FREE_QUESTIONS - 1), 1);
+check('무료 정확히 소진되면 0', resolveFreeRemaining(FREE_QUESTIONS), 0);
+check('무료 초과 사용해도 음수로 안 내려감', resolveFreeRemaining(FREE_QUESTIONS + 5), 0);
+check('무료 남았으면 잔액 0이어도 결제 가능', canAffordNext({ freeRemaining: 1, balanceKrw: 0 }), true);
+check('무료 소진, 잔액 충분하면 결제 가능', canAffordNext({ freeRemaining: 0, balanceKrw: PRICE_PER_QUESTION_KRW }), true);
+check('무료 소진, 잔액 모자라면 결제 불가', canAffordNext({ freeRemaining: 0, balanceKrw: PRICE_PER_QUESTION_KRW - 1 }), false);
+
+// 관리자 판별 — 대소문자/공백 차이로 관리자가 로그인 못 하거나, 반대로 허용목록에
+// 없는 계정이 들어가는 사고를 여기서 막는다.
+process.env.ADMIN_EMAILS = "Admin@Example.com, second@example.com";
+check("허용목록 이메일(대소문자 다름)", isAdminEmail("admin@example.com"), true);
+check("허용목록 이메일(앞뒤 공백)", isAdminEmail("  second@example.com  "), true);
+check("허용목록에 없는 이메일", isAdminEmail("outsider@example.com"), false);
+check("빈 이메일", isAdminEmail(""), false);
+process.env.ADMIN_EMAILS = "";
+check("허용목록 자체가 비면 전부 거부", isAdminEmail("admin@example.com"), false);
+
+// 광고 기반 하루 무료 판정. 자정을 넘기면(날짜가 바뀌면) 다시 쓸 수 있어야 한다.
+check('오늘 아직 무료 안 썼으면(null) 사용 가능', isFreeAvailable(null, new Date('2026-09-21T10:00:00+09:00')), true);
+check('오늘 이미 썼으면 사용 불가', isFreeAvailable(new Date('2026-09-21T01:00:00+09:00'), new Date('2026-09-21T23:00:00+09:00')), false);
+check('날짜가 바뀌면 다시 사용 가능', isFreeAvailable(new Date('2026-09-20T23:59:00+09:00'), new Date('2026-09-21T00:01:00+09:00')), true);
 
 console.log(`✓ self-check 통과 (${passed}건)`);

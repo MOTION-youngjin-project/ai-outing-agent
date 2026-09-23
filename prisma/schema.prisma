@@ -174,7 +174,8 @@ model PlaceLifeInfoCache {
 model User {
   id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
   email         String        @unique @db.VarChar(255)
-  passwordHash  String        @map("password_hash") @db.VarChar(255)
+  // 소셜 로그인(구글/카카오/네이버)으로만 가입한 사용자는 비밀번호가 없다.
+  passwordHash  String?       @map("password_hash") @db.VarChar(255)
   name          String?       @db.VarChar(100)
   // agent.ts의 PLACE_TAGS(실내/야외/데이트/저비용)와 같은 값만 담는다. 값이 4개뿐이라
   // 별도 테이블 없이 JSON 배열 하나로 충분하다고 판단.
@@ -183,6 +184,10 @@ model User {
   savedPlaces   SavedPlace[]
   savedCourses  SavedCourse[]
   agentRuns     AgentRun[]
+  usages        RecommendationUsage[]
+  wallet        Wallet?
+  payments      Payment[]
+  adCredit      AdCredit?
 
   @@map("users")
 }
@@ -679,4 +684,129 @@ model PopularRouteTemplatePlace {
 
   @@id([templateId, sequenceNo])
   @@map("popular_route_template_places")
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+
+  @@map("payment_status")
+}
+
+// 과금 근거가 되는 사용량 카운터. agent_runs를 쓰지 않는 이유는 그쪽이 TTL 24시간에
+// 만료분 하드 삭제 대상이라 하루만 지나면 "몇 번 썼는지"의 근거가 사라지기 때문이다.
+//
+// 증분 컬럼(used_count += 1)이 아니라 "행 1개 = 사용 1회"로 둔다 — 동시 요청에서
+// upsert 경합이 없고, 돈이 오가는 경로의 감사 로그를 겸한다.
+//
+// 차감 시점은 "장소가 담긴 추천이 실제로 나왔을 때"뿐이다. 실패(Gemini 429/503 같은
+// 우리 쪽 장애가 상당수)와 되묻기(needsMoreInfo)는 행을 만들지 않는다.
+model RecommendationUsage {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  // 로그인 사용자는 userId, 비로그인 게스트는 sessionKeyHash로 센다(agent_runs와 같은
+  // 소유자 표현). 둘 중 하나만 채워진다. 로그인이 앱 사용의 전제가 된 뒤로 새 행은
+  // 전부 userId만 채워지지만, 컬럼 자체는 과거 데이터 호환을 위해 남긴다.
+  userId         BigInt?  @map("user_id") @db.UnsignedBigInt
+  sessionKeyHash String?  @map("session_key_hash") @db.VarChar(64)
+  // 이 건이 무료였는지(0) 유료로 크레딧에서 차감됐는지(단가). 가격이 나중에 바뀌어도
+  // 과거 행의 실제 차감액은 그대로 남아야 해서 plans.ts 상수를 참조하지 않고 값을 굳힌다.
+  costKrw        Int      @default(0) @map("cost_krw")
+  // 어떤 추천에서 차감됐는지. agent_runs는 만료 삭제되므로 FK를 일부러 걸지 않는다 —
+  // saved_courses.agent_run_id가 같은 이유로 이미 쓰는 방식이다.
+  agentRunId     String?  @map("agent_run_id") @db.Char(36)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([sessionKeyHash, createdAt])
+  @@map("recommendation_usages")
+}
+
+// 사용자당 크레딧 지갑 1개. 선불 크레딧 잔액과 자동충전에 쓰는 빌링키를 들고 있다 —
+// 구독 주기 개념이 없다(무료 질문 소진 후 건당 차감, 잔액 부족 시 자동 충전).
+model Wallet {
+  id     BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  userId BigInt @unique @map("user_id") @db.UnsignedBigInt
+  // 토스페이먼츠 빌링키 발급/승인에 쓰는 고객 식별자. userId를 그대로 쓰면 안 된다 —
+  // 유추 가능한 값을 customerKey로 쓰는 걸 토스가 금지한다. 그래서 별도 UUID를 발급한다.
+  customerKey String  @unique @map("customer_key") @db.Char(36)
+  // 카드 등록 성공 시 받는 키. 이후 자동 충전이 이 키로 나간다. 서버 전용 값이라
+  // 어떤 응답에도 실어 보내지 않는다.
+  billingKey  String? @map("billing_key") @db.VarChar(200)
+  balanceKrw  Int     @default(0) @map("balance_krw")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamp(0)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallets")
+}
+
+// 승인 요청 1건 = 1행(최초 카드 등록 시 첫 충전, 이후 자동/수동 충전 각각). 승인 API를
+// 부르기 "전에" pending으로 먼저 만들고 그 orderId를 멱등키(Idempotency-Key)로 쓴다 —
+// 네트워크 재시도로 이중 결제가 나는 걸 막는 유일한 수단이고, 응답을 못 받았을 때
+// 무슨 요청이 나갔는지 아는 유일한 기록이다.
+model Payment {
+  id      BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  userId  BigInt @map("user_id") @db.UnsignedBigInt
+  orderId String @unique @map("order_id") @db.Char(36)
+  // 충전 금액. 항상 서버의 TOPUP_AMOUNT_KRW에서 읽은 값이고 클라이언트가 보낸 값이 아니다.
+  amount     Int
+  status     PaymentStatus @default(pending)
+  paymentKey String?       @map("payment_key") @db.VarChar(200)
+  requestedAt DateTime     @default(now()) @map("requested_at") @db.Timestamp(0)
+  approvedAt  DateTime?    @map("approved_at") @db.Timestamp(0)
+  failureMessage String?   @map("failure_message") @db.VarChar(500)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, requestedAt])
+  @@map("payments")
+}
+
+// 결제(billing/*) 대신 광고 기반 무료 한도. 하루 1건은 그냥 무료고, 그 이상은 광고를
+// 봐야 한다(무제한 — 사업자등록 전까지는 돈을 받을 방법이 없어서 이 방식으로 간다).
+// billing/* 테이블·코드는 나중에 사업자등록되면 다시 쓸 수 있게 그대로 둔다.
+model AdCredit {
+  id     BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  // 로그인 사용자는 userId, 비로그인 게스트는 sessionKeyHash로 구분한다(agent_runs와
+  // 같은 소유자 표현). 둘 중 하나만 채워진다 — MySQL unique 인덱스는 NULL을 여러 개
+  // 허용하므로 둘 다 nullable+unique로 둬도 게스트 행이 여러 개 있어도 문제없다.
+  userId         BigInt? @unique @map("user_id") @db.UnsignedBigInt
+  sessionKeyHash String? @unique @map("session_key_hash") @db.VarChar(64)
+  // 광고를 봐서 쌓인 질문권. 하루 무료 1건과 별개로 소진 전까지 계속 쓸 수 있다.
+  credits Int @default(0)
+  // 오늘 무료 1건을 이미 썼는지는 "오늘 날짜와 같은가"로 판정한다 — 자정 지나면 자동으로
+  // 다시 하루치가 찬다(별도 리셋 배치 필요 없음). 게스트(sessionKeyHash)는 계정이 없어
+  // 쿠키만 지우면 무한 리셋되므로 이 하루 무료를 아예 안 준다 — quota.ts에서 막는다.
+  lastFreeAt DateTime? @map("last_free_at") @db.Timestamp(0)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ad_credits")
+}
+
+enum AdminActionType {
+  grant_ad_credit
+  reset_daily_free
+  delete_account
+
+  @@map("admin_action_type")
+}
+
+// 관리자 페이지에서 벌어지는 파괴적/과금 관련 조작의 감사 로그. 계정 삭제 같은 액션은
+// 대상 User 행 자체가 사라지므로 targetUserId에 FK를 걸지 않고(삭제 후에도 로그가
+// 남아야 한다) targetEmail을 스냅샷으로 같이 저장한다 — saved_courses가 agent_run_id에
+// FK를 안 거는 것과 같은 이유.
+model AdminActionLog {
+  id           BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  adminEmail   String          @map("admin_email") @db.VarChar(255)
+  action       AdminActionType
+  targetUserId BigInt?         @map("target_user_id") @db.UnsignedBigInt
+  targetEmail  String          @map("target_email") @db.VarChar(255)
+  detail       Json?
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([targetUserId, createdAt])
+  @@index([createdAt])
+  @@map("admin_action_logs")
 }

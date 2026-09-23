@@ -28,7 +28,12 @@ export async function PATCH(request: Request) {
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+    if (!user) {
+      return NextResponse.json({ error: "현재 비밀번호가 올바르지 않습니다." }, { status: 400 });
+    }
+    // passwordHash가 없으면 소셜 로그인으로만 가입한 계정 — 비교할 기존 비밀번호가
+    // 없으니 확인 없이 새 비밀번호를 처음 설정하는 것으로 취급한다.
+    if (user.passwordHash && !(await bcrypt.compare(currentPassword, user.passwordHash))) {
       return NextResponse.json({ error: "현재 비밀번호가 올바르지 않습니다." }, { status: 400 });
     }
     data.passwordHash = await bcrypt.hash(newPassword, 10);

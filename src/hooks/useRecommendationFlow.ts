@@ -9,6 +9,7 @@ import {
   fetchRegions,
   postRecommend,
   postSuggest,
+  RecommendError,
   type Region,
   type RecommendResult,
   type RecommendProgressEvent,
@@ -23,7 +24,12 @@ declare global {
 
 // 진행 단계 한 줄을 그리는 데 필요한 것 — 화면(InputScreen)은 이 배열만 보고 그린다.
 // done=true면 체크 표시로 접히고, false면 지금 진행 중인 한 줄이다.
-export type ProgressStep = { key: string; label: string; icon: string; done: boolean };
+export type ProgressStep = {
+  key: string;
+  label: string;
+  icon: string;
+  done: boolean;
+};
 
 // 에이전트가 실제로 호출한 도구 이름 → 사람이 읽는 문구.
 // src/lib/tools/*.ts의 tool name과 1:1로 맞춰야 한다(빠지면 화면에 도구 이름이 그대로 뜬다).
@@ -50,7 +56,9 @@ const DEFAULT_REGION_NAME = "대구광역시";
 // ResultsScreen의 "다른 곳 추천"(인라인 재요청)도 이 요약으로 history를 이어붙인다.
 export function summarize(rec: Recommendation): string {
   if (rec.needsMoreInfo || !rec.places) return rec.message;
-  const list = rec.places.map((p) => `- ${p.name}: ${p.oneLineDescription}`).join("\n");
+  const list = rec.places
+    .map((p) => `- ${p.name}: ${p.oneLineDescription}`)
+    .join("\n");
   return `${rec.message}\n${list}`;
 }
 
@@ -85,7 +93,8 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
   const regions = regionsQuery.data ?? [];
 
   // 고른 지역이 없으면 대구를 기본으로 "보여준다"(store는 비워 둔 채).
-  const defaultRegionId = regions.find((r) => r.name === DEFAULT_REGION_NAME)?.id ?? "";
+  const defaultRegionId =
+    regions.find((r) => r.name === DEFAULT_REGION_NAME)?.id ?? "";
   const effectiveRegionId = regionId || defaultRegionId;
 
   // 에이전트가 지금 뭘 하고 있는지 보여주는 진행 상황 — 전부 서버가 실제로 보낸 이벤트만
@@ -104,7 +113,9 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
       setToolLog((prev) =>
         // 같은 도구를 아직 진행 중인데 또 시작할 일은 없다 — 이미 끝난 같은 도구를
         // 다시 부른 경우(모델이 재질의)는 새 줄로 쌓아서 두 번 물어본 게 보이게 한다.
-        prev.some((t) => t.tool === tool && !t.done) ? prev : [...prev, { tool, done: false }]
+        prev.some((t) => t.tool === tool && !t.done)
+          ? prev
+          : [...prev, { tool, done: false }],
       );
     } else if (event.type === "tool_end" && event.tool) {
       const tool = event.tool;
@@ -171,8 +182,15 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
 
   // 보내기·다시 시도·질문 고치기가 전부 이 한 길로 간다.
   // baseHistory: 이 질문 앞까지의 대화, baseRecs: 그 대화에 달린 추천들.
-  function submitTurn(baseHistory: ChatTurn[], baseRecs: (RecommendResult | null)[], content: string) {
-    const historyWithUser: ChatTurn[] = [...baseHistory, { role: "user", content }];
+  function submitTurn(
+    baseHistory: ChatTurn[],
+    baseRecs: (RecommendResult | null)[],
+    content: string,
+  ) {
+    const historyWithUser: ChatTurn[] = [
+      ...baseHistory,
+      { role: "user", content },
+    ];
     // 이 대화의 첫 turn이면(사이드바 "새 질문"으로 시작했거나 아직 한 번도 안 보낸 상태)
     // 새 conversationId를 발급한다 — 과거 대화를 이어서 보내는 중이면 이미 store에 있는
     // 값을 그대로 재사용해서 같은 대화로 계속 묶인다.
@@ -195,7 +213,8 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
   }
 
   // 첫 질문 앞에는 지역을 붙여 보낸다("대구광역시에서 …").
-  const regionName = regions.find((r) => r.id === effectiveRegionId)?.name ?? "";
+  const regionName =
+    regions.find((r) => r.id === effectiveRegionId)?.name ?? "";
   const regionPrefix = regionName ? `${regionName}에서 ` : "";
 
   // 지금 대화에 사용자 턴 하나를 붙여 보내는 유일한 입구 — 입력창 보내기, "다른 곳
@@ -204,7 +223,8 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
   // 채우기만 하고 부르지 않는다.
   function sendTurn(raw: string) {
     const text = raw.trim();
-    if (!text || !effectiveRegionId || recommendMutation.isPending) return false;
+    if (!text || !effectiveRegionId || recommendMutation.isPending)
+      return false;
     // 기본값(대구)으로 보낸 거라면 이제 사용자가 고른 지역으로 확정한다 — 지도·상세
     // 화면의 날씨가 store의 지역을 본다.
     if (!regionId) setRegionId(effectiveRegionId);
@@ -227,7 +247,8 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
   // 보낸다(store.queuedTurn) — 진행 단계와 새 카드가 대화 안에 그대로 쌓이게.
   // 꺼내는 즉시 비워서 두 번 보내지 않는다.
   useEffect(() => {
-    if (!queuedTurn || recommendMutation.isPending || !effectiveRegionId) return;
+    if (!queuedTurn || recommendMutation.isPending || !effectiveRegionId)
+      return;
     // 한 틱 미뤄서 보낸다 — 개발 모드의 이중 effect에서도 cleanup이 앞의 예약을
     // 지우므로 딱 한 번만 나간다.
     const id = window.setTimeout(() => {
@@ -286,18 +307,30 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
   }, [recommendMutation.isPending, recommendMutation.submittedAt]);
 
   const recommendation = lastRecommendation;
-  const errorMessage = recommendMutation.error instanceof Error ? recommendMutation.error.message : null;
+  const errorMessage =
+    recommendMutation.error instanceof Error
+      ? recommendMutation.error.message
+      : null;
   // 후속 제안은 "지금 하고 있는 대화"에 딸린 것이다 — 대화를 비우면(새 질문, 채팅
   // 나가기) 맥락이 사라졌는데도 이전 대화의 제안이 홈 화면에 그대로 떠 있었다.
   // suggestMutation은 화면 밖(홈/결과 화면)에서 초기화할 방법이 없어서, 값을 지우는
   // 대신 "대화 중일 때만 쓴다"로 막는다 — 어디서 비우든 항상 맞다.
   const followUp = history.length > 0 ? suggestMutation.data : undefined;
+
   // 예전엔 제안 문장을 입력창 위에 흐리게 겹쳐 그렸다 — 이미 적힌 질문처럼 보이는데
   // 모바일에선 받아들일 방법(Tab/→)이 없어서, 그대로 보내면 아무 일도 없었다.
   // 이제 제안은 칩으로만 보여주고, 입력창에는 진짜 placeholder만 둔다.
+
+  // 한도 초과는 재시도해봐야 소용없고 광고 화면으로 보내야 한다 — 그 한 가지만 구분한다.
+  const quotaExceeded =
+    recommendMutation.error instanceof RecommendError &&
+    recommendMutation.error.code === "quota_exceeded";
   const displayedSuggestion =
-    recommendMutation.isPending || suggestMutation.isPending ? "" : (followUp ?? "");
-  const showSuggestionChip = !recommendMutation.isPending && !suggestMutation.isPending && !!followUp;
+    recommendMutation.isPending || suggestMutation.isPending
+      ? ""
+      : (followUp ?? "");
+  const showSuggestionChip =
+    !recommendMutation.isPending && !suggestMutation.isPending && !!followUp;
   // 한 줄짜리 문구 대신 "지금까지 끝낸 단계 + 지금 하는 단계" 목록을 만든다.
   // 규칙은 하나뿐이다: 서버가 알려준 사실만 줄로 만든다.
   //  - 1번 줄(질문 살펴보는 중)은 항상 있다. 서버에서 첫 이벤트가 오면 = 모델이 뭘 할지
@@ -321,7 +354,12 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
       });
     });
     if (resolvingPlaces) {
-      steps.push({ key: "places", label: "실제 장소 정보 확인", icon: "pin", done: false });
+      steps.push({
+        key: "places",
+        label: "실제 장소 정보 확인",
+        icon: "pin",
+        done: false,
+      });
     } else if (progressSeen && toolLog.every((t) => t.done)) {
       // 도구를 한 번이라도 썼으면 "모은 정보로", 아니면 미리 받아둔 날씨·자료로 고르는 중.
       steps.push({
@@ -344,6 +382,7 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
     regionsQuery,
     recommendation,
     errorMessage,
+    quotaExceeded,
     displayedSuggestion,
     showSuggestionChip,
     progressSteps,

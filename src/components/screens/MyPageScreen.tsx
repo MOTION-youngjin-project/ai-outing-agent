@@ -87,7 +87,9 @@ export function MyPageScreen() {
               <Icon name="user" className="h-7 w-7 text-mint-mid" />
             </div>
             <div className="flex-1">
-              <div className="text-[17px] font-bold text-ink">{session.user?.name || session.user?.email}</div>
+              <div className="text-[17px] font-bold text-ink">
+                {session.user?.name || session.user?.email?.split("@")[0] || "사용자"}
+              </div>
               <div className="mt-0.5 text-[13px] text-muted">저장한 나들이와 설정을 관리해요.</div>
             </div>
             <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />

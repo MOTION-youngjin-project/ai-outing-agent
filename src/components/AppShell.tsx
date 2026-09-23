@@ -15,6 +15,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   // 탭 루트 4개만 "얕은" 화면이다 — 그 밖은 전부 한 단계 들어간 화면으로 본다.
   const isDeep = !["/", "/map", "/saved", "/mypage"].includes(pathname);
 
+  // 관리자 페이지는 데스크톱 웹 전용 도구라 460px 모바일 셸/사이드바/하단탭바가
+  // 필요 없다 — 전체 폭 그대로 내려준다.
+  if (pathname?.startsWith("/admin")) return <>{children}</>;
+
   return (
     <div className="mx-auto flex w-full max-w-[460px] flex-1 lg:max-w-none lg:pl-[280px]">
       <Sidebar />

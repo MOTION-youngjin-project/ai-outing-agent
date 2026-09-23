@@ -5,7 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
-import { fetchWeather, fetchAirQuality, fetchPlacesSearch, fetchCulturalEvents, type RecommendResult } from "@/lib/clientApi";
+import {
+  fetchWeather,
+  fetchAirQuality,
+  fetchPlacesSearch,
+  fetchCulturalEvents,
+  type RecommendResult,
+} from "@/lib/clientApi";
 import type { RecommendationFlow } from "@/hooks/useRecommendationFlow";
 import { Icon } from "@/components/Icon";
 import { SidebarToggleButton } from "@/components/SidebarToggleButton";
@@ -38,7 +44,17 @@ const QUICK_PROMPTS = [
 
 // src/lib/tools/culturePortal.ts의 DTYPES와 같은 값 — 서버 전용 도구 모듈을 클라이언트
 // 번들에 끌어오지 않으려고 여기 따로 둠(같은 파일이 @langchain/core/tools도 import함).
-const CULTURE_DTYPES = ["연극", "뮤지컬", "오페라", "음악", "콘서트", "국악", "무용", "전시", "기타"] as const;
+const CULTURE_DTYPES = [
+  "연극",
+  "뮤지컬",
+  "오페라",
+  "음악",
+  "콘서트",
+  "국악",
+  "무용",
+  "전시",
+  "기타",
+] as const;
 
 // 채팅을 떠날 때의 스크롤 위치 — 뒤로 돌아왔을 때 제자리로 되돌리는 데만 쓴다.
 // 앱 안에서만 의미 있는 값이라 모듈 변수로 둔다(새로고침하면 사라진다).
@@ -63,6 +79,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
     regions,
     recommendation,
     errorMessage,
+    quotaExceeded,
     displayedSuggestion,
     showSuggestionChip,
     progressSteps,
@@ -78,7 +95,10 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
 
   // 내 질문 고치기 — 어느 말풍선을 고치는 중인지와 고치는 중인 문구.
   // 보내면 그 질문 뒤의 대화는 걷어내고 고친 질문부터 새로 이어진다(editTurn).
-  const [editing, setEditing] = useState<{ index: number; text: string } | null>(null);
+  const [editing, setEditing] = useState<{
+    index: number;
+    text: string;
+  } | null>(null);
   function submitEdit() {
     if (!editing || !editing.text.trim()) return;
     editTurn(editing.index, editing.text);
@@ -108,17 +128,24 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
   // 턴 수가 그때와 같으면 그 자리로 되돌린다. 턴이 늘었으면 평소처럼 맨 아래로.
   const turnCount = history.length;
   const [restoreY] = useState(() =>
-    lastChatScroll && lastChatScroll.turns === history.length ? lastChatScroll.y : null
+    lastChatScroll && lastChatScroll.turns === history.length
+      ? lastChatScroll.y
+      : null,
   );
   const [mountTurnCount] = useState(turnCount);
   useEffect(() => {
     if (turnCount === 0) return;
     if (restoreY !== null && turnCount === mountTurnCount) {
-      const id = requestAnimationFrame(() => window.scrollTo({ top: restoreY }));
+      const id = requestAnimationFrame(() =>
+        window.scrollTo({ top: restoreY }),
+      );
       return () => cancelAnimationFrame(id);
     }
     const id = requestAnimationFrame(() => {
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "smooth",
+      });
     });
     return () => cancelAnimationFrame(id);
   }, [turnCount, restoreY, mountTurnCount]);
@@ -128,7 +155,10 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
       // 화면이 아직 붙어 있어서 그 값(맨 위)이 기억됐다(실측). 주소가 이미 바뀌었으면
       // 이 화면의 스크롤이 아니므로 무시한다.
       if (window.location.pathname !== "/") return;
-      lastChatScroll = { turns: useAppStore.getState().history.length, y: window.scrollY };
+      lastChatScroll = {
+        turns: useAppStore.getState().history.length,
+        y: window.scrollY,
+      };
     }
     window.addEventListener("scroll", remember, { passive: true });
     return () => window.removeEventListener("scroll", remember);
@@ -218,7 +248,9 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
     return () => cancelAnimationFrame(id);
   }, [extrasOpen]);
 
-  const [cultureDtype, setCultureDtype] = useState<(typeof CULTURE_DTYPES)[number]>(CULTURE_DTYPES[0]);
+  const [cultureDtype, setCultureDtype] = useState<
+    (typeof CULTURE_DTYPES)[number]
+  >(CULTURE_DTYPES[0]);
   const [cultureKeyword, setCultureKeyword] = useState("");
   const cultureMutation = useMutation({ mutationFn: fetchCulturalEvents });
 
@@ -249,7 +281,12 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           </button>
         ) : (
           weatherQuery.data && (
-            <HourlyWeatherPopover regionName={shortRegionName(regions.find((r) => r.id === badgeRegionId)?.name ?? "")} weather={weatherQuery.data} />
+            <HourlyWeatherPopover
+              regionName={shortRegionName(
+                regions.find((r) => r.id === badgeRegionId)?.name ?? "",
+              )}
+              weather={weatherQuery.data}
+            />
           )
         )}
       </div>
@@ -258,227 +295,285 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           래퍼가 flex-1을 이어받으므로 아래 고정 입력창(mt-auto)도 그대로 동작한다. */}
       <div className="relative flex flex-1 flex-col px-5">
         {!inConversation && <HeroAtmosphere weather={weatherQuery.data} />}
-        <div className={`sk-under-overlay relative z-10 flex flex-1 flex-col ${inConversation ? "gap-3" : "gap-4"}`}>
-        {!inConversation && (
-          <>
-            {/* Hero — 이 두 덩이(제목 + 설명)를 기준으로 위아래를 크게 비운다.
+        <div
+          className={`sk-under-overlay relative z-10 flex flex-1 flex-col ${inConversation ? "gap-3" : "gap-4"}`}
+        >
+          {!inConversation && (
+            <>
+              {/* Hero — 이 두 덩이(제목 + 설명)를 기준으로 위아래를 크게 비운다.
                 화면에서 제일 먼저 읽히는 자리라 주변이 비어 있을수록 또렷하다. */}
-            {/* 크기·여백은 globals.css의 .sk-hero*가 들고 있다 — 유틸리티로 두면
+              {/* 크기·여백은 globals.css의 .sk-hero*가 들고 있다 — 유틸리티로 두면
                 Tailwind가 그 값을 생성 못 했을 때 제목이 16px로 내려앉는다(실측). */}
-            <div className="sk-enter sk-hero">
-              <h1 className="sk-hero-title">어디로 나가볼까요?</h1>
-              <p className="sk-hero-sub">
-                지역을 고르고 하고 싶은 걸 편하게 적어주세요.
-                <br />
-                날씨와 대기질을 함께 확인해서 코스를 추천해드려요.
-              </p>
-            </div>
+              <div className="sk-enter sk-hero">
+                <h1 className="sk-hero-title">어디로 나가볼까요?</h1>
+                <p className="sk-hero-sub">
+                  지역을 고르고 하고 싶은 걸 편하게 적어주세요.
+                  <br />
+                  날씨와 대기질을 함께 확인해서 코스를 추천해드려요.
+                </p>
+              </div>
 
-            {/* 날씨·대기질은 지역 선택 "위"에 둔다 — 아래에 두면 지역을 고르는 순간
+              {/* 날씨·대기질은 지역 선택 "위"에 둔다 — 아래에 두면 지역을 고르는 순간
                 이 줄이 새로 생기면서 입력창과 칩이 통째로 아래로 밀려난다.
                 위에 있으면 밀리는 건 제목 쪽 여백뿐이라 손이 가는 자리는 안 움직인다. */}
-            {!!regionId && (weatherQuery.data || airQualityQuery.data) && (
-              <div className="sk-panel sk-enter flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-[13px]">
-                {airQualityQuery.data && (
-                  <span className="flex items-center gap-1.5">
-                    <span className="sk-slot h-7 w-7"><Icon name="dust" className="h-[16px] w-[16px]" /></span>
-                    <span className="text-muted">미세먼지</span>
-                    <span className="font-semibold text-accent">{airQualityQuery.data.overallGrade}</span>
-                  </span>
-                )}
-                {weatherQuery.data && (
-                  <span className="flex items-center gap-1.5">
-                    <Icon name="sun" className="h-[18px] w-[18px] text-amber-400" />
-                    <span className="font-medium text-ink-soft">
-                      {weatherQuery.data.temperatureC !== null ? `${weatherQuery.data.temperatureC}°C · ` : ""}
-                      {weatherQuery.data.summary}
+              {!!regionId && (weatherQuery.data || airQualityQuery.data) && (
+                <div className="sk-panel sk-enter flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-[13px]">
+                  {airQualityQuery.data && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="sk-slot h-7 w-7">
+                        <Icon name="dust" className="h-[16px] w-[16px]" />
+                      </span>
+                      <span className="text-muted">미세먼지</span>
+                      <span className="font-semibold text-accent">
+                        {airQualityQuery.data.overallGrade}
+                      </span>
                     </span>
-                  </span>
-                )}
-              </div>
-            )}
+                  )}
+                  {weatherQuery.data && (
+                    <span className="flex items-center gap-1.5">
+                      <Icon
+                        name="sun"
+                        className="h-[18px] w-[18px] text-amber-400"
+                      />
+                      <span className="font-medium text-ink-soft">
+                        {weatherQuery.data.temperatureC !== null
+                          ? `${weatherQuery.data.temperatureC}°C · `
+                          : ""}
+                        {weatherQuery.data.summary}
+                      </span>
+                    </span>
+                  )}
+                </div>
+              )}
 
-            {/* 브라우저 기본 <select>는 열면 운영체제가 그린 목록이 떠서(파란 선택 막대,
+              {/* 브라우저 기본 <select>는 열면 운영체제가 그린 목록이 떠서(파란 선택 막대,
                 시스템 글꼴) 이 줄만 다른 앱처럼 보였다 — 조건 필터와 같은 방식의
                 우리 창으로 바꿨다. 고르는 값(regionId)은 그대로다. */}
-            <div className="sk-enter">
-              <RegionPicker
-                regions={regions}
-                value={effectiveRegionId}
-                onChange={setRegionId}
-                disabled={isPending}
-              />
-            </div>
+              <div className="sk-enter">
+                <RegionPicker
+                  regions={regions}
+                  value={effectiveRegionId}
+                  onChange={setRegionId}
+                  disabled={isPending}
+                />
+              </div>
+            </>
+          )}
 
-          </>
-        )}
-
-        {/* 스레드의 구조·데이터 흐름은 develop 그대로다(턴별 recommendations[i],
+          {/* 스레드의 구조·데이터 흐름은 develop 그대로다(턴별 recommendations[i],
             마지막 턴에만 현재 날씨/대기질). 바뀐 건 className뿐 — 40ms 간격으로
             올라오고(sk-stagger), 말풍선/패널/아바타가 SOCKET 조형을 따른다. */}
-        {inConversation && (
-          <div className="sk-stagger flex flex-col gap-4 pt-2">
-            {userTurns.map((turn, i) => {
-              const rec = recommendations[i];
-              const isLast = i === userTurns.length - 1;
-              const turnHasCourse = !!rec && !rec.needsMoreInfo && (rec.places?.length ?? 0) > 0;
-              return (
-                <div key={i} className="flex flex-col gap-3">
-                  {editing?.index === i ? (
-                    <form
-                      className="sk-edit-box sk-enter ml-auto flex w-[85%] flex-col gap-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        submitEdit();
-                      }}
-                    >
-                      <textarea
-                        autoFocus
-                        value={editing.text}
-                        onChange={(e) => setEditing({ index: i, text: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") setEditing(null);
-                          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                            e.preventDefault();
-                            submitEdit();
-                          }
+          {inConversation && (
+            <div className="sk-stagger flex flex-col gap-4 pt-2">
+              {userTurns.map((turn, i) => {
+                const rec = recommendations[i];
+                const isLast = i === userTurns.length - 1;
+                const turnHasCourse =
+                  !!rec && !rec.needsMoreInfo && (rec.places?.length ?? 0) > 0;
+                return (
+                  <div key={i} className="flex flex-col gap-3">
+                    {editing?.index === i ? (
+                      <form
+                        className="sk-edit-box sk-enter ml-auto flex w-[85%] flex-col gap-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          submitEdit();
                         }}
-                        rows={3}
-                        aria-label="질문 고치기"
-                        className="sk-edit-input"
-                      />
-                      {!isLast && (
-                        <p className="text-[11px] leading-snug text-muted">
-                          다시 보내면 이 질문 아래 대화는 지워지고 여기서부터 새로 이어져요.
-                        </p>
-                      )}
-                      <div className="flex justify-end gap-2">
-                        <button type="button" onClick={() => setEditing(null)} className="sk sk-edit-action">
-                          취소
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={!editing.text.trim() || isPending}
-                          className="sk sk-primary sk-edit-action"
-                        >
-                          다시 보내기
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <div className="sk-user-row flex items-end justify-end gap-1.5">
-                      {/* 답을 기다리는 중에는 고칠 수 없다 — 받는 중인 답이 어느 질문의
+                      >
+                        <textarea
+                          autoFocus
+                          value={editing.text}
+                          onChange={(e) =>
+                            setEditing({ index: i, text: e.target.value })
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") setEditing(null);
+                            if (
+                              e.key === "Enter" &&
+                              !e.shiftKey &&
+                              !e.nativeEvent.isComposing
+                            ) {
+                              e.preventDefault();
+                              submitEdit();
+                            }
+                          }}
+                          rows={3}
+                          aria-label="질문 고치기"
+                          className="sk-edit-input"
+                        />
+                        {!isLast && (
+                          <p className="text-[11px] leading-snug text-muted">
+                            다시 보내면 이 질문 아래 대화는 지워지고 여기서부터
+                            새로 이어져요.
+                          </p>
+                        )}
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(null)}
+                            className="sk sk-edit-action"
+                          >
+                            취소
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={!editing.text.trim() || isPending}
+                            className="sk sk-primary sk-edit-action"
+                          >
+                            다시 보내기
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="sk-user-row flex items-end justify-end gap-1.5">
+                        {/* 답을 기다리는 중에는 고칠 수 없다 — 받는 중인 답이 어느 질문의
                           답인지 헷갈린다. 끝나면(성공이든 실패든) 다시 뜬다. */}
-                      {!isPending && (
-                        <button
-                          type="button"
-                          onClick={() => setEditing({ index: i, text: turn.content })}
-                          aria-label="이 질문 고치기"
-                          title="질문 고치기"
-                          className="sk-edit-btn"
-                        >
-                          <Icon name="edit" className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      <div className="max-w-[85%] rounded-[16px_4px_3px_16px] bg-mint-bg px-4 py-2.5 text-[14px] leading-relaxed text-ink">
-                        {turn.content}
+                        {!isPending && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditing({ index: i, text: turn.content })
+                            }
+                            aria-label="이 질문 고치기"
+                            title="질문 고치기"
+                            className="sk-edit-btn"
+                          >
+                            <Icon name="edit" className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <div className="max-w-[85%] rounded-[16px_4px_3px_16px] bg-mint-bg px-4 py-2.5 text-[14px] leading-relaxed text-ink">
+                          {turn.content}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {rec && (
-                    <div className="flex items-start gap-2">
-                      <span className="sk-slot mt-0.5 h-7 w-7">
-                        <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
-                      </span>
-                      <div className="flex min-w-0 flex-1 flex-col gap-2">
-                        <span className="text-[12px] font-semibold text-muted">AI 추천</span>
-                        {rec.needsMoreInfo && (
-                          <div className="sk-panel border-accent/30 bg-mint-bg px-4 py-3.5">
-                            <p className="text-[14px] leading-relaxed text-ink">{rec.message}</p>
-                          </div>
-                        )}
-                        {turnHasCourse && (
-                          <>
-                            <CourseCard
-                              recommendation={rec}
-                              regionName={regionName}
-                              // 지난 턴의 그때 그 순간 날씨/대기질은 저장돼 있지 않다 —
-                              // 지금 값을 보여줘도 되는 건 가장 최근 턴뿐이다.
-                              weather={isLast ? weatherQuery.data : undefined}
-                              airQuality={isLast ? airQualityQuery.data : undefined}
-                              onOpenDetail={() => openCourseDetail(rec)}
-                            />
-                            {rec.message && (
-                              <div className="sk-panel px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft">
+                    )}
+                    {rec && (
+                      <div className="flex items-start gap-2">
+                        <span className="sk-slot mt-0.5 h-7 w-7">
+                          <Icon
+                            name="sparkle"
+                            className="h-4 w-4 text-mint-mid"
+                          />
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col gap-2">
+                          <span className="text-[12px] font-semibold text-muted">
+                            AI 추천
+                          </span>
+                          {rec.needsMoreInfo && (
+                            <div className="sk-panel border-accent/30 bg-mint-bg px-4 py-3.5">
+                              <p className="text-[14px] leading-relaxed text-ink">
                                 {rec.message}
-                              </div>
-                            )}
-                          </>
-                        )}
-                        {/* 정상으로 받은 답이어도 마음에 안 들 수 있다 — 이 답은 그대로 두고
+                              </p>
+                            </div>
+                          )}
+                          {turnHasCourse && (
+                            <>
+                              <CourseCard
+                                recommendation={rec}
+                                regionName={regionName}
+                                // 지난 턴의 그때 그 순간 날씨/대기질은 저장돼 있지 않다 —
+                                // 지금 값을 보여줘도 되는 건 가장 최근 턴뿐이다.
+                                weather={isLast ? weatherQuery.data : undefined}
+                                airQuality={
+                                  isLast ? airQualityQuery.data : undefined
+                                }
+                                onOpenDetail={() => openCourseDetail(rec)}
+                              />
+                              {rec.message && (
+                                <div className="sk-panel px-4 py-3.5 text-[13px] leading-relaxed text-ink-soft">
+                                  {rec.message}
+                                </div>
+                              )}
+                            </>
+                          )}
+                          {/* 정상으로 받은 답이어도 마음에 안 들 수 있다 — 이 답은 그대로 두고
                             "다른 곳으로 추천해줘"를 새 턴으로 붙인다(비교할 수 있게).
                             최신 답에만 둔다: 지난 답에서 갈라지는 건 질문 고치기로 한다. */}
-                        {isLast && !isPending && turnHasCourse && (
-                          <div className="flex justify-start">
-                            <button type="button" onClick={requestAnother} className="sk sk-notice-btn">
-                              <Icon name="retry" className="h-3.5 w-3.5" />
-                              다른 곳 추천
-                            </button>
-                          </div>
-                        )}
+                          {isLast && !isPending && turnHasCourse && (
+                            <div className="flex justify-start">
+                              <button
+                                type="button"
+                                onClick={requestAnother}
+                                className="sk sk-notice-btn"
+                              >
+                                <Icon name="retry" className="h-3.5 w-3.5" />
+                                다른 곳 추천
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    )}
+                  </div>
+                );
+              })}
 
-            {/* 조회 중 — 답변이 들어올 자리에 그대로 둔다(아바타·들여쓰기가 실제 답변과
+              {/* 조회 중 — 답변이 들어올 자리에 그대로 둔다(아바타·들여쓰기가 실제 답변과
                 같아서, 답이 오면 이 자리에 카드가 앉는다). 패널 위로 느린 스캔 밴드가
                 왕복하고, 단계가 하나 끝날 때마다 줄이 체크로 접히며 다음 줄이 열린다. */}
-            {isPending && (
-              <div className="flex items-start gap-2">
-                <span className="sk-slot mt-0.5 h-7 w-7">
-                  <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <span className="text-[12px] font-semibold text-muted">AI 추천</span>
-                  <RecommendProgress steps={progressSteps} />
-                  {/* 가끔 요청이 응답 없이 멈춘다 — 평소(10초 안팎)보다 한참 늦으면
+              {isPending && (
+                <div className="flex items-start gap-2">
+                  <span className="sk-slot mt-0.5 h-7 w-7">
+                    <Icon name="sparkle" className="h-4 w-4 text-mint-mid" />
+                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <span className="text-[12px] font-semibold text-muted">
+                      AI 추천
+                    </span>
+                    <RecommendProgress steps={progressSteps} />
+                    {/* 가끔 요청이 응답 없이 멈춘다 — 평소(10초 안팎)보다 한참 늦으면
                       기다리게만 두지 말고 다시 보낼 길을 연다. 먼저 보낸 요청은
                       늦게 도착해도 버려진다(useRecommendationFlow의 requestSeq). */}
-                  {isSlow && (
-                    <div className="sk-enter sk-notice">
-                      <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink-soft">
-                        응답이 평소보다 늦어요. 멈춘 것 같으면 다시 보내 보세요.
-                      </p>
-                      <button type="button" onClick={retryLast} className="sk sk-notice-btn">
-                        <Icon name="retry" className="h-3.5 w-3.5" />
-                        다시 시도
-                      </button>
-                    </div>
-                  )}
+                    {isSlow && (
+                      <div className="sk-enter sk-notice">
+                        <p className="min-w-0 flex-1 text-[13px] leading-snug text-ink-soft">
+                          응답이 평소보다 늦어요. 멈춘 것 같으면 다시 보내
+                          보세요.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={retryLast}
+                          className="sk sk-notice-btn"
+                        >
+                          <Icon name="retry" className="h-3.5 w-3.5" />
+                          다시 시도
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {/* 실패하면 원인 문구만 보여주고 끝이었다 — 같은 질문을 다시 쳐야 했다.
-            마지막 질문을 그대로 다시 보내는 버튼을 붙인다. */}
-        {errorMessage && !isPending && (
-          <div className="sk-enter sk-notice sk-notice-error" role="alert">
-            <p className="min-w-0 flex-1 text-[13px] leading-snug">{errorMessage}</p>
-            {userTurns.length > 0 && (
-              <button type="button" onClick={retryLast} className="sk sk-notice-btn">
-                <Icon name="retry" className="h-3.5 w-3.5" />
-                다시 시도
-              </button>
-            )}
-          </div>
-        )}
+          {/* 실패하면 원인을 보여준다.
+            질문 한도 초과면 다시 시도해도 같은 결과라 광고 화면으로 보내고,
+            일반 오류면 마지막 질문을 그대로 다시 보낼 수 있게 한다. */}
+          {errorMessage && !isPending && (
+            <div className="sk-enter sk-notice sk-notice-error" role="alert">
+              <p className="min-w-0 flex-1 text-[13px] leading-snug">
+                {errorMessage}
+              </p>
 
-        {/* 입력창 — 대화 중에는 화면 하단에 붙어 있어야 한다(스크롤로 사라지면
+              {quotaExceeded ? (
+                <Link href="/ads" className="sk sk-notice-btn">
+                  광고 보고 질문권 받기
+                </Link>
+              ) : (
+                userTurns.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={retryLast}
+                    className="sk sk-notice-btn"
+                  >
+                    <Icon name="retry" className="h-3.5 w-3.5" />
+                    다시 시도
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
+          {/* 입력창 — 대화 중에는 화면 하단에 붙어 있어야 한다(스크롤로 사라지면
             위로 기록을 읽다가 질문을 못 한다). position:sticky라 자리를 그대로
             차지하므로 별도 여백 계산이 필요 없고, 맨 아래까지 내리면 제자리에 앉는다.
             bottom은 탭바 높이(--sk-dock)에서 10px 빼서 아래끝이 탭바에 살짝 물리게
@@ -492,273 +587,331 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             화면 아래에서 --sk-dock-10px, 흘러갈 때(mt-auto)는 AppShell의 아래 여백
             --sk-dock+12px 위라서 22px 차이가 난다 — 답이 도착해 sticky로 바뀌는
             순간 입력창이 그만큼 튀어 보인다. lg에서는 탭바가 없어 0이다. */}
-        <div
-          className={
-            inConversation
-              ? "sticky bottom-[calc(var(--sk-dock)-10px+env(safe-area-inset-bottom))] z-10 -mx-5 mb-[-22px] mt-auto flex flex-col gap-2 border-t border-[var(--sk-line-soft)] bg-page/95 px-5 pb-3 pt-2.5 backdrop-blur lg:mb-0 lg:bottom-0"
-              : "flex flex-col gap-2 pt-2"
-          }
-        >
-          {showSuggestionChip && !input && (
-            <button
-              type="button"
-              onClick={() => {
-                acceptSuggestion();
-                focusInput();
-              }}
-              className="sk sk-on flex max-w-full items-center gap-1.5 self-start px-3.5 py-1.5 text-[13px]"
-            >
-              <Icon name="sparkle" className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 truncate">{displayedSuggestion}</span>
-            </button>
-          )}
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              sendMessage();
-            }}
-            className="sk-input flex items-center gap-2 p-1.5 pl-4"
+          <div
+            className={
+              inConversation
+                ? "sticky bottom-[calc(var(--sk-dock)-10px+env(safe-area-inset-bottom))] z-10 -mx-5 mb-[-22px] mt-auto flex flex-col gap-2 border-t border-[var(--sk-line-soft)] bg-page/95 px-5 pb-3 pt-2.5 backdrop-blur lg:mb-0 lg:bottom-0"
+                : "flex flex-col gap-2 pt-2"
+            }
           >
-            <div className="relative flex-1">
-              {/* 예전엔 제안 문장을 입력창 위에 흐리게 겹쳐 그려서, 이미 적힌 질문처럼
+            {showSuggestionChip && !input && (
+              <button
+                type="button"
+                onClick={() => {
+                  acceptSuggestion();
+                  focusInput();
+                }}
+                className="sk sk-on flex max-w-full items-center gap-1.5 self-start px-3.5 py-1.5 text-[13px]"
+              >
+                <Icon name="sparkle" className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 truncate">{displayedSuggestion}</span>
+              </button>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendMessage();
+              }}
+              className="sk-input flex items-center gap-2 p-1.5 pl-4"
+            >
+              <div className="relative flex-1">
+                {/* 예전엔 제안 문장을 입력창 위에 흐리게 겹쳐 그려서, 이미 적힌 질문처럼
                   보였다(그대로 보내면 빈 입력이라 아무 일도 없었다). 이제 진짜
                   placeholder만 둔다 — "예:"로 시작해서 예시라는 게 글자로 보인다. */}
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                disabled={isPending}
-                placeholder={inConversation ? "더 궁금한 걸 물어보세요" : "예: 여자친구랑 데이트할 만한 곳 있어?"}
-                aria-label="질문 입력"
-                className="relative w-full bg-transparent py-2 text-[15px] text-ink outline-none placeholder:text-muted/60 disabled:opacity-50"
-              />
-            </div>
-            {/* 비어 있으면 누를 수 없는 모양 — 누를 수 있어 보이는데 아무 일도 없는
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  disabled={isPending}
+                  placeholder={
+                    inConversation
+                      ? "더 궁금한 걸 물어보세요"
+                      : "예: 여자친구랑 데이트할 만한 곳 있어?"
+                  }
+                  aria-label="질문 입력"
+                  className="relative w-full bg-transparent py-2 text-[15px] text-ink outline-none placeholder:text-muted/60 disabled:opacity-50"
+                />
+              </div>
+              {/* 비어 있으면 누를 수 없는 모양 — 누를 수 있어 보이는데 아무 일도 없는
                 상태를 없앤다. */}
-            <button
-              type="submit"
-              disabled={isPending || !effectiveRegionId || !input.trim()}
-              aria-label="보내기"
-              className={`sk sk-primary sk-slot h-10 w-10 ${isPending ? "sk-loading" : ""}`}
-            >
-              <Icon name="send" className="h-[18px] w-[18px]" />
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={isPending || !effectiveRegionId || !input.trim()}
+                aria-label="보내기"
+                className={`sk sk-primary sk-slot h-10 w-10 ${isPending ? "sk-loading" : ""}`}
+              >
+                <Icon name="send" className="h-[18px] w-[18px]" />
+              </button>
+            </form>
 
-          {/* 지역을 안 고르면 보내기 버튼이 비활성이라 클릭도 Enter도 아무 일이 안 일어난다
+            {/* 지역을 안 고르면 보내기 버튼이 비활성이라 클릭도 Enter도 아무 일이 안 일어난다
               (비활성 submit 버튼은 Enter 암묵 제출까지 막는다) — 이유를 안 알려주면 앱이
               먹통인 걸로 보인다. 지역을 고르면 저절로 사라지는 파생 렌더링. */}
-          {!effectiveRegionId && input.trim() && (
-            <p className="px-4 text-[13px] text-red-600">위에서 지역을 먼저 선택해주세요.</p>
-          )}
+            {!effectiveRegionId && input.trim() && (
+              <p className="px-4 text-[13px] text-red-600">
+                위에서 지역을 먼저 선택해주세요.
+              </p>
+            )}
 
-          {/* sk-reel — 그냥 잘리는 가로 스크롤 대신 가장자리에서 녹아 사라지고,
+            {/* sk-reel — 그냥 잘리는 가로 스크롤 대신 가장자리에서 녹아 사라지고,
               들어오는 칩이 아래에서 솟아오른다. 아래 여백은 칩의 단차(그림자)가
               마스크에 잘리지 않을 만큼 둔다. */}
-          <div
-            className={`sk-reel sk-stagger gap-2 ${
-              inConversation ? `pb-2 pt-1 ${input ? "hidden" : ""}` : "pb-3 pt-1"
-            }`}
-          >
-            {inConversation
-              ? QUICK_REFINEMENTS.map((chip) => (
-                  <button
-                    key={chip.label}
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => fillInput(chip.text)}
-                    className="sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-medium text-ink-soft"
-                  >
-                    {chip.label}
-                  </button>
-                ))
-              : QUICK_PROMPTS.map((q) => (
-                  <button
-                    key={q.label}
-                    type="button"
-                    onClick={() => fillInput(q.text)}
-                    className="sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-medium text-ink-soft"
-                  >
-                    {q.icon ? (
-                      <Icon name={q.icon} className="h-3.5 w-3.5 text-mint-mid" />
-                    ) : (
-                      <span className="text-[13px] font-semibold text-mint-mid">₩</span>
-                    )}
-                    {q.label}
-                  </button>
-                ))}
+            <div
+              className={`sk-reel sk-stagger gap-2 ${
+                inConversation
+                  ? `pb-2 pt-1 ${input ? "hidden" : ""}`
+                  : "pb-3 pt-1"
+              }`}
+            >
+              {inConversation
+                ? QUICK_REFINEMENTS.map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => fillInput(chip.text)}
+                      className="sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-medium text-ink-soft"
+                    >
+                      {chip.label}
+                    </button>
+                  ))
+                : QUICK_PROMPTS.map((q) => (
+                    <button
+                      key={q.label}
+                      type="button"
+                      onClick={() => fillInput(q.text)}
+                      className="sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[13px] font-medium text-ink-soft"
+                    >
+                      {q.icon ? (
+                        <Icon
+                          name={q.icon}
+                          className="h-3.5 w-3.5 text-mint-mid"
+                        />
+                      ) : (
+                        <span className="text-[13px] font-semibold text-mint-mid">
+                          ₩
+                        </span>
+                      )}
+                      {q.label}
+                    </button>
+                  ))}
+            </div>
           </div>
-        </div>
 
-        {!inConversation && (
-        <>
-        {/* 장소·문화행사 검색은 "가끔 쓰는" 기능인데 늘 펼쳐져 있어서 홈이 길고
+          {!inConversation && (
+            <>
+              {/* 장소·문화행사 검색은 "가끔 쓰는" 기능인데 늘 펼쳐져 있어서 홈이 길고
             꽉 차 보였다. 구분선 가운데 문구를 그대로 버튼으로 바꿔서 기본은 접어두고,
             필요할 때만 펼친다(자리·문구·순서는 그대로). */}
-        <div className="mt-6 flex items-center gap-3">
-          <span className="h-px flex-1 bg-hairline" />
-          <button
-            type="button"
-            onClick={() => setExtrasOpen((v) => !v)}
-            aria-expanded={extrasOpen}
-            aria-controls="home-extras"
-            className={`sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[12px] ${
-              extrasOpen ? "sk-on" : "font-medium text-muted"
-            }`}
-          >
-            이렇게도 찾아보세요
-            <Icon
-              name="down"
-              className={`h-3.5 w-3.5 transition-transform duration-200 ${extrasOpen ? "-rotate-180" : ""}`}
-            />
-          </button>
-          <span className="h-px flex-1 bg-hairline" />
-        </div>
-
-        {extrasOpen && (
-        <div
-          id="home-extras"
-          ref={extrasRef}
-          className="sk-stagger flex flex-col gap-4"
-        >
-
-        <div className="sk-panel sk-enter flex flex-col gap-2.5 p-4">
-          <div className="flex items-center gap-3">
-            <span className="sk-slot h-9 w-9">
-              <Icon name="pin" className="h-[18px] w-[18px] text-accent" />
-            </span>
-            <div>
-              <h2 className="text-[15px] font-semibold text-ink">장소 검색</h2>
-              <p className="text-[12px] text-muted">가고 싶은 장소를 바로 찾아보세요.</p>
-            </div>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const q = placeQuery.trim();
-              if (q) placesMutation.mutate(q);
-            }}
-            className="flex gap-2"
-          >
-            <input
-              value={placeQuery}
-              onChange={(e) => setPlaceQuery(e.target.value)}
-              placeholder="장소 이름으로 검색 (예: 대구미술관)"
-              className="sk-input min-w-0 flex-1 px-3.5 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
-            />
-            <button
-              type="submit"
-              disabled={placesMutation.isPending || !placeQuery.trim()}
-              className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14px] ${placesMutation.isPending ? "sk-loading" : ""}`}
-            >
-              검색
-            </button>
-          </form>
-          {placesMutation.isPending && <p className="px-1 text-xs text-muted">검색 중...</p>}
-          {placesMutation.data && (
-            <div className="sk-stagger flex flex-col gap-2">
-              {placesMutation.data.length === 0 && (
-                <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
-              )}
-              {placesMutation.data.map((p) => (
-                <Link
-                  key={p.id}
-                  href={`/place/${p.id}`}
-                  className="sk-panel block px-4 py-3 text-left"
+              <div className="mt-6 flex items-center gap-3">
+                <span className="h-px flex-1 bg-hairline" />
+                <button
+                  type="button"
+                  onClick={() => setExtrasOpen((v) => !v)}
+                  aria-expanded={extrasOpen}
+                  aria-controls="home-extras"
+                  className={`sk flex shrink-0 items-center gap-1.5 px-3.5 py-1.5 text-[12px] ${
+                    extrasOpen ? "sk-on" : "font-medium text-muted"
+                  }`}
                 >
-                  <div className="text-[15px] font-semibold text-ink">{p.name}</div>
-                  {p.roadAddress && <div className="text-[13px] text-muted">{p.roadAddress}</div>}
-                  {p.categorySummary && (
-                    <div className="mt-0.5 text-[12px] text-muted/80">{p.categorySummary}</div>
-                  )}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+                  이렇게도 찾아보세요
+                  <Icon
+                    name="down"
+                    className={`h-3.5 w-3.5 transition-transform duration-200 ${extrasOpen ? "-rotate-180" : ""}`}
+                  />
+                </button>
+                <span className="h-px flex-1 bg-hairline" />
+              </div>
 
-        <div className="sk-panel sk-enter flex flex-col gap-2.5 p-4">
-          <div className="flex items-center gap-3">
-            <span className="sk-slot h-9 w-9">
-              <Icon name="calendar" className="h-[18px] w-[18px] text-accent" />
-            </span>
-            <div>
-              <h2 className="text-[15px] font-semibold text-ink">문화행사 검색</h2>
-              <p className="text-[12px] text-muted">전국의 전시, 공연, 축제 정보를 찾아보세요.</p>
-            </div>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              cultureMutation.mutate({ dtype: cultureDtype, keyword: cultureKeyword.trim() });
-            }}
-            className="flex gap-2"
-          >
-            <select
-              value={cultureDtype}
-              onChange={(e) => setCultureDtype(e.target.value as (typeof CULTURE_DTYPES)[number])}
-              className="sk-input shrink-0 px-3 py-2.5 text-[14px] font-medium text-ink-soft outline-none"
-            >
-              {CULTURE_DTYPES.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            <input
-              value={cultureKeyword}
-              onChange={(e) => setCultureKeyword(e.target.value)}
-              placeholder="제목 검색어 (선택)"
-              className="sk-input min-w-0 flex-1 px-3.5 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
-            />
-            <button
-              type="submit"
-              disabled={cultureMutation.isPending}
-              className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14px] ${cultureMutation.isPending ? "sk-loading" : ""}`}
-            >
-              검색
-            </button>
-          </form>
-          {cultureMutation.isPending && <p className="px-1 text-xs text-muted">검색 중...</p>}
-          {cultureMutation.data && (
-            <div className="sk-stagger flex flex-col gap-2">
-              {cultureMutation.data.length === 0 && (
-                <p className="px-1 text-xs text-muted">검색 결과가 없습니다.</p>
-              )}
-              {cultureMutation.data.map((event, i) =>
-                event.url ? (
-                  <a
-                    key={i}
-                    href={event.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="sk-panel flex items-center gap-2 px-4 py-3"
-                  >
-                    <div className="flex-1">
-                      <div className="text-[15px] font-semibold text-ink">{event.title}</div>
-                      <div className="text-[13px] text-muted">
-                        {event.eventSite} · {event.eventPeriod}
+              {extrasOpen && (
+                <div
+                  id="home-extras"
+                  ref={extrasRef}
+                  className="sk-stagger flex flex-col gap-4"
+                >
+                  <div className="sk-panel sk-enter flex flex-col gap-2.5 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="sk-slot h-9 w-9">
+                        <Icon
+                          name="pin"
+                          className="h-[18px] w-[18px] text-accent"
+                        />
+                      </span>
+                      <div>
+                        <h2 className="text-[15px] font-semibold text-ink">
+                          장소 검색
+                        </h2>
+                        <p className="text-[12px] text-muted">
+                          가고 싶은 장소를 바로 찾아보세요.
+                        </p>
                       </div>
                     </div>
-                    <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />
-                  </a>
-                ) : (
-                  <div key={i} className="sk-panel px-4 py-3">
-                    <div className="text-[15px] font-semibold text-ink">{event.title}</div>
-                    <div className="text-[13px] text-muted">
-                      {event.eventSite} · {event.eventPeriod}
-                    </div>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const q = placeQuery.trim();
+                        if (q) placesMutation.mutate(q);
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        value={placeQuery}
+                        onChange={(e) => setPlaceQuery(e.target.value)}
+                        placeholder="장소 이름으로 검색 (예: 대구미술관)"
+                        className="sk-input min-w-0 flex-1 px-3.5 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
+                      />
+                      <button
+                        type="submit"
+                        disabled={
+                          placesMutation.isPending || !placeQuery.trim()
+                        }
+                        className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14px] ${placesMutation.isPending ? "sk-loading" : ""}`}
+                      >
+                        검색
+                      </button>
+                    </form>
+                    {placesMutation.isPending && (
+                      <p className="px-1 text-xs text-muted">검색 중...</p>
+                    )}
+                    {placesMutation.data && (
+                      <div className="sk-stagger flex flex-col gap-2">
+                        {placesMutation.data.length === 0 && (
+                          <p className="px-1 text-xs text-muted">
+                            검색 결과가 없습니다.
+                          </p>
+                        )}
+                        {placesMutation.data.map((p) => (
+                          <Link
+                            key={p.id}
+                            href={`/place/${p.id}`}
+                            className="sk-panel block px-4 py-3 text-left"
+                          >
+                            <div className="text-[15px] font-semibold text-ink">
+                              {p.name}
+                            </div>
+                            {p.roadAddress && (
+                              <div className="text-[13px] text-muted">
+                                {p.roadAddress}
+                              </div>
+                            )}
+                            {p.categorySummary && (
+                              <div className="mt-0.5 text-[12px] text-muted/80">
+                                {p.categorySummary}
+                              </div>
+                            )}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )
+
+                  <div className="sk-panel sk-enter flex flex-col gap-2.5 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="sk-slot h-9 w-9">
+                        <Icon
+                          name="calendar"
+                          className="h-[18px] w-[18px] text-accent"
+                        />
+                      </span>
+                      <div>
+                        <h2 className="text-[15px] font-semibold text-ink">
+                          문화행사 검색
+                        </h2>
+                        <p className="text-[12px] text-muted">
+                          전국의 전시, 공연, 축제 정보를 찾아보세요.
+                        </p>
+                      </div>
+                    </div>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        cultureMutation.mutate({
+                          dtype: cultureDtype,
+                          keyword: cultureKeyword.trim(),
+                        });
+                      }}
+                      className="flex gap-2"
+                    >
+                      <select
+                        value={cultureDtype}
+                        onChange={(e) =>
+                          setCultureDtype(
+                            e.target.value as (typeof CULTURE_DTYPES)[number],
+                          )
+                        }
+                        className="sk-input shrink-0 px-3 py-2.5 text-[14px] font-medium text-ink-soft outline-none"
+                      >
+                        {CULTURE_DTYPES.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={cultureKeyword}
+                        onChange={(e) => setCultureKeyword(e.target.value)}
+                        placeholder="제목 검색어 (선택)"
+                        className="sk-input min-w-0 flex-1 px-3.5 py-2.5 text-[14px] text-ink outline-none placeholder:text-muted/60"
+                      />
+                      <button
+                        type="submit"
+                        disabled={cultureMutation.isPending}
+                        className={`sk sk-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14px] ${cultureMutation.isPending ? "sk-loading" : ""}`}
+                      >
+                        검색
+                      </button>
+                    </form>
+                    {cultureMutation.isPending && (
+                      <p className="px-1 text-xs text-muted">검색 중...</p>
+                    )}
+                    {cultureMutation.data && (
+                      <div className="sk-stagger flex flex-col gap-2">
+                        {cultureMutation.data.length === 0 && (
+                          <p className="px-1 text-xs text-muted">
+                            검색 결과가 없습니다.
+                          </p>
+                        )}
+                        {cultureMutation.data.map((event, i) =>
+                          event.url ? (
+                            <a
+                              key={i}
+                              href={event.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="sk-panel flex items-center gap-2 px-4 py-3"
+                            >
+                              <div className="flex-1">
+                                <div className="text-[15px] font-semibold text-ink">
+                                  {event.title}
+                                </div>
+                                <div className="text-[13px] text-muted">
+                                  {event.eventSite} · {event.eventPeriod}
+                                </div>
+                              </div>
+                              <Icon
+                                name="next"
+                                className="h-5 w-5 shrink-0 text-slate-300"
+                              />
+                            </a>
+                          ) : (
+                            <div key={i} className="sk-panel px-4 py-3">
+                              <div className="text-[15px] font-semibold text-ink">
+                                {event.title}
+                              </div>
+                              <div className="text-[13px] text-muted">
+                                {event.eventSite} · {event.eventPeriod}
+                              </div>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
-            </div>
+            </>
           )}
-        </div>
-        </div>
-        )}
-        </>
-        )}
         </div>
       </div>
     </>
