@@ -17,12 +17,14 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 // 남아야 하므로 FK 없이 그냥 값만 저장하고(스키마의 admin_action_logs 주석 참고),
 // targetEmail을 스냅샷으로 같이 남겨서 삭제된 계정도 로그만 보고 알아볼 수 있게 한다.
 // request.url은 리버스 프록시가 Host 헤더를 그대로 넘기지 않으면 백엔드가 바인딩한
-// 내부 주소(예: localhost:4000)로 나온다. NextAuth(trustHost:true)가 보는 것과 같은
-// x-forwarded-* 헤더를 우선해서 절대 URL을 만든다.
+// 내부 주소(예: localhost:4000)로 나온다. x-forwarded-host를 우선해서 절대 URL을
+// 만든다. x-forwarded-proto는 안 쓴다 — nginx가 자신과 백엔드 사이의 내부 연결
+// 스킴(보통 http)을 그대로 넘기는 경우가 흔해서(실측: 이 서버가 그랬다) 못 믿는다.
+// x-forwarded-host가 있다는 것 자체가 이 프록시를 거쳤다는 신호이고, 이 배포는
+// 프록시 바깥으로 http를 노출하지 않으므로 그때는 그냥 https로 확정한다.
 export function absoluteUrlFromRequest(request: Request, path: string): URL {
   const forwardedHost = request.headers.get("x-forwarded-host");
-  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
-  const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : new URL(request.url).origin;
+  const origin = forwardedHost ? `https://${forwardedHost}` : new URL(request.url).origin;
   return new URL(path, origin);
 }
 
