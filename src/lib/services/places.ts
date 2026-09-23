@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateDataSource } from "./shared";
 import { pickBestPlaceMatch, pickConfidentPlaceMatch, pickRegionForAddress, rankPlaceMatches, type PlaceMatchHint } from "./matching";
 import { fetchPlaceImage } from "@/lib/tools/tourApi";
+import { fetchWikipediaImage } from "@/lib/tools/wikipedia";
 import { DAEGU_DISTRICTS } from "@/lib/tools/parking";
 import type { Place } from "../../../generated/prisma/client";
 import { coordinate } from "../coordinates";
@@ -191,7 +192,9 @@ async function ensurePlaceImage(place: Place, regionName: string | null): Promis
   if (existing) return;
 
   try {
-    const image = await fetchPlaceImage(place.name, regionName);
+    // 위키백과에 문서가 있는 유명한 곳이면(대구미술관 등) 그 대표 사진을 우선 쓴다 —
+    // 사람이 큐레이션한 사진이라 TourAPI 갤러리보다 신뢰도가 높다. 없으면 기존 로직.
+    const image = (await fetchWikipediaImage(place.name)) ?? (await fetchPlaceImage(place.name, regionName));
     if (!image) return;
     await prisma.placeImage.create({
       data: {
