@@ -56,17 +56,16 @@ export function CourseStopList({
                 </div>
                 <Icon name="next" className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
               </div>
-              {/* 카테고리·머무는 시간·요금을 이름 아래 한 줄로 모은다 — 값이 있는 것만 뜬다 */}
-              {(categoryLabel || p.visitDuration || p.fee) && (
+              {/* 카테고리·머무는 시간을 이름 아래 한 줄로 모은다 — 값이 있는 것만 뜬다.
+                  요금은 여기 안 보여준다 — TourAPI 원문이 "[개인] - 성인 1,000원 · 청소년 /
+                  대학생 / …" 식으로 길어서 목록 카드를 몇 줄씩 잡아먹는다. 상세 화면
+                  (DetailScreen)에는 그대로 나온다. */}
+              {(categoryLabel || p.visitDuration) && (
                 <div className="mt-2 flex flex-wrap items-center gap-1">
                   {categoryLabel && <span className="sk-tag">{categoryLabel}</span>}
-                  {/* 머무는 시간·요금은 LLM이 준 문장이라 길이를 보장할 수 없다
-                      ("[개인] - 성인 1,000원 · 청소년 / 대학생 / …") — 줄바꿈을 허용해야
-                      태그 하나가 카드보다 넓어져 화면을 가로로 밀지 않는다. */}
                   {p.visitDuration && (
                     <span className="sk-tag sk-tag-mute sk-tag-flow">{p.visitDuration}</span>
                   )}
-                  {p.fee && <span className="sk-tag sk-tag-mute sk-tag-flow">{p.fee}</span>}
                 </div>
               )}
             </div>
