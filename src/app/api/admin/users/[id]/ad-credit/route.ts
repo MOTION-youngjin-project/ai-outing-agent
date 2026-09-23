@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { isAdminEmail, logAdminAction } from "@/lib/admin";
+import { absoluteUrlFromRequest, isAdminEmail, logAdminAction } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const target = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-  if (!target) return NextResponse.redirect(new URL("/admin", request.url));
+  if (!target) return NextResponse.redirect(absoluteUrlFromRequest(request, "/admin"));
 
   const form = await request.formData();
   const action = form.get("action");
@@ -51,5 +51,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "알 수 없는 동작입니다." }, { status: 400 });
   }
 
-  return NextResponse.redirect(new URL(`/admin/users/${id}`, request.url));
+  return NextResponse.redirect(absoluteUrlFromRequest(request, `/admin/users/${id}`));
 }
