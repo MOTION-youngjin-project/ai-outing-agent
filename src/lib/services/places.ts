@@ -85,7 +85,9 @@ export interface CachedPlace {
 // ensurePlaceImage가 채워둔 대표 이미지를 꺼내온다 — saved-places/route.ts가 이미 쓰던
 // thumbnailUrl 우선, 없으면 originalUrl 패턴을 여기로 모아서 다른 호출부도 같이 쓴다.
 export async function getPlaceImageUrl(placeId: bigint): Promise<string | null> {
-  const image = await prisma.placeImage.findFirst({ where: { placeId } });
+  // orderBy 없이 findFirst만 쓰면 저장 순서가 우연히 대표(isPrimary)가 아닌 이미지를
+  // 앞세울 수 있다 — sortOrder(0이 대표)로 명시해서 항상 대표 이미지를 돌려준다.
+  const image = await prisma.placeImage.findFirst({ where: { placeId }, orderBy: { sortOrder: "asc" } });
   return image?.thumbnailUrl ?? image?.originalUrl ?? null;
 }
 
