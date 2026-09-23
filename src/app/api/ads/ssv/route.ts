@@ -19,18 +19,32 @@ export async function GET(req: NextRequest) {
   const customData = params.get("custom_data");
 
   if (!keyId || !signature || !transactionId) {
+    console.error("SSV 콜백 필수 파라미터 누락:", Object.fromEntries(params));
     return NextResponse.json({ error: "missing params" }, { status: 400 });
   }
 
-  const owner = parseSsvOwner(customData);
-  if (!owner) return NextResponse.json({ error: "unknown owner" }, { status: 400 });
-
-  const pem = await fetchSsvPublicKey(keyId).catch(() => null);
-  if (!pem) return NextResponse.json({ error: "unknown key" }, { status: 400 });
+  const pem = await fetchSsvPublicKey(keyId).catch((err) => {
+    console.error("SSV 공개키 조회 실패:", err);
+    return null;
+  });
+  if (!pem) {
+    console.error("SSV 알 수 없는 key_id:", keyId);
+    return NextResponse.json({ error: "unknown key" }, { status: 400 });
+  }
 
   const rawQuery = url.search.slice(1);
   if (!verifySsvSignature(rawQuery, signature, pem)) {
+    console.error("SSV 서명 검증 실패:", rawQuery);
     return NextResponse.json({ error: "invalid signature" }, { status: 400 });
+  }
+
+  // 서명은 유효함(구글이 실제로 보낸 콜백) — custom_data가 없거나 형식이 안 맞으면
+  // 누구에게 줄지 몰라 크레딧만 못 준다. 콜백 자체는 정상 처리된 것이므로 200을
+  // 돌려준다(AdMob 콘솔의 "URL 확인" 테스트도 custom_data 없이 호출한다).
+  const owner = parseSsvOwner(customData);
+  if (!owner) {
+    console.warn("SSV 콜백에 유효한 custom_data 없음 — 크레딧 미지급:", { transactionId, customData });
+    return NextResponse.json({ ok: true });
   }
 
   try {
