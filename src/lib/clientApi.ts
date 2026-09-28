@@ -434,3 +434,12 @@ export async function postSuggest(history: ChatTurn[]): Promise<string | null> {
   const data = await res.json();
   return data.suggestion ?? null;
 }
+
+// 대화의 첫 턴 응답 직후에만 호출한다 — 사이드바 "대화 기록" 제목을 AI 요약으로 채운다.
+export async function postConversationTitle(agentRunId: string): Promise<void> {
+  await fetch("/api/conversations/title", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agentRunId }),
+  });
+}

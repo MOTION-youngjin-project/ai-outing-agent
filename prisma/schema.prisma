@@ -510,6 +510,9 @@ model AgentRun {
   // 매 turn마다 그대로 실어보낸다. 이 컬럼 도입 전 행은 전부 null로 남고(백필 없음),
   // 그룹핑 쪽 애플리케이션 코드가 null이면 그 행의 id 자체를 대체 키로 취급한다.
   conversationId       String?               @map("conversation_id") @db.Char(36)
+  // 대화의 첫 turn에서만 AI가 채운다(사이드바 "대화 기록" 제목용) — 이후 turn은
+  // null로 둔다. 실패해도 조용히 null로 남고, 그러면 사이드바가 userQuery로 대체한다.
+  title                String?               @db.VarChar(80)
   requestMode          RequestMode           @map("request_mode")
   currentRegionId      BigInt?               @map("current_region_id") @db.UnsignedBigInt
   environmentMode      EnvironmentMode?      @map("environment_mode")

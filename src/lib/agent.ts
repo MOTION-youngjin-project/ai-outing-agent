@@ -405,3 +405,36 @@ export async function suggestNextMessage(history: ChatTurn[]): Promise<string> {
   }
   return "";
 }
+
+const TITLE_SYSTEM_PROMPT =
+  "다음은 나들이 추천 AI에게 사용자가 보낸 첫 질문이다. 이 대화를 사이드바 목록에서 구분할 짧은 제목을 " +
+  "10자 내외로 만들어라. 질문을 그대로 반복하지 말고 핵심만 요약해라. 따옴표·마침표·설명 없이 제목 하나만 출력해라.";
+
+// 사이드바 "대화 기록" 제목. 대화의 첫 질문 하나만 보고 짧게 요약한다(ChatGPT류 UX와
+// 동일). 실패해도 조용히 빈 문자열 — 호출부가 원래 질문 원문으로 대체한다.
+export async function summarizeConversationTitle(firstUserMessage: string): Promise<string> {
+  for (const model of MODEL_FALLBACK_CHAIN) {
+    if (shouldSkipForCooldown(model)) continue;
+
+    const llm = new ChatGoogleGenerativeAI({
+      model,
+      apiKey: process.env.GEMINI_API_KEY,
+      temperature: 0.3,
+    });
+
+    try {
+      const result = await withTimeout(
+        llm.invoke([
+          { role: "system", content: TITLE_SYSTEM_PROMPT },
+          { role: "user", content: firstUserMessage },
+        ]),
+        10000
+      );
+      return (result.content as string).trim().slice(0, 80);
+    } catch (err) {
+      if (!isRetryableModelError(err)) return "";
+      markCooldown(model);
+    }
+  }
+  return "";
+}
