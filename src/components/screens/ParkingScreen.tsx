@@ -161,6 +161,7 @@ export function ParkingScreen({
             controlsAnimated={!dragging}
             center={parkingQuery.data.destination}
             destinationLabel={place.name}
+            bottomInsetRatio={SNAP_PEEK}
             spots={parkingQuery.data.spots
               .map((s, i) => ({ ...s, order: i + 1 }))
               .filter((s) => s.latitude !== null && s.longitude !== null)

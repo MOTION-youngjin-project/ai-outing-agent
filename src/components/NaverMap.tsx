@@ -136,6 +136,7 @@ export function NaverMap({
   controlsAnimated = true,
   selectedId,
   onSelect,
+  bottomInsetRatio,
 }: {
   center: { latitude: number; longitude: number };
   // MapScreen(코스 지도)처럼 정류지 전부를 spots 번호 배지로만 보여줄 땐 별도 목적지
@@ -158,6 +159,11 @@ export function NaverMap({
   // 주차장 목록과 선택을 맞출 때만 넘긴다(제어형). 안 넘기면 지도가 자체 상태로 토글한다.
   selectedId?: string | null;
   onSelect?: (id: string) => void;
+  // 지도 위에 얹히는 바텀시트가 초기 상태에서 컨테이너 아래쪽을 가리는 비율(0~1).
+  // fitBounds는 시트 존재를 모르고 컨테이너 전체 기준으로 마커를 배치하므로, 이걸
+  // 안 넘기면 목적지/주차장 마커가 시트 뒤에 가려질 수 있다(주차장이 목적지보다 아래
+  // 방향에 몰려 있으면 특히 잘 생김 — 2026-09-28 실사용자 리포트).
+  bottomInsetRatio?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
@@ -306,8 +312,13 @@ export function NaverMap({
         // 목적지 기준 고정 줌 대신, 목적지+모든 주차장이 한 화면에 들어오도록 자동 조정
         // (주차장이 5km+ 떨어져 있어 마커가 화면 밖으로 벗어나는 문제 방지). 위쪽
         // 여백(40px)은 목적지 마커 라벨 pill이 뷰포트 경계에서 잘리는 문제 방지용.
+        // 아래쪽 여백은 bottomInsetRatio만큼 더 준다 — 안 그러면 fitBounds가 컨테이너
+        // 전체 기준으로 마커를 배치해서, 그 위에 얹힌 바텀시트가 목적지/주차장 마커를
+        // 그대로 가려버린다(주차장이 목적지보다 아래쪽에 몰려 있을 때 특히 잘 드러남).
         if (spots.length > 0 || origin || (routePath && routePath.length > 1)) {
-          map.fitBounds(bounds, { top: 40, right: 20, bottom: 20, left: 20 });
+          const containerHeight = containerRef.current?.clientHeight ?? 0;
+          const bottom = 20 + containerHeight * (bottomInsetRatio ?? 0);
+          map.fitBounds(bounds, { top: 40, right: 20, bottom, left: 20 });
         }
 
         // SDK 로드 전에 이미 선택된 주차장이 있었으면(목록에서 들어온 경우) 여기서 반영한다.
