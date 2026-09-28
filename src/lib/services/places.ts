@@ -88,7 +88,8 @@ export interface CachedPlace {
 export async function getPlaceImageUrl(placeId: bigint): Promise<string | null> {
   // orderBy 없이 findFirst만 쓰면 저장 순서가 우연히 대표(isPrimary)가 아닌 이미지를
   // 앞세울 수 있다 — sortOrder(0이 대표)로 명시해서 항상 대표 이미지를 돌려준다.
-  const image = await prisma.placeImage.findFirst({ where: { placeId }, orderBy: { sortOrder: "asc" } });
+  // hiddenAt이 있으면(신고 누적으로 관리자가 숨김) 다음 순번 사진으로 넘어간다.
+  const image = await prisma.placeImage.findFirst({ where: { placeId, hiddenAt: null }, orderBy: { sortOrder: "asc" } });
   return image?.thumbnailUrl ?? image?.originalUrl ?? null;
 }
 

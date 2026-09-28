@@ -226,6 +226,11 @@ export async function deleteSavedCourse(publicId: string): Promise<boolean> {
   return res.ok;
 }
 
+export async function reportPlaceImage(placeId: string): Promise<boolean> {
+  const res = await fetch(`/api/places/${encodeURIComponent(placeId)}/report-image`, { method: "POST" });
+  return res.ok;
+}
+
 export async function fetchPreferences(): Promise<string[]> {
   const res = await fetch("/api/preferences");
   if (!res.ok) return [];
