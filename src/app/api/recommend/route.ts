@@ -94,8 +94,11 @@ export async function POST(req: NextRequest) {
         }
         emit({ type: "result", result });
       } catch (err) {
+        // err.message를 그대로 보내지 않는다 — Gemini/Prisma 등 내부 예외 원문이 그대로
+        // 노출된 적이 있었다("[GoogleGenerativeAI Error]: ... 503 Service Unavailable" 등,
+        // 2026-09-28 실사용자 리포트). 원인은 로그로만 남기고 사용자에겐 고정 문구만 보낸다.
         console.error(err);
-        emit({ type: "error", message: err instanceof Error ? err.message : "추천 생성 중 오류가 발생했습니다." });
+        emit({ type: "error", message: "추천을 만드는 중 문제가 생겼어요. 잠시 후 다시 시도해주세요." });
       } finally {
         closed = true;
         controller.close();
