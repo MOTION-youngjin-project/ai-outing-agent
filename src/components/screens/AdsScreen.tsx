@@ -169,12 +169,24 @@ export function AdsScreen({ quota, customData }: { quota: AdQuotaState; customDa
         </div>
 
         {isNativeApp ? (
-          <button
-            onClick={showNativeAd}
-            className="rounded-full bg-cta py-3 text-[15px] font-semibold text-white"
-          >
-            광고 보고 질문권 받기
-          </button>
+          customData ? (
+            <button
+              onClick={showNativeAd}
+              className="rounded-full bg-cta py-3 text-[15px] font-semibold text-white"
+            >
+              광고 보고 질문권 받기
+            </button>
+          ) : (
+            // customData(로그인 user:<id> 또는 게스트 guest:<쿠키해시>)가 없으면 SSV
+            // 콜백이 누구에게 적립할지 알 수 없어 광고를 열어도 보상을 못 받는다 —
+            // 버튼을 누르게 해두고 "잠시 후 다시 시도"만 반복 표시하는 대신(눌러도
+            // 매번 똑같이 막히는 걸 "일시적 오류"로 오해하게 만든다), 처음부터
+            // 비활성으로 두고 원인을 알려준다. 새로고침하면 서버가 쿠키를 다시 읽어
+            // 보통 해결된다.
+            <div className="rounded-full bg-slate-100 py-3 text-center text-[15px] font-semibold text-muted">
+              페이지를 새로고침한 뒤 다시 시도해주세요
+            </div>
+          )
         ) : watching ? (
           <div className="sk-panel px-4 py-4">
             <AdUnit />
