@@ -79,13 +79,27 @@ export function ParkingScreen({
 
   // 지도 위 바텀시트(목적지 좌표 있음)와 목록만 보여주는 폴백(목적지 좌표 없음) 둘 다
   // 같은 항목 UI를 쓴다.
+  // 상세보기 버튼은 예전엔 목록 위에 항상 따로 떠 있었다(스크롤하면 목록과 멀어져서
+  // 뭘 상세보기하는 건지 헷갈리고, 시트를 내리면 목록과 함께 안 보였다) — 이제 선택된
+  // 항목 자신의 오른쪽에서만, 선택된 동안만 생긴다. 항목 전체가 버튼이면 그 안에
+  // 진짜 버튼을 또 넣을 수 없어서(중첩 button은 무효) 바깥을 div+role=button으로 바꿨다.
   function ParkingSpotItem({ spot, index }: { spot: ParkingSpotWithDistance; index: number }) {
     const occ = occupancyLabel(spot);
+    const selected = selectedId === spot.id;
+    function select() {
+      setSelectedId(spot.id);
+      router.replace(`${placeHref}/parking?selected=${encodeURIComponent(spot.id)}`, { scroll: false });
+    }
     return (
-      <button
-        aria-pressed={selectedId === spot.id}
-        onClick={() => { setSelectedId(spot.id); router.replace(`${placeHref}/parking?selected=${encodeURIComponent(spot.id)}`, { scroll: false }); }}
-        className="flex w-full items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)] ring-1 ring-hairline"
+      <div
+        role="button"
+        tabIndex={0}
+        aria-pressed={selected}
+        onClick={select}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); }
+        }}
+        className="flex w-full cursor-pointer items-start gap-3 rounded-2xl bg-white px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(17,24,39,0.05)] ring-1 ring-hairline"
       >
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-mint-soft text-[13px] font-bold text-mint-mid">
           {index + 1}
@@ -105,13 +119,22 @@ export function ParkingScreen({
               (spot.walkMinutes !== null ? ` · 운영 ${spot.operatingHours}` : `운영 ${spot.operatingHours}`)}
           </div>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="flex shrink-0 flex-col items-end gap-1.5 text-right">
           {occ && <div className={`text-[14px] font-bold ${occ.className}`}>{occ.label}</div>}
-          <div className="mt-0.5 text-[13px] text-muted">
+          <div className="text-[13px] text-muted">
             {spot.remainingSpaces ?? "-"} / {spot.capacity ?? "-"}
           </div>
+          {selected && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openParkingDetail(spot); }}
+              className="mt-0.5 rounded-full bg-cta px-2.5 py-1 text-[11px] font-semibold text-white"
+            >
+              상세보기
+            </button>
+          )}
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -126,7 +149,6 @@ export function ParkingScreen({
         </div>
       )}
       {parkingQuery.isError && <div role="alert" className="px-5 py-4"><p>주차장 정보를 불러오지 못했습니다.</p><button onClick={() => parkingQuery.refetch()} className="mt-2 text-accent">주차장 다시 조회</button></div>}
-      {selectedId && parkingQuery.data?.spots.some(s => s.id === selectedId) && <div className="px-5 py-3"><button className="rounded-full bg-cta px-4 py-2 text-white" onClick={() => openParkingDetail(parkingQuery.data!.spots.find(s => s.id === selectedId)!)}>선택한 주차장 상세보기</button></div>}
       {!parkingQuery.isLoading && parkingQuery.data?.spots.length === 0 && (
         <p className="px-6 text-[14px] text-muted">주차장 정보를 찾을 수 없습니다.</p>
       )}
@@ -151,7 +173,7 @@ export function ParkingScreen({
         )}
 
       {!parkingQuery.isLoading && parkingQuery.data && parkingQuery.data.destination && (
-        <div ref={containerRef} className="relative h-[calc(100dvh-76px)] overflow-hidden">
+        <div ref={containerRef} className="relative h-[calc(100dvh-var(--sk-dock))] overflow-hidden">
           <NaverMap
             selectedId={selectedId}
             onSelect={setSelectedId}

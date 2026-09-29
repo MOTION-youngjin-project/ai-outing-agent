@@ -586,11 +586,14 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             mb -22px는 그 두 자리를 정확히 같은 높이로 맞춘다: 붙어 있을 때(sticky)는
             화면 아래에서 --sk-dock-10px, 흘러갈 때(mt-auto)는 AppShell의 아래 여백
             --sk-dock+12px 위라서 22px 차이가 난다 — 답이 도착해 sticky로 바뀌는
-            순간 입력창이 그만큼 튀어 보인다. lg에서는 탭바가 없어 0이다. */}
+            순간 입력창이 그만큼 튀어 보인다. lg에서는 탭바가 없어 0이다.
+            max(0px, ...)는 앱 안(--sk-dock: 0px)에서 -10px로 내려가 입력창 아래끝이
+            웹뷰 바깥(네이티브 탭바 밑)으로 잘려나가는 걸 막는다 — 탭바가 없으면
+            겹쳐 물릴 자리도 없으니 0에서 멈춰야 한다. */}
           <div
             className={
               inConversation
-                ? "sticky bottom-[calc(var(--sk-dock)-10px+env(safe-area-inset-bottom))] z-10 -mx-5 mb-[-22px] mt-auto flex flex-col gap-2 border-t border-[var(--sk-line-soft)] bg-page/95 px-5 pb-3 pt-2.5 backdrop-blur lg:mb-0 lg:bottom-0"
+                ? "sticky bottom-[calc(max(0px,var(--sk-dock)-10px)+env(safe-area-inset-bottom))] z-10 -mx-5 mb-[-22px] mt-auto flex flex-col gap-2 border-t border-[var(--sk-line-soft)] bg-page/95 px-5 pb-3 pt-2.5 backdrop-blur lg:mb-0 lg:bottom-0"
                 : "flex flex-col gap-2 pt-2"
             }
           >
