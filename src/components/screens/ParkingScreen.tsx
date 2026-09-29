@@ -51,6 +51,10 @@ export function ParkingScreen({
   const dragRef = useRef<{ startY: number; startRatio: number; height: number } | null>(null);
   const [sheetRatio, setSheetRatio] = useState(SNAP_PEEK);
   const [dragging, setDragging] = useState(false);
+  // SNAP_COLLAPSED 근처(스냅 지점 자체 + 드래그로 그 언저리까지 끌어올린 상태 전부)에서
+  // 목록을 비운다 — 딱 SNAP_COLLAPSED일 때만 걸면 드래그 도중 살짝 못 미친 값에서는
+  // 여전히 텍스트가 로고를 가린다.
+  const isNearCollapsed = sheetRatio >= SNAP_COLLAPSED - 0.05;
 
   function onHandlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     const height = containerRef.current?.clientHeight ?? 1;
@@ -198,11 +202,15 @@ export function ParkingScreen({
           />
 
           {/* 드래그 바텀시트 — 손 떼면 SNAP_EXPANDED/SNAP_PEEK 중 가까운 쪽으로 스냅.
-              드래그 중엔 transition을 꺼서 손가락을 그대로 따라가게 한다. */}
+              드래그 중엔 transition을 꺼서 손가락을 그대로 따라가게 한다.
+              거의 다 접었을 때(SNAP_COLLAPSED 근처)는 흰 배경 시트가 지도 왼쪽 아래
+              네이버 로고까지 덮어버렸다 — 네이버 지도 이용약관상 그 로고는 항상
+              보여야 한다. 그 구간에서는 목록 내용을 아예 안 그리고 배경도 투명하게
+              비워서 손잡이 하나만 지도 위에 떠 있게 한다. */}
           <div
-            className={`absolute inset-x-0 bottom-0 z-10 flex flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-2px_16px_rgba(17,24,39,0.1)] ${
-              dragging ? "" : "transition-[top] duration-200 ease-out"
-            }`}
+            className={`absolute inset-x-0 bottom-0 z-10 flex flex-col overflow-hidden rounded-t-2xl shadow-[0_-2px_16px_rgba(17,24,39,0.1)] ${
+              isNearCollapsed ? "bg-transparent shadow-none" : "bg-white"
+            } ${dragging ? "" : "transition-[top] duration-200 ease-out"}`}
             style={{ top: `${sheetRatio * 100}%` }}
           >
             <div
@@ -212,33 +220,35 @@ export function ParkingScreen({
               onPointerCancel={onHandlePointerUp}
               className="flex shrink-0 cursor-grab touch-none select-none items-center justify-center py-2.5 active:cursor-grabbing"
             >
-              <span className="h-1 w-9 rounded-full bg-slate-300" />
+              <span className="h-1 w-9 rounded-full bg-slate-300 shadow-[0_1px_4px_rgba(17,24,39,0.25)]" />
             </div>
 
-            <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
-              {parkingQuery.data.spots.length > 0 && (
-                <>
-                  <div className="flex items-center justify-between px-1">
-                    <h2 className="flex items-center gap-1 text-[15px] font-bold text-ink">
-                      주차장 목록
-                      <Icon name="info" className="h-3.5 w-3.5 text-slate-300" />
-                    </h2>
-                    <span className="text-[13px] text-muted">직선거리순 · 도보 분당 67m 추정</span>
-                  </div>
+            {!isNearCollapsed && (
+              <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 pb-4">
+                {parkingQuery.data.spots.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between px-1">
+                      <h2 className="flex items-center gap-1 text-[15px] font-bold text-ink">
+                        주차장 목록
+                        <Icon name="info" className="h-3.5 w-3.5 text-slate-300" />
+                      </h2>
+                      <span className="text-[13px] text-muted">직선거리순 · 도보 분당 67m 추정</span>
+                    </div>
 
-                  <div className="flex flex-col gap-2.5">
-                    {parkingQuery.data.spots.map((s, i) => (
-                      <ParkingSpotItem key={s.id} spot={s} index={i} />
-                    ))}
-                  </div>
+                    <div className="flex flex-col gap-2.5">
+                      {parkingQuery.data.spots.map((s, i) => (
+                        <ParkingSpotItem key={s.id} spot={s} index={i} />
+                      ))}
+                    </div>
 
-                  <div className="flex gap-2 rounded-2xl bg-slate-50 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
-                    <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
-                    <p>주차 요금 및 운영시간은 변동될 수 있어요. 방문 전 현장 안내를 확인해 주세요.</p>
-                  </div>
-                </>
-              )}
-            </div>
+                    <div className="flex gap-2 rounded-2xl bg-slate-50 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
+                      <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+                      <p>주차 요금 및 운영시간은 변동될 수 있어요. 방문 전 현장 안내를 확인해 주세요.</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
