@@ -814,7 +814,10 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: calc(0.875rem + env(safe-area-inset-top)) 1.25rem 0.875rem;
+    /* +6px는 카메라 펀치홀/노치 기기에서 제목이 거기 바로 붙어 가리던 것에 대한
+       여유(ScreenHeader와 같은 값) — env() 값 자체가 기기마다 실측과 조금씩
+       어긋나는 걸 감안한 안전 마진이다. */
+    padding: calc(0.875rem + env(safe-area-inset-top) + 6px) 1.25rem 0.875rem;
   }
 
   /* 홈은 바를 두지 않는다 — 불투명한 띠가 배경 애니메이션을 가로로 잘라먹는다.
