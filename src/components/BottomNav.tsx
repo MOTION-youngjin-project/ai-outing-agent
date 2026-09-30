@@ -7,6 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
 import { useAppStore } from "@/lib/store";
 import { noteReplace } from "@/lib/useBack";
+import { activeNavId, navDirection } from "@/lib/nav";
+import { beginNav, keepsNativeNavigation } from "@/lib/navMotion";
 
 // 나들플랜 안드로이드 앱(webview_flutter)이 WebView User-Agent 뒤에 붙이는 식별자.
 // 앱 안에서 열렸을 때는 네이티브 탭바와 중복되는 이 웹 자체 네비를 숨긴다.
@@ -77,12 +79,36 @@ export function BottomNav() {
 
   if (!show || isNativeApp) return null;
 
+  // 어느 탭에서 어느 탭으로 가는지 — 그 부호가 화면이 움직일 방향이 된다.
+  // 전역 탭 4개에만 쓴다(대화 기록·새 질문·상세 진입은 여기 오지 않는다).
+  const here = activeNavId(pathname);
+  function goTab(
+    e: React.MouseEvent,
+    id: "home" | "map" | "saved" | "mypage",
+    push: () => void
+  ) {
+    // 새 탭·새 창·가운데 클릭·키보드 활성화는 브라우저 기본 동작 그대로 둔다.
+    if (keepsNativeNavigation(e)) return;
+    const dir = navDirection(here, id);
+    if (!dir) return; // 같은 탭이면 굳이 다시 이동하지 않는다
+    e.preventDefault();
+    beginNav(dir, push);
+  }
+
   const tabs = [
     { id: "home", label: "챗", icon: "chat", href: "/", active: pathname === "/" || onSearchedPlace || onRecommend },
     { id: "map", label: "지도", icon: "pin", onClick: () => goToMap(), active: onMap },
     { id: "saved", label: "저장", icon: "bookmark", href: "/saved", active: onSaved },
     { id: "mypage", label: "마이", icon: "user", href: "/mypage", active: pathname === "/mypage" },
   ] as const;
+
+  // 지도 탭은 링크가 아니라 버튼이라(방금 본 코스로 보낼지 판단해야 한다) 따로 감싼다.
+  function onMapTab(e: React.MouseEvent) {
+    if (keepsNativeNavigation(e)) return goToMap();
+    const dir = navDirection(here, "map");
+    if (!dir) return goToMap();
+    beginNav(dir, () => goToMap());
+  }
 
   // 선택된 탭 아래로 트랙 하나가 미끄러져 옮겨간다 — 탭마다 따로 켜지는 게 아니라
   // 같은 트랙이 이동하는 것이라 "어디서 어디로 갔는지"가 눈에 남는다.
@@ -96,7 +122,11 @@ export function BottomNav() {
     // 접히고 펼쳐질 때 레이아웃 뷰포트 폭 계산이 어긋나 한쪽에 빈 공간이 생기는
     // 경우가 있다(실사용자 실측: 오른쪽이 비어 보임) — inset-x-0 + mx-auto는 같은
     // 컨테이닝 블록의 양쪽 끝에 직접 붙기 때문에 이 문제를 겪지 않는다.
-    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto flex w-full max-w-[460px] items-end justify-around border-t border-hairline bg-white/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+    //
+    // 폭 상한은 클래스가 아니라 .sk-dock-bar(globals.css)가 들고 있다 — 768 이상에서
+    // 600px로 넓어져야 하는데, Tailwind 유틸리티(max-w-[460px])를 같이 두면
+    // 유틸리티 레이어가 항상 이겨서 그 확장이 먹지 않는다.
+    <nav className="sk-dock-bar fixed inset-x-0 bottom-0 z-20 mx-auto flex w-full items-end justify-around border-t border-hairline bg-white/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
       <span aria-hidden className="sk-navrail">
         <i
           style={{
@@ -119,7 +149,7 @@ export function BottomNav() {
         return "onClick" in tab ? (
           <button
             key={tab.id}
-            onClick={tab.onClick}
+            onClick={onMapTab}
             aria-current={tab.active ? "page" : undefined}
             className={className}
           >
@@ -129,6 +159,7 @@ export function BottomNav() {
           <Link
             key={tab.id}
             href={tab.href}
+            onClick={(e) => goTab(e, tab.id, () => router.push(tab.href))}
             aria-current={tab.active ? "page" : undefined}
             className={className}
           >

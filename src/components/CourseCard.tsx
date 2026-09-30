@@ -83,10 +83,10 @@ export function CourseCard({
   return (
     // 카드 안이 한꺼번에 나타나지 않는다 — 제목 → 환경 정보 → 요약 → 장소 목록
     // → 태그 → 액션 순서로 40ms 간격을 두고 도착한다(sk-stagger).
-    <div className="sk-panel sk-enter sk-stagger p-4">
-      <h3 className="sk-cap text-[15px] font-bold text-ink">{title}</h3>
+    <div className="sk-panel sk-card-course sk-enter sk-stagger">
+      <h3 className="sk-cap sk-cc-title font-bold text-ink">{title}</h3>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <div className="sk-cc-meta flex flex-wrap items-center gap-1.5">
         {regionName && (
           <span className="sk-tag sk-tag-mute text-ink-soft">
             <Icon name="pin" className="h-3 w-3 text-accent" />
@@ -107,14 +107,14 @@ export function CourseCard({
         )}
       </div>
 
-      {subline && <p className="mt-2 text-[12px] text-muted">{subline}</p>}
+      {subline && <p className="sk-cc-sub text-muted">{subline}</p>}
 
-      <div className="mt-3">
+      <div className="sk-cc-stops">
         <CourseStopList places={places} runId={recommendation.agentRunId} ordered={isCourse} late />
       </div>
 
       {allTags.length > 0 && (
-        <div className="sk-stagger flex flex-wrap gap-1.5 border-t border-[var(--sk-line-soft)] pt-3">
+        <div className="sk-cc-tags sk-stagger flex flex-wrap gap-1.5 border-t border-[var(--sk-line-soft)] pt-3">
           {allTags.map((t) => (
             // LLM이 만든 태그라 "실내" 같은 낱말일 수도, 한 문장일 수도 있다 —
             // 길면 줄바꿈되게 둬야 카드 밖으로 밀고 나가지 않는다.
@@ -127,20 +127,20 @@ export function CourseCard({
 
       {/* 액션 — 셋을 한 줄에 욱여넣으니 글자가 버튼에 꽉 찼다.
           핵심 액션을 전폭 한 줄로 올리고 보조 둘은 같은 너비 그리드로 맞춘다. */}
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="sk-cc-actions flex">
         <button
           onClick={openOnMap}
           disabled={!hasAnyCoords}
           className={
             hasAnyCoords
-              ? "sk sk-primary flex w-full items-center justify-center gap-1.5 px-4 py-3 text-[13px]"
-              : "sk flex w-full items-center justify-center gap-1.5 px-4 py-3 text-[13px] font-semibold"
+              ? "sk sk-primary sk-cc-go flex items-center justify-center gap-1.5 px-4 py-3 text-[13px]"
+              : "sk sk-cc-go flex items-center justify-center gap-1.5 px-4 py-3 text-[13px] font-semibold"
           }
         >
           <Icon name={isCourse ? "arrowUpRight" : "pin"} className="h-4 w-4" />
           {goLabel}
         </button>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="sk-cc-sub-actions gap-2">
           <button
             onClick={onOpenDetail}
             className="sk flex items-center justify-center gap-1.5 px-3 py-2.5 text-[12px] font-semibold text-ink-soft"

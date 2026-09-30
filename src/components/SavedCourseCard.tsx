@@ -27,7 +27,7 @@ export function SavedCourseCard({
   const tags = Array.from(new Set(places.flatMap((p) => p.tags ?? [])));
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(17,24,39,0.06)]">
+    <div className="sk-sv-card rounded-2xl bg-white p-4 shadow-[0_1px_3px_rgba(17,24,39,0.06)]">
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="line-clamp-2 text-[16px] font-bold leading-snug text-ink">{saved.title}</h3>
@@ -53,7 +53,7 @@ export function SavedCourseCard({
       </div>
 
       {/* 정류지 가로 스트립 — 구간 사이에 도보/차량 이동시간을 끼워 넣는다. */}
-      <div className="sk-reel mt-3 items-start gap-1 pb-2">
+      <div className="sk-reel sk-reel-stops mt-3 items-start gap-1 pb-2">
         {places.map((p, i) => (
           <div key={i} className="flex shrink-0 items-start gap-1">
             {i > 0 && (
@@ -108,7 +108,7 @@ export function SavedCourseCard({
 
       <button
         onClick={() => router.push(`/saved/${saved.publicId}`)}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
+        className="sk-sv-open mt-3 flex w-full items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
       >
         <Icon name="menu" className="h-4 w-4" />
         코스 다시 보기

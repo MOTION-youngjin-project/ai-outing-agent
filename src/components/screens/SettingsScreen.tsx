@@ -95,7 +95,7 @@ export function SettingsScreen() {
     <>
       <ScreenHeader title="앱 설정" onBack={goBack} />
 
-      <div className="flex flex-col gap-6 px-5">
+      <div className="sk-set flex flex-col gap-6 px-5">
         <div className="flex flex-col gap-2.5">
           <h2 className="px-1 text-[13px] font-semibold text-muted">질문권</h2>
 

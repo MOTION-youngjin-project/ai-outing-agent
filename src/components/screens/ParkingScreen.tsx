@@ -210,7 +210,7 @@ export function ParkingScreen({
           <div
             className={`absolute inset-x-0 bottom-0 z-10 flex flex-col overflow-hidden rounded-t-2xl shadow-[0_-2px_16px_rgba(17,24,39,0.1)] ${
               isNearCollapsed ? "bg-transparent shadow-none" : "bg-white"
-            } ${dragging ? "" : "transition-[top] duration-200 ease-out"}`}
+            } ${dragging ? "" : "sk-glide-top"}`}
             style={{ top: `${sheetRatio * 100}%` }}
           >
             <div

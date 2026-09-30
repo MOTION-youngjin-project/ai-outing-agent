@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -57,11 +57,12 @@ export function CourseMapView({
     enabled: withCoords.length > 1,
   });
 
-  const routePath = (legsQuery.data ?? []).flatMap((leg) => leg?.path ?? []);
+  const legs = legsQuery.data ?? [];
+  const routePath = legs.flatMap((leg) => leg?.path ?? []);
   // legsQuery는 좌표 있는 정류지 쌍 기준이라, places 인덱스(to)로 해당 구간 경로를 찾는다.
   const legPathTo = (toIndex: number) => {
     const k = withCoords.findIndex(({ i }) => i === toIndex) - 1;
-    return k >= 0 && withCoords[k].i === toIndex - 1 ? legsQuery.data?.[k]?.path : undefined;
+    return k >= 0 && withCoords[k].i === toIndex - 1 ? legs[k]?.path : undefined;
   };
   const spots: MapParkingSpot[] = withCoords.map(({ p, i }) => ({
     id: spotId(p, i),
@@ -97,6 +98,32 @@ export function CourseMapView({
   // 이 화면에서 구간으로 들어간 거면(push) 뒤로 = 브라우저 back. 새로고침 등으로
   // 구간 주소에서 바로 시작했으면 back할 곳이 없으니 선택 카드 주소로 바꾼다.
   const pushedLeg = useRef(false);
+
+  // 앞으로 가는지 뒤로 가는지 — stop 번호의 증감으로만 읽는다. 브라우저 뒤로/앞으로도
+  // 결국 stop이 바뀌는 것이라 popstate를 따로 듣지 않아도 방향이 맞는다.
+  // 렌더 중 ref를 읽고 쓰지 않으려고(react-hooks/refs) 커밋 뒤에 맞춘다.
+  const lastStopRef = useRef(selectedIndex);
+  const [dir, setDir] = useState<"fwd" | "back">("fwd");
+  useEffect(() => {
+    const prev = lastStopRef.current;
+    if (selectedIndex !== prev) {
+      lastStopRef.current = selectedIndex;
+      if (selectedIndex >= 0 && prev >= 0) setDir(selectedIndex > prev ? "fwd" : "back");
+    }
+  }, [selectedIndex]);
+
+  // 현재 구간(이전 장소 → 선택한 장소)의 실제 도로 좌표. legs[i]는 withCoords[i] →
+  // withCoords[i+1] 구간이므로, 선택 장소가 withCoords에서 몇 번째인지로 찾는다.
+  const selectedCoordPos = withCoords.findIndex((x) => x.i === selectedIndex);
+  const highlightPath =
+    selectedCoordPos > 0 ? (legs[selectedCoordPos - 1]?.path ?? undefined) : undefined;
+  // 여기서는 카메라를 움직이지 않는다(fitTo를 넘기지 않는다).
+  // 처음 들어올 때 코스 전체가 한 화면에 들어오도록 한 번 맞추고, 그 뒤로는 사용자가
+  // 보고 있는 자리를 그대로 둔다 — 핀을 훑어보는 동안 탭할 때마다 지도가 다시
+  // 중앙 정렬되면 "내가 보던 곳"을 계속 빼앗긴다. 지금 어느 구간인지는 카메라가
+  // 아니라 강조된 선(highlightPath)이 말해준다.
+  // 카메라가 실제로 움직이는 곳은 "현재 구간"(CurrentLegView)뿐이다 — 거기선
+  // 사용자가 "이 구간으로 데려가 달라"고 명시적으로 누른 것이다.
 
   function hrefFor(index: number | null, leg = false) {
     if (index === null) return pathname;
@@ -154,6 +181,7 @@ export function CourseMapView({
           center={{ latitude: withCoords[0].p.latitude, longitude: withCoords[0].p.longitude }}
           spots={spots}
           routePath={routePath.length > 1 ? routePath : undefined}
+          highlightPath={highlightPath}
           className="sk-panel relative h-72 w-full overflow-hidden p-0"
           selectedId={selectedId}
           onSelect={selectById}
@@ -167,6 +195,7 @@ export function CourseMapView({
           toOrder={selectedIndex + 1}
           drivingPath={legPathTo(selectedIndex)}
           advanceLabel={selectedIndex + 1 < places.length ? "다음 장소로" : "코스 마치기"}
+          dir={dir}
           onAdvance={advanceLeg}
           onBack={backFromLeg}
           onClose={closeLeg}
@@ -177,6 +206,7 @@ export function CourseMapView({
           index={selectedIndex}
           prevPlace={prevPlace}
           runId={runId}
+          dir={dir}
           onClose={() => selectIndex(null)}
           onStartLeg={startLeg}
         />
@@ -195,6 +225,7 @@ function SelectedStopCard({
   index,
   prevPlace,
   runId,
+  dir,
   onClose,
   onStartLeg,
 }: {
@@ -202,6 +233,7 @@ function SelectedStopCard({
   index: number;
   prevPlace: PlaceWithMeta | null;
   runId: string | null;
+  dir: "fwd" | "back";
   onClose: () => void;
   onStartLeg: () => void;
 }) {
@@ -209,8 +241,12 @@ function SelectedStopCard({
   const detailHref =
     place.placeId && (runId ? `/recommend/${runId}/place/${place.placeId}` : `/place/${place.placeId}`);
 
+  // 카드(그릇)는 그대로 두고 안쪽 내용만 갈아끼운다 — 핀을 옮길 때마다 카드가 통째로
+  // 사라졌다 나타나면 지도 아래가 깜빡인다. key가 바뀌면 이 div만 다시 마운트되므로
+  // 등장 애니메이션(sk-swap-x)이 다시 돌고, 바깥 그릇은 움직이지 않는다.
   return (
-    <div className="rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(17,24,39,0.06)]">
+    <div className="sk-mapcard rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(17,24,39,0.06)]">
+      <div key={index} className="sk-swap-x" data-dir={dir}>
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
           {place.imageUrl ? (
@@ -254,9 +290,13 @@ function SelectedStopCard({
 
       {prevPlace && place.travelDistanceM != null && (
         <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-page px-3 py-2.5 text-[12px] text-ink-soft">
+          {/* 도보/차량 — 이 앱에 이동수단 토글은 없고 거리(1200m)로 자동 결정된다.
+              장소를 옮겨 다니다 이 줄의 뜻이 바뀌는 순간이 곧 "모드 전환"이라,
+              아이콘만 짧게 다시 앉혀서 바뀐 걸 눈에 띄게 한다. */}
           <Icon
+            key={place.travelDistanceM < WALK_DISTANCE_THRESHOLD_M ? "walk" : "car"}
             name={place.travelDistanceM < WALK_DISTANCE_THRESHOLD_M ? "walk" : "car"}
-            className="h-4 w-4 shrink-0 text-muted"
+            className="sk-mapmode h-4 w-4 shrink-0 text-muted"
           />
           <span className="flex-1">
             이전 장소에서{" "}
@@ -272,7 +312,7 @@ function SelectedStopCard({
         {detailHref ? (
           <Link
             href={detailHref}
-            className="flex-1 rounded-full border border-hairline py-2 text-center text-[13px] font-medium text-ink-soft"
+            className="sk-press flex-1 rounded-full border border-hairline py-2 text-center text-[13px] font-medium text-ink-soft"
           >
             상세 보기
           </Link>
@@ -287,7 +327,7 @@ function SelectedStopCard({
         {prevPlace ? (
           <button
             onClick={onStartLeg}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-2 text-[13px] font-semibold text-white"
+            className="sk-press flex flex-1 items-center justify-center gap-1.5 rounded-full bg-accent py-2 text-[13px] font-semibold text-white"
           >
             <Icon name="arrowUpRight" className="h-3.5 w-3.5" />
             현재 구간 보기
@@ -317,6 +357,7 @@ function SelectedStopCard({
         <Icon name="menu" className="h-3.5 w-3.5" />
         전체 코스 보기
       </button>
+      </div>
     </div>
   );
 }

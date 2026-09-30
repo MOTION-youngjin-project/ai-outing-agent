@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDrivingDirections, type PlaceWithMeta } from "@/lib/clientApi";
@@ -82,15 +83,33 @@ export function DirectionsScreen({
         {selectedRoute && origin && hasDestination && (
           <>
             {routes.length > 1 && (
-              <div className="flex gap-2">
+              // 이 앱에서 "경로를 바꾸는" 유일한 컨트롤이다(도보/차량 토글은 없다 —
+              // 거리로 자동 결정된다). 예전엔 선택 색이 버튼에서 버튼으로 즉시 점프했다.
+              // 이제 선택 알약 하나가 자리 사이를 미끄러져 옮겨가고, 그 뒤로 지도의
+              // 경로가 새로 그어지고 시간·거리가 바뀐다 — 셋이 한 흐름으로 읽힌다.
+              // 버튼·라벨·색·동작은 그대로고, 멈춘 상태의 모습도 같다.
+              <div
+                className="sk-seg"
+                style={
+                  {
+                    "--n": routes.length,
+                    "--i": Math.max(
+                      0,
+                      routes.findIndex((r) => r.option === (selectedOption ?? routes[0].option))
+                    ),
+                  } as CSSProperties
+                }
+              >
+                <span aria-hidden className="sk-seg-pill" />
                 {routes.map((r) => (
                   <button
                     key={r.option}
                     onClick={() => setSelectedOption(r.option)}
+                    aria-pressed={(selectedOption ?? routes[0].option) === r.option}
                     className={
                       (selectedOption ?? routes[0].option) === r.option
-                        ? "flex-1 rounded-full bg-cta py-2 text-[13px] font-semibold text-white"
-                        : "flex-1 rounded-full border border-hairline bg-white py-2 text-[13px] text-ink-soft"
+                        ? "sk-seg-btn sk-seg-on"
+                        : "sk-seg-btn"
                     }
                   >
                     {OPTION_LABELS[r.option] ?? r.option}
@@ -108,9 +127,15 @@ export function DirectionsScreen({
               className="relative h-64 w-full overflow-hidden rounded-2xl"
             />
 
+            {/* 경로를 바꾸면 이 두 값도 같이 바뀐다 — 그릇(흰 줄)은 그대로 두고 숫자만
+                자리에서 교대한다. tabular-nums라 "8분"에서 "12분"이 돼도 줄이 밀리지 않는다. */}
             <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
-              <span className="text-[16px] font-bold text-ink">약 {selectedRoute.durationMin}분</span>
-              <span className="text-[13px] text-muted">{(selectedRoute.distanceM / 1000).toFixed(1)}km</span>
+              <span key={`t${selectedRoute.durationMin}`} className="sk-swap-t sk-num text-[16px] font-bold text-ink">
+                약 {selectedRoute.durationMin}분
+              </span>
+              <span key={`d${selectedRoute.distanceM}`} className="sk-swap-t sk-num text-[13px] text-muted">
+                {(selectedRoute.distanceM / 1000).toFixed(1)}km
+              </span>
             </div>
 
             <ExternalMapMenu latitude={place.latitude!} longitude={place.longitude!} name={place.name} label="외부 지도에서 길찾기" />

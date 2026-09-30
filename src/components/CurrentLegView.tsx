@@ -21,6 +21,7 @@ export function CurrentLegView({
   drivingPath,
   onAdvance,
   advanceLabel,
+  dir,
   onBack,
   onClose,
 }: {
@@ -33,6 +34,8 @@ export function CurrentLegView({
   drivingPath?: { latitude: number; longitude: number }[];
   onAdvance: () => void;
   advanceLabel: string;
+  // 앞 구간으로 가는지 뒤 구간으로 돌아가는지 — 아래 본문이 들어오는 방향이 달라진다.
+  dir: "fwd" | "back";
   // 헤더의 뒤로 — 선택 카드로 한 단계 돌아간다(하드웨어 뒤로와 같다).
   onBack: () => void;
   // "전체 코스 보기" — 선택까지 풀고 코스 전체로.
@@ -133,6 +136,9 @@ export function CurrentLegView({
         <h2 className="text-[17px] font-bold text-ink">현재 구간</h2>
       </div>
 
+      {/* 지도는 이 바깥에 둔다 — 아래 본문은 구간마다 다시 마운트되는데, 지도가 그
+          안에 있으면 구간을 넘길 때마다 지도 인스턴스가 새로 만들어진다(비싸고, 카메라도
+          매번 튄다). 지도는 그대로 두고 핀·경로·카메라만 prop으로 따라간다. */}
       <NaverMap
         // 마운트 때 한 번만 그리는 지도라, 구간이나 경로가 바뀌면 key로 새로 그린다
         // ("다음 장소로"를 눌러도 이전 구간 지도가 그대로 남던 문제).
@@ -141,9 +147,14 @@ export function CurrentLegView({
         spots={spots}
         origin={userPos ?? undefined}
         routePath={route?.path ?? drivingPath}
+        fitTo={[
+          { latitude: from.latitude!, longitude: from.longitude! },
+          { latitude: to.latitude!, longitude: to.longitude! },
+        ]}
         className="relative h-64 w-full overflow-hidden rounded-2xl"
       />
 
+      <div key={routeKey} className="sk-swap-x flex flex-col gap-3" data-dir={dir}>
       {isWalk && routeQuery.isLoading && <p className="px-1 text-[13px] text-muted">도보 경로 조회 중...</p>}
       {isWalk && !routeQuery.isLoading && !route && (
         <p className="px-1 text-[13px] text-muted">도보 경로를 불러오지 못했어요.</p>
@@ -191,16 +202,18 @@ export function CurrentLegView({
         {toOrder - 1}번째 장소 → {toOrder}번째 장소 구간이에요.
       </p>
 
+      {/* 남은 시간·거리는 걷는 동안 계속 바뀐다 — 자릿수가 줄었다 늘 때 글자 폭이
+          흔들리지 않도록 tabular-nums로 고정한다(M3의 마이페이지 통계와 같은 처리). */}
       {remaining && (
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col items-center gap-1 rounded-2xl bg-white px-2 py-3 text-center shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
             <Icon name="clock" className="h-5 w-5 text-mint-mid" />
-            <span className="text-[14px] font-bold text-ink">약 {Math.max(1, Math.round(remaining.timeSec / 60))}분</span>
+            <span className="sk-num text-[14px] font-bold text-ink">약 {Math.max(1, Math.round(remaining.timeSec / 60))}분</span>
             <span className="text-[11px] text-muted">남은 시간</span>
           </div>
           <div className="flex flex-col items-center gap-1 rounded-2xl bg-white px-2 py-3 text-center shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
             <Icon name="pin" className="h-5 w-5 text-mint-mid" />
-            <span className="text-[14px] font-bold text-ink">{remaining.distanceM}m</span>
+            <span className="sk-num text-[14px] font-bold text-ink">{remaining.distanceM}m</span>
             <span className="text-[11px] text-muted">남은 거리</span>
           </div>
         </div>
@@ -236,17 +249,24 @@ export function CurrentLegView({
         </div>
       </div>
 
+      </div>
+
+      {/* 버튼 줄은 위 본문 바깥이다 — 구간을 넘길 때마다 같은 버튼이 옆에서 다시
+          날아 들어오면 산만하고, 누르자마자 버튼이 움직여서 두 번 누르기 어려워진다.
+          자리는 고정하고 글자만 바뀐다. */}
       <div className="flex gap-2">
         <button
           onClick={onAdvance}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
+          className="sk-press flex flex-1 items-center justify-center gap-1.5 rounded-full bg-cta py-3 text-[14px] font-semibold text-white"
         >
           <Icon name="arrowUpRight" className="h-4 w-4" />
-          {advanceLabel}
+          <span key={advanceLabel} className="sk-swap-t">
+            {advanceLabel}
+          </span>
         </button>
         <button
           onClick={onClose}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-hairline py-3 text-[14px] font-medium text-ink-soft"
+          className="sk-press flex flex-1 items-center justify-center gap-1.5 rounded-full border border-hairline py-3 text-[14px] font-medium text-ink-soft"
         >
           <Icon name="menu" className="h-4 w-4" />
           전체 코스 보기

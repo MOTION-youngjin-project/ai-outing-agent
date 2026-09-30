@@ -39,18 +39,21 @@ export function CourseStopList({
         const content = (
           <>
             {p.imageUrl ? (
+              // alt=""는 develop의 접근성 수정이다 — 바로 옆에 장소 이름이 글로 있어서
+              // 이 이미지는 장식이다. 크기는 .sk-stop-thumb가 들고 있다(데스크톱
+              // 추천 카드 안에서만 커져야 해서).
               // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-              <img src={p.imageUrl} alt="" className="sk-thumb h-[60px] w-[60px] shrink-0" />
+              <img src={p.imageUrl} alt="" className="sk-thumb sk-stop-thumb shrink-0" />
             ) : (
-              <div className="sk-slot h-[60px] w-[60px]">
+              <div className="sk-slot sk-stop-thumb">
                 <Icon name="pin" className="h-6 w-6 text-mint-mid" />
               </div>
             )}
             <div className="min-w-0 flex-1">
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[15px] font-bold leading-snug text-ink">{p.name}</div>
-                  <div className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-muted">
+                  <div className="sk-stop-name truncate font-bold leading-snug text-ink">{p.name}</div>
+                  <div className="sk-stop-desc mt-1 line-clamp-2 leading-relaxed text-muted">
                     {p.oneLineDescription}
                   </div>
                 </div>
@@ -61,7 +64,7 @@ export function CourseStopList({
                   대학생 / …" 식으로 길어서 목록 카드를 몇 줄씩 잡아먹는다. 상세 화면
                   (DetailScreen)에는 그대로 나온다. */}
               {(categoryLabel || p.visitDuration) && (
-                <div className="mt-2 flex flex-wrap items-center gap-1">
+                <div className="sk-stop-tags mt-2 flex flex-wrap items-center gap-1">
                   {categoryLabel && <span className="sk-tag">{categoryLabel}</span>}
                   {p.visitDuration && (
                     <span className="sk-tag sk-tag-mute sk-tag-flow">{p.visitDuration}</span>
@@ -73,7 +76,7 @@ export function CourseStopList({
         );
 
         return (
-          <div key={i} className="flex flex-col">
+          <div key={i} className="sk-stop flex flex-col">
             {/* 정류지 한 칸 — 레일에는 번호(또는 핀)와 점선만 둔다 */}
             <div className="flex gap-3">
               <div className="flex w-7 shrink-0 flex-col items-center">
@@ -82,7 +85,7 @@ export function CourseStopList({
                   // 어긋나게 준다) — 세 개가 동시에 켜지면 "순서"가 안 읽힌다.
                   <span
                     className="sk-slot sk-slot-on h-7 w-7 text-[12px]"
-                    style={late ? { animationDelay: `${200 + i * 90}ms` } : undefined}
+                    style={late ? { animationDelay: `${215 + i * 150}ms` } : undefined}
                   >
                     {i + 1}
                   </span>
@@ -100,12 +103,12 @@ export function CourseStopList({
                     className={`mt-1.5 w-px flex-1 border-l border-dashed border-[var(--sk-line)] ${
                       late ? "sk-draw" : ""
                     }`}
-                    style={late ? { animationDelay: `${260 + i * 90}ms` } : undefined}
+                    style={late ? { animationDelay: `${275 + i * 150}ms` } : undefined}
                   />
                 )}
               </div>
 
-              <div className="min-w-0 flex-1 pb-1">
+              <div className="sk-stop-body min-w-0 flex-1">
                 {p.placeId ? (
                   <Link
                     href={runId ? `/recommend/${runId}/place/${p.placeId}` : `/place/${p.placeId}`}
@@ -123,7 +126,7 @@ export function CourseStopList({
                 정류지 안이 아니라 사이에 자기 줄을 갖고, 레일의 점선도 이어진다.
                 차량은 Directions 실측, 도보는 직선거리 추정이라 형태를 달리한다. */}
             {hasTravel && (
-              <div className="flex gap-3">
+              <div className="sk-stop-leg flex gap-3">
                 <div className="flex w-7 shrink-0 justify-center">
                   <span className="w-px border-l border-dashed border-[var(--sk-line)]" />
                 </div>

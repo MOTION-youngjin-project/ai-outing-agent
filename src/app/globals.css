@@ -138,6 +138,18 @@ body {
   --sk-t-macro: 780ms;
   /* 물건이 제자리를 찾아가는 곡선 — 살짝 지나쳤다 앉는다(SETTLE과 같은 성격) */
   --sk-e-place: cubic-bezier(0.22, 1.18, 0.32, 1);
+
+  /* --- 화면과 화면 사이 ------------------------------------------
+     나가는 쪽은 들어오는 쪽보다 항상 짧고 가속된다. 사람이 "기다렸다"고
+     느끼기 전에 끝나야 해서(≈120ms) 이동은 그 모션이 도는 중에 시작된다.
+     이동량은 모바일이 크고(손가락이 좌우로 탭을 옮긴다) 웹이 작다
+     (큰 화면에서 같은 거리는 과해 보이고, 사이드바가 왼쪽에 고정이라
+      가로로 밀면 사이드바를 밀어내는 것처럼 읽힌다).
+     --------------------------------------------------------------- */
+  --sk-t-exit: 120ms;
+  --sk-e-exit: cubic-bezier(0.4, 0, 1, 1);
+  --sk-nav-shift: 28px; /* 모바일: 가로 */
+  --sk-nav-lift: 22px; /* 웹: 세로 */
 }
 
 @layer components {
@@ -627,6 +639,16 @@ body {
     );
   }
 
+  /* 저장한 코스의 정류지 스트립 — 첫 장소의 번호 배지가 썸네일 왼쪽 위로 4px 나와 있어서
+     릴의 왼쪽 페이드(0~22px)에 통째로 들어가 지워졌다(실측: 배지 x = -4px).
+     스트립은 처음에 맨 왼쪽에서 시작하므로 왼쪽에 숨은 내용이 없다 — 왼쪽 페이드만 없애고
+     오른쪽(더 볼 게 있다는 신호)은 그대로 둔다. */
+  .sk-reel-stops {
+    padding-left: 5px;
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 30px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 30px), transparent 100%);
+  }
+
   .sk-reel::-webkit-scrollbar {
     display: none;
   }
@@ -789,6 +811,964 @@ body {
     padding: 7px 14px;
     font-size: 13px;
     font-weight: 600;
+  }
+
+  /* =========================================================
+     채팅 스레드 — 아래 값은 전부 "지금 JSX에 박혀 있던 유틸리티와
+     같은 값"을 옮겨 온 것이다(모바일 화면은 그대로다). 유틸리티 레이어가
+     컴포넌트 레이어를 이기기 때문에, 데스크톱에서 덮어야 하는 값만
+     여기로 내려온다.
+     ========================================================= */
+  .sk-thread {
+    gap: 1rem; /* was: gap-4 */
+  }
+
+  /* 내 질문 말풍선 */
+  .sk-ask-bubble {
+    max-width: 85%; /* was: max-w-[85%] */
+  }
+
+  /* AI 설명문 — 모바일에서는 지금처럼 패널(테두리+면)이다 */
+  .sk-ai-text {
+    padding: 0.875rem 1rem; /* was: px-4 py-3.5 */
+    font-size: 13px; /* was: text-[13px] */
+    line-height: 1.625; /* was: leading-relaxed */
+  }
+
+  /* 대화 중 입력 영역 — 좌우 -20px로 빼고 다시 20px 안쪽으로 넣어
+     화면 폭 전체에 면과 경계선이 깔리게 한다(was: -mx-5 px-5). */
+  .sk-compose-chat {
+    margin-inline: -1.25rem;
+    padding-inline: 1.25rem;
+  }
+
+  /* =========================================================
+     마이페이지 — 무게가 서로 다른 네 층으로 읽히게 한다.
+       1) 프로필 요약: 이 화면에서 유일하게 "면"을 가진 덩어리
+       2) 섹션 제목  : 페이지 배경 위에 그대로(sk-cap의 accent 표식)
+       3) 리스트 row : 배경 없음 — 얇은 선과 정렬만으로 한 덩어리
+       4) 선호 조건  : 기존 pill 칩 그대로
+     예전엔 넷 다 "흰 둥근 카드 + 그림자"라 위계가 없었고, 카드 안에 리스트가
+     또 들어간 것처럼 무거웠다. 반대로 선을 전부 걷으면 글자가 허공에 뜨므로,
+     목록 위의 실선 한 줄 + row 사이 구분선 + 같은 왼쪽 축으로 영역감을 만든다.
+     ========================================================= */
+  .sk-my {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* 화면 제목 줄 — ScreenHeader(공용)가 자기 여백을 갖고 있어 여기선 자리만 준다 */
+  .sk-my-head {
+    margin-bottom: -6px;
+  }
+
+  /* ---- 1층: 프로필 요약 ---- */
+  .sk-my-sum {
+    margin-inline: 1.25rem;
+    padding: 14px;
+    border: 1px solid var(--sk-line-soft);
+    border-radius: 14px;
+    background: var(--sk-face);
+    box-shadow: 0 1px 2px rgba(15, 60, 58, 0.04);
+  }
+
+  .sk-my-sum-id {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .sk-my-avatar {
+    display: flex;
+    height: 44px;
+    width: 44px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--sk-mint-soft);
+  }
+
+  .sk-my-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+
+  .sk-my-sub {
+    margin-top: 1px;
+    font-size: 12px;
+    color: var(--sk-muted);
+  }
+
+  /* 숫자가 먼저 읽히도록 값을 위에, 라벨을 아래에 둔다 */
+  /* 숫자가 22px이라 선 바로 밑에 붙으면 글자가 선을 이고 있는 것처럼 보인다 —
+     가름선과 숫자 사이를 넉넉히 띄운다. */
+  .sk-my-stats {
+    display: flex;
+    margin-top: 12px;
+    border-top: 1px solid var(--sk-line-soft);
+    padding-top: 16px;
+  }
+
+  .sk-my-stat {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .sk-my-stat + .sk-my-stat {
+    border-left: 1px solid var(--sk-line-soft);
+  }
+
+  .sk-my-stat-v {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--color-ink);
+  }
+
+  .sk-my-stat-l {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--sk-muted);
+  }
+
+  /* ---- 2층: 섹션 ---- */
+  .sk-my-sec {
+    display: flex;
+    flex-direction: column;
+    margin-inline: 1.25rem;
+  }
+
+  .sk-my-sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .sk-my-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-ink);
+  }
+
+  .sk-my-more {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    font-size: 13px;
+    color: var(--sk-muted);
+  }
+
+  .sk-my-desc {
+    margin-top: 4px;
+    padding-left: 11px;
+    font-size: 12px;
+    color: var(--sk-muted);
+  }
+
+  /* ---- 3층: 리스트 ---- */
+  /* 목록 위의 실선 한 줄이 "여기부터 이 섹션의 내용"이라는 경계다 —
+     이게 없으면 row들이 페이지에 그냥 떠 있는 글자처럼 보인다. */
+  .sk-my-list {
+    margin-top: 8px;
+    border-top: 1px solid var(--sk-line-soft);
+  }
+
+  .sk-my-row {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 8px;
+    border-radius: 10px;
+    text-align: left;
+  }
+
+  .sk-my-row + .sk-my-row {
+    border-top: 1px solid var(--sk-line-soft);
+  }
+
+  @media (hover: hover) {
+    .sk-my-row:hover {
+      background: color-mix(in srgb, var(--sk-mint-bg) 45%, transparent);
+    }
+  }
+
+  .sk-my-row-body {
+    min-width: 0;
+    flex: 1 1 0%;
+  }
+
+  .sk-my-row-title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--color-ink);
+  }
+
+  .sk-my-row-sub {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--sk-muted);
+  }
+
+  .sk-my-thumb {
+    height: 44px;
+    width: 44px;
+    flex: none;
+    border-radius: 12px;
+    object-fit: cover;
+  }
+
+  .sk-my-slot {
+    display: flex;
+    height: 28px;
+    width: 28px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--sk-mint-bg);
+  }
+
+  .sk-my-chev {
+    height: 18px;
+    width: 18px;
+    flex: none;
+    color: #cbd5e1;
+  }
+
+  .sk-my-empty {
+    padding: 12px 8px;
+    font-size: 13px;
+    color: var(--sk-muted);
+  }
+
+  /* 삭제는 기록 하나를 지우는 보조 동작이다 — primary처럼 보이면 안 된다 */
+  .sk-my-del {
+    flex: none;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--sk-muted);
+  }
+
+  @media (hover: hover) {
+    .sk-my-del:hover {
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+  }
+
+  /* =========================================================
+     PRESS 확장 — .sk의 "단차" 모델을 아직 안 붙은 것들로 넓힌다.
+     scale로 줄이는 흔한 방식 대신, 이 앱이 원래 쓰던 "눌리면 실제로
+     내려앉는다"를 그대로 따른다. 면이 없는 줄(row·아이콘)은 단차 대신
+     면이 켜지고 1px 내려앉는 것으로 같은 말을 한다.
+     ========================================================= */
+  .sk-my-row,
+  .sk-my-del,
+  .sk-side-icon,
+  .sk-side-nav,
+  .sk-sort-btn,
+  .sk-edit-btn {
+    transition:
+      transform var(--sk-snap-out),
+      background-color var(--sk-t-micro) ease,
+      box-shadow var(--sk-snap-out),
+      color var(--sk-t-micro) ease;
+  }
+
+  .sk-my-row:not(:disabled):active,
+  .sk-my-del:not(:disabled):active,
+  .sk-side-icon:active,
+  .sk-side-nav:active,
+  .sk-edit-btn:active {
+    transform: translateY(1px);
+    transition: transform var(--sk-snap-in);
+  }
+
+  .sk-sort-btn:not(:disabled):active {
+    transform: translateY(1px);
+    box-shadow: 0 0 0 rgba(17, 24, 39, 0);
+    transition:
+      transform var(--sk-snap-in),
+      box-shadow var(--sk-snap-in);
+  }
+
+  /* 줄 위에 커서가 오면 내용이 살짝 진행 방향으로 밀리고 꺾쇠가 먼저 움직인다 —
+     "이 줄은 눌러서 어디로 간다"가 색이 아니라 움직임으로 읽힌다. */
+  .sk-my-row-body,
+  .sk-my-chev {
+    transition: transform var(--sk-glide), color var(--sk-t-micro) ease;
+  }
+
+  @media (hover: hover) {
+    .sk-my-row:hover .sk-my-row-body {
+      transform: translateX(3px);
+    }
+
+    .sk-my-row:hover .sk-my-chev {
+      transform: translateX(3px);
+      color: var(--sk-accent);
+    }
+  }
+
+  /* ---- 4층: 선호 조건 칩(기존 pill 유지) ---- */
+  .sk-my-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 10px;
+  }
+
+  /* 네 개가 한 줄에 들어가야 "한 덩어리"로 읽힌다 — 390의 본문(350)과
+     웹 왼쪽 열(340) 둘 다에서 한 줄에 맞는 치수다. */
+  .sk-my-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--sk-hairline);
+    background: var(--sk-face);
+    font-size: 13px;
+    color: var(--color-ink-soft);
+  }
+
+  .sk-my-chip {
+    transition:
+      transform var(--sk-snap-out),
+      background-color var(--sk-t-micro) ease,
+      border-color var(--sk-t-micro) ease,
+      color var(--sk-t-micro) ease;
+  }
+
+  .sk-my-chip:active {
+    transform: translateY(1px);
+    transition: transform var(--sk-snap-in);
+  }
+
+  /* 켜지는 순간 — 색만 바뀌는 게 아니라 한 번 앉았다 올라오며 "선택됐다"고 말한다.
+     클래스가 붙을 때 애니메이션이 다시 재생된다. */
+  .sk-my-chip-on {
+    border-color: var(--sk-accent);
+    background: var(--sk-mint-bg);
+    font-weight: 600;
+    color: var(--sk-accent);
+    animation: sk-chip-set 260ms var(--sk-e-place);
+  }
+
+  /* =========================================================
+     M2 — 장면이 있는 자리들.
+     "흩어짐 → 모임 → 연결 → 정착"을 sequence·timing·draw로만 만든다.
+     크게 튀거나 돌리거나 늘리지 않는다. 모든 등장은 backwards fill이라
+     애니메이션이 도는 동안에도 요소는 DOM에 그대로 있고 누를 수 있다
+     (불투명도는 클릭 판정을 막지 않는다) — 버튼이 늦게 살아나지 않는다.
+     ========================================================= */
+
+  /* 요소마다 조금씩 다른 등장 — 같은 fade-up을 복붙하지 않는다 */
+  @keyframes sk-rise {
+    0% { opacity: 0; transform: translateY(16px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes sk-rise-sm {
+    0% { opacity: 0; transform: translateY(9px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes sk-zone-in {
+    0% { opacity: 0; transform: translateY(12px) scale(0.985); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes sk-ask-in {
+    0% { opacity: 0; transform: translateX(22px) scale(0.98); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes sk-reveal-x {
+    0% { opacity: 0; transform: translateX(-7px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  /* 정류지는 레일 쪽(왼쪽)에서 앉는다 — 선이 내려오는 방향과 같은 축이라
+     "선을 따라 도착했다"로 읽힌다. */
+  @keyframes sk-stop-in {
+    0% { opacity: 0; transform: translate(-10px, 4px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes sk-prog-leave {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  }
+
+  /* ---------- HOME : 첫인상 ----------
+     배경이 먼저 깔리고(경쟁하지 않게 느리게), 그 위로 제목 → 설명 → 지금 상태
+     → 고르는 줄 → 적는 줄 → 칩 순으로 앉는다. 마지막 칩이 ~700ms에 끝난다. */
+  .sk-atmo {
+    animation: sk-fade-in 640ms linear backwards;
+  }
+
+  .sk-home-stack .sk-hero-title {
+    animation: sk-rise 400ms var(--sk-e-place) 60ms backwards;
+  }
+
+  .sk-home-stack .sk-hero-sub {
+    animation: sk-rise-sm 320ms var(--sk-ease) 150ms backwards;
+  }
+
+  .sk-home-stack .sk-home-air {
+    animation: sk-rise-sm 300ms var(--sk-ease) 230ms backwards;
+  }
+
+  /* 지역 고르기와 질문 적기는 "하나의 작업 구역"이다 — 같은 움직임으로 20ms 차이만
+     두어 둘이 한 덩어리로 앉는 것처럼 보이게 한다. */
+  .sk-home-stack .sk-home-region {
+    animation: sk-zone-in 340ms var(--sk-e-place) 300ms backwards;
+  }
+
+  .sk-home-stack .sk-home-compose > form.sk-input {
+    animation: sk-zone-in 340ms var(--sk-e-place) 330ms backwards;
+  }
+
+  .sk-home-stack .sk-home-compose > .sk-reel > * {
+    animation: sk-rise-sm 280ms var(--sk-ease) backwards;
+  }
+
+  .sk-home-stack .sk-home-compose > .sk-reel > *:nth-child(1) { animation-delay: 430ms; }
+  .sk-home-stack .sk-home-compose > .sk-reel > *:nth-child(2) { animation-delay: 475ms; }
+  .sk-home-stack .sk-home-compose > .sk-reel > *:nth-child(3) { animation-delay: 520ms; }
+  .sk-home-stack .sk-home-compose > .sk-reel > *:nth-child(n + 4) { animation-delay: 565ms; }
+
+  .sk-home-stack .sk-home-toggle-row {
+    animation: sk-rise-sm 280ms var(--sk-ease) 610ms backwards;
+  }
+
+  /* ---------- CHAT : 질문 보내기 ---------- */
+  /* 누르는 순간 보내기 아이콘이 진행 방향으로 한 번 민다(단차 1px과 함께) */
+  .sk-input .sk-primary:not(:disabled):active > svg {
+    transform: translate(3px, 1px);
+  }
+
+  /* 한 턴은 스레드의 stagger를 쓰지 않는다 — 안쪽(말풍선 / AI 묶음)이 각자
+     자기 순서로 들어오는 편이 "질문 → 답"의 인과가 더 잘 읽힌다. */
+  .sk-thread.sk-stagger > .sk-turn {
+    animation: none;
+  }
+
+  /* 내 질문 — 오른쪽에서 들어와 살짝 지나쳤다 앉는다 */
+  .sk-user-row {
+    animation: sk-ask-in 260ms var(--sk-e-place) backwards;
+  }
+
+  /* 고치기 버튼은 말풍선이 앉은 뒤에 따라온다 */
+  .sk-user-row .sk-edit-btn {
+    animation: sk-fade-in 200ms linear 200ms backwards;
+  }
+
+  /* ---------- CHAT : AI가 말하기 시작 ----------
+     아바타가 먼저 슬롯에 박히고 → 라벨이 옆에서 열리고 → 그다음 내용. */
+  .sk-ai-avatar {
+    animation: sk-lock 260ms var(--sk-ease) backwards;
+  }
+
+  .sk-ai-label {
+    animation: sk-reveal-x 240ms var(--sk-ease) 110ms backwards;
+  }
+
+  .sk-ai-body > *:not(.sk-ai-label) {
+    animation: sk-rise-sm 300ms var(--sk-ease) 190ms backwards;
+  }
+
+  /* 설명문과 후속 액션은 코스가 다 만들어진 뒤에 이어진다(아래 카드 시퀀스 참고) */
+  .sk-ai-body > .sk-ai-text {
+    animation: sk-rise-sm 320ms var(--sk-ease) 720ms backwards;
+  }
+
+  .sk-ai-body > .sk-ai-more {
+    animation: sk-fade-in 260ms linear 800ms backwards;
+  }
+
+  /* ---------- 진행 패널 → 결과 : 교차 ----------
+     답이 도착해도 패널은 160ms 더 남아 접히며 빠진다. 높이를 0fr로 접기 때문에
+     아래 내용이 튀지 않고 밀려 올라온다. 그 사이 결과 카드는 이미 등장 중이다. */
+  .sk-prog-wrap {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 200ms var(--sk-ease);
+  }
+
+  .sk-prog-wrap > * {
+    min-height: 0;
+  }
+
+  .sk-prog-out {
+    grid-template-rows: 0fr;
+    pointer-events: none;
+  }
+
+  .sk-prog-out > * {
+    overflow: hidden;
+    animation: sk-prog-leave 180ms var(--sk-e-exit) forwards;
+  }
+
+  /* =========================================================
+     M3 — 관리 화면(마이페이지·저장·설정).
+     M2보다 한 단계 차분하다: 이동은 더 짧고, 시퀀스는 섹션 단위다.
+     강도 순서는 코스 결과 > 홈·채팅 > 마이페이지·저장 > 설정.
+     ========================================================= */
+
+  /* 섹션이 화면에 들어오면 한 번 앉는다. data-reveal은 lib/useReveal이 켠다.
+     "wait"인 동안에도 요소는 자리를 그대로 차지한다(레이아웃이 튀지 않는다). */
+  [data-reveal="wait"] {
+    opacity: 0;
+  }
+
+  [data-reveal="in"] {
+    animation: sk-sec-in 380ms var(--sk-e-place) backwards;
+  }
+
+  @keyframes sk-sec-in {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  /* ---------- 마이페이지: 첫 진입 ----------
+     제목 → 프로필 → (웹)왼쪽 열 → 오른쪽 열. 화면에 이미 들어와 있는 섹션은
+     useReveal이 곧바로 "in"으로 켜므로, 아래 지연이 그 순서를 만든다. */
+  .sk-my-head {
+    animation: sk-rise-sm 300ms var(--sk-ease) backwards;
+  }
+
+  .sk-my-sum {
+    animation: sk-rise-sm 340ms var(--sk-e-place) 70ms backwards;
+  }
+
+  /* 프로필 카드 안쪽 — 아바타가 박히고, 이름이 열리고, 숫자 줄이 앉는다 */
+  .sk-my-av {
+    animation: sk-lock 280ms var(--sk-ease) 130ms backwards;
+  }
+
+  .sk-my-id {
+    animation: sk-reveal-x 260ms var(--sk-ease) 190ms backwards;
+  }
+
+  .sk-my-stats {
+    animation: sk-rise-sm 300ms var(--sk-e-place) 250ms backwards;
+  }
+
+  .sk-my-stat-v {
+    /* 세는 동안 자릿수가 바뀌어도 글자 폭이 흔들리지 않는다 */
+    font-variant-numeric: tabular-nums;
+    display: inline-block;
+    text-align: inherit;
+  }
+
+  /* 섹션 자체의 등장 지연 — 모바일은 DOM 순서대로 한 줄로 내려온다 */
+  .sk-my-a-hist[data-reveal="in"] { animation-delay: 150ms; }
+  .sk-my-a-saved[data-reveal="in"] { animation-delay: 210ms; }
+  .sk-my-a-pref[data-reveal="in"] { animation-delay: 270ms; }
+  .sk-my-a-recent[data-reveal="in"] { animation-delay: 330ms; }
+  .sk-my-a-set[data-reveal="in"] { animation-delay: 390ms; }
+
+  /* 섹션 안의 줄은 짧게 이어 붙는다 */
+  .sk-my-list > * {
+    animation: sk-rise-sm 260ms var(--sk-ease) backwards;
+  }
+
+  .sk-my-list > *:nth-child(1) { animation-delay: 60ms; }
+  .sk-my-list > *:nth-child(2) { animation-delay: 110ms; }
+  .sk-my-list > *:nth-child(3) { animation-delay: 160ms; }
+  .sk-my-list > *:nth-child(4) { animation-delay: 210ms; }
+  .sk-my-list > *:nth-child(5) { animation-delay: 260ms; }
+  /* 긴 목록은 끝까지 기다리게 하지 않는다 — 6번째부터는 같은 시각에 함께 */
+  .sk-my-list > *:nth-child(n + 6) { animation-delay: 300ms; }
+
+  /* hover에서 구분선도 같이 반응한다(면·글·꺾쇠만 움직이던 M1을 한 겹 넓힌다) */
+  .sk-my-row + .sk-my-row {
+    transition: border-color var(--sk-t-micro) ease;
+  }
+
+  @media (hover: hover) {
+    .sk-my-row:hover + .sk-my-row,
+    .sk-my-row:hover {
+      border-top-color: var(--sk-mint-soft);
+    }
+  }
+
+  /* ---------- 줄 삭제 ----------
+     서버가 성공을 준 뒤에만 돈다(요청은 늦추지 않는다). 글이 먼저 빠지고,
+     그다음 줄 높이가 접히면서 아래 줄들이 올라와 앉는다. */
+  .sk-row-out {
+    overflow: hidden;
+    pointer-events: none;
+    animation: sk-row-collapse 260ms var(--sk-e-exit) forwards;
+  }
+
+  @keyframes sk-row-collapse {
+    0% { opacity: 1; transform: translateX(0); max-height: 96px; padding-top: 10px; padding-bottom: 10px; }
+    45% { opacity: 0; transform: translateX(10px); max-height: 96px; }
+    100% { opacity: 0; transform: translateX(10px); max-height: 0; padding-top: 0; padding-bottom: 0; border-top-width: 0; }
+  }
+
+  /* ---------- 빈 상태 ---------- */
+  .sk-my-empty,
+  .sk-empty {
+    animation: sk-rise-sm 280ms var(--sk-ease) 120ms backwards;
+  }
+
+  /* ---------- 저장 화면 ---------- */
+  .sk-sv-tabs {
+    animation: sk-rise-sm 300ms var(--sk-ease) 60ms backwards;
+  }
+
+  .sk-sv-find {
+    animation: sk-rise-sm 300ms var(--sk-ease) 120ms backwards;
+  }
+
+  .sk-sv-list[data-reveal="in"] {
+    animation-delay: 180ms;
+  }
+
+  /* 저장 항목 — 앞 6개만 차례로, 그 뒤는 함께(목록이 길어도 끝까지 기다리지 않는다) */
+  .sk-sv-list > * {
+    animation: sk-rise-sm 280ms var(--sk-e-place) backwards;
+  }
+
+  .sk-sv-list > *:nth-child(1) { animation-delay: 220ms; }
+  .sk-sv-list > *:nth-child(2) { animation-delay: 270ms; }
+  .sk-sv-list > *:nth-child(3) { animation-delay: 320ms; }
+  .sk-sv-list > *:nth-child(4) { animation-delay: 370ms; }
+  .sk-sv-list > *:nth-child(5) { animation-delay: 420ms; }
+  .sk-sv-list > *:nth-child(6) { animation-delay: 470ms; }
+  .sk-sv-list > *:nth-child(n + 7) { animation-delay: 510ms; }
+
+  /* 저장한 코스 카드 — 누를 수 있는 카드라 커서에 반응한다(읽기용 패널은 정적) */
+  .sk-sv-card {
+    transition:
+      transform var(--sk-snap-out),
+      box-shadow var(--sk-snap-out),
+      border-color var(--sk-t-micro) ease;
+    border: 1px solid transparent;
+  }
+
+  @media (hover: hover) {
+    .sk-sv-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--sk-mint-soft);
+      box-shadow: 0 2px 4px rgba(17, 24, 39, 0.06), 0 12px 22px -16px rgba(15, 60, 58, 0.5);
+    }
+  }
+
+  .sk-sv-open {
+    transition:
+      transform var(--sk-snap-out),
+      box-shadow var(--sk-snap-out),
+      background-color var(--sk-t-micro) ease;
+  }
+
+  .sk-sv-open:active {
+    transform: translateY(2px);
+    transition: transform var(--sk-snap-in);
+  }
+
+  /* ---------- 설정 화면 : 가장 절제된 층 ---------- */
+  .sk-set > * {
+    animation: sk-rise-sm 280ms var(--sk-ease) backwards;
+  }
+
+  .sk-set > *:nth-child(1) { animation-delay: 60ms; }
+  .sk-set > *:nth-child(2) { animation-delay: 110ms; }
+  .sk-set > *:nth-child(3) { animation-delay: 160ms; }
+  .sk-set > *:nth-child(n + 4) { animation-delay: 200ms; }
+
+  /* =========================================================
+     M4 — 지도 계층.
+     세기 순서는 코스 결과 > 지도 > 홈·채팅 > 마이페이지·저장 > 설정이다.
+     지도가 두 번째로 강한 이유는 여기가 "코스가 실제 이동으로 살아나는" 자리라서고,
+     그런데도 화려함보다 연결을 앞세우는 이유는 지도 자체가 이미 정보로 빽빽하기 때문이다.
+
+     [지도 canvas는 건드리지 않는다]
+     여기 있는 규칙 중 지도 root/canvas에 transform·opacity를 거는 것은 하나도 없다.
+     걸면 마커 좌표와 포인터 좌표가 어긋나고 pan/zoom이 깨진다. 움직이는 것은
+     (1) 마커 HTML(아래 클래스들), (2) 지도 바깥 패널, (3) Polyline 오버레이뿐이고
+     (3)은 CSS가 아니라 Naver Maps API로만 움직인다(lib/mapMotion.ts).
+     ========================================================= */
+
+  /* ---------- 핀 ----------
+     꽂히는 동작(sk-mappin-drop)과 간격 상한은 위쪽 지도 핀 블록에 그대로 있다 —
+     코스 결과의 1 → 2 → 3과 같은 70ms 리듬이다. 여기서는 그 반대쪽만 더한다.
+
+     선택이 다른 핀으로 넘어간다 — 놓아주는 쪽.
+     새 핀의 sk-grab과 동시에 둘 다 세게 튀면 어디가 선택됐는지 읽히지 않는다.
+     그래서 이쪽은 짧고(160ms) 약하게(0.94), 눌렸다 펴지는 정도만 한다. */
+  .sk-mappin-off {
+    animation: sk-pin-release 160ms var(--sk-ease) backwards;
+  }
+
+  @keyframes sk-pin-release {
+    0% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  /* ---------- 지도에 붙은 패널 ----------
+     그릇은 그대로 두고 내용만 교대한다. 방향은 stop 번호의 증감에서 온다
+     (브라우저 뒤로/앞으로도 결국 stop이 바뀌는 것이라 따로 듣지 않아도 맞는다). */
+  .sk-swap-x {
+    animation: sk-swap-fwd 240ms var(--sk-e-place) backwards;
+  }
+
+  .sk-swap-x[data-dir="back"] {
+    animation-name: sk-swap-back;
+  }
+
+  @keyframes sk-swap-fwd {
+    0% { opacity: 0; transform: translateX(14px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  @keyframes sk-swap-back {
+    0% { opacity: 0; transform: translateX(-14px); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  /* 값 하나만 바뀌는 자리(남은 시간, 거리, 버튼 글자) — 줄을 밀지 않고 제자리에서 교대 */
+  .sk-swap-t {
+    display: inline-block;
+    animation: sk-swap-in 200ms var(--sk-ease) backwards;
+  }
+
+  /* 숫자가 계속 바뀌는 자리는 글자 폭을 고정한다(M3 마이페이지 통계와 같은 처리) */
+  .sk-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 도보 ↔ 차량이 바뀌는 순간의 아이콘 — 한 번만 앉는다 */
+  .sk-mapmode {
+    animation: sk-settle 240ms var(--sk-e-place) backwards;
+  }
+
+  /* 선택 카드(그릇) 자체는 목록에서 카드로 바뀔 때 한 번만 등장한다 */
+  .sk-mapcard {
+    animation: sk-rise-sm 280ms var(--sk-e-place) backwards;
+  }
+
+  /* ---------- 누름 ----------
+     .sk의 단(段) 구조를 쓰지 않는 둥근 버튼용. 생김새는 그대로 두고 누름 반응만
+     SOCKET 문법(snap-in 90ms로 들어가고 snap-out 240ms로 되튀며 나온다)에 맞춘다.
+     M3의 .sk-sv-open과 같은 값이다. */
+  .sk-press {
+    transition:
+      transform var(--sk-snap-out),
+      box-shadow var(--sk-snap-out),
+      background-color var(--sk-t-micro) ease;
+  }
+
+  .sk-press:not(:disabled):active {
+    transform: translateY(2px);
+    transition: transform var(--sk-snap-in);
+  }
+
+  /* ---------- 지도 위에 얹힌 것이 시트를 따라 움직인다 ----------
+     [일관성] 여기 둘만 Tailwind의 ease-out(cubic-bezier(0,0,.2,1))을 쓰고 있었다 —
+     시스템에 이미 같은 뜻의 토큰이 있다(--sk-glide: 200ms, "미끄러진다").
+     시간은 200ms 그대로고 곡선만 시스템 값으로 맞춘다. 멈춘 모습은 같다. */
+  .sk-glide-bottom {
+    transition: bottom var(--sk-glide);
+  }
+
+  .sk-glide-top {
+    transition: top var(--sk-glide);
+  }
+
+  /* ---------- 경로 옵션 세그먼트 ----------
+     추천 경로 ↔ 다른 경로. 이 앱에서 경로를 바꾸는 유일한 컨트롤이다.
+     멈춰 있을 때의 모습은 예전과 같다(같은 알약, 같은 색, 같은 글자) — 선택이
+     자리 사이를 "옮겨간다"는 것만 달라졌다. 폭은 --n으로 나누고 위치는 --i로 잡아서
+     항목이 둘이든 셋이든 그대로 맞는다. */
+  .sk-seg {
+    position: relative;
+    display: flex;
+    gap: 8px;
+    isolation: isolate;
+  }
+
+  .sk-seg-pill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: -1;
+    width: calc((100% - (var(--n) - 1) * 8px) / var(--n));
+    border-radius: 999px;
+    background: var(--sk-cta);
+    transform: translateX(calc(var(--i) * (100% + 8px)));
+    transition: transform var(--sk-t-meso) var(--sk-e-place);
+  }
+
+  .sk-seg-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    border-radius: 999px;
+    border: 1px solid var(--sk-hairline);
+    background: var(--sk-face);
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    font-size: 13px;
+    color: var(--color-ink-soft);
+    transition:
+      color var(--sk-t-micro) ease,
+      border-color var(--sk-t-micro) ease,
+      transform var(--sk-snap-out);
+  }
+
+  .sk-seg-btn:not(:disabled):active {
+    transform: translateY(1px);
+    transition: transform var(--sk-snap-in);
+  }
+
+  /* 선택된 칸은 알약이 뒤에 깔리므로 자기 배경·테두리를 비운다 —
+     알약이 도착하기 전에 글자만 먼저 하얘지지 않도록 색 전환을 살짝 늦춘다. */
+  .sk-seg-on {
+    border-color: transparent;
+    background: transparent;
+    font-weight: 600;
+    color: #ffffff;
+    transition:
+      color var(--sk-t-micro) ease 90ms,
+      border-color var(--sk-t-micro) ease;
+  }
+
+  /* =========================================================
+     추천 카드 (CourseCard)
+     ========================================================= */
+  .sk-card-course {
+    padding: 1rem; /* was: p-4 */
+  }
+
+  .sk-cc-title {
+    font-size: 15px; /* was: text-[15px] */
+  }
+
+  .sk-cc-meta {
+    margin-top: 0.5rem; /* was: mt-2 */
+  }
+
+  .sk-cc-sub {
+    margin-top: 0.5rem; /* was: mt-2 */
+    font-size: 12px; /* was: text-[12px] */
+  }
+
+  .sk-cc-stops {
+    margin-top: 0.75rem; /* was: mt-3 */
+  }
+
+  /* 액션 묶음 — 세로로 쌓일 때는 버튼끼리, 그리고 위 태그 줄과도 숨 쉴 자리가 있어야 한다.
+     예전엔 태그↓버튼 16 / 버튼↓버튼 8이라 46px 버튼 둘이 붙어 보였다(실측). */
+  .sk-cc-actions {
+    flex-direction: column; /* was: flex-col */
+    margin-top: 20px; /* was: mt-4(16px) */
+    gap: 12px; /* was: gap-2(8px) — 가로 한 줄이 되는 1200↑에서는 다시 8px */
+  }
+
+  .sk-cc-go {
+    width: 100%; /* was: w-full */
+  }
+
+  .sk-cc-sub-actions {
+    display: grid; /* was: grid grid-cols-2 */
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* ---------- 코스가 "만들어지는" 장면 (M2의 핵심) ----------
+     흩어진 장소가 하나로 연결되는 인과가 눈에 보여야 한다:
+       카드 → 제목 → 환경 → ①이 박히고 → 선이 그어지고 → ②가 박히고 → 선 → ③
+       → 태그 → 액션.
+     기본 sk-stagger(40ms 균등)로는 이 인과가 안 보여서, 카드 안에서만 각 구역에
+     제 시각을 준다(specificity가 stagger보다 높아 그 위에 얹힌다).
+     연결선·번호의 지연은 CourseStopList가 인라인으로 주고(150ms 간격),
+     여기 값과 맞물린다. 모든 요소는 처음부터 누를 수 있다. */
+  .sk-card-course.sk-stagger > .sk-cc-title {
+    animation-delay: 80ms;
+  }
+
+  .sk-card-course.sk-stagger > .sk-cc-meta {
+    animation-delay: 140ms;
+  }
+
+  .sk-card-course.sk-stagger > .sk-cc-sub {
+    animation-delay: 170ms;
+  }
+
+  .sk-card-course.sk-stagger > .sk-cc-stops {
+    animation-delay: 190ms;
+  }
+
+  .sk-card-course.sk-stagger > .sk-cc-tags {
+    animation-delay: 570ms;
+  }
+
+  .sk-card-course.sk-stagger > .sk-cc-actions {
+    /* 코스가 다 구성된 뒤 마지막으로 자리잡는다 — 조금 더 존재감 있게 */
+    animation: sk-zone-in 360ms var(--sk-e-place) 640ms backwards;
+  }
+
+  /* 정류지 안에도 작은 위계를 둔다 — 번호(박힘) 다음에 몸통(옆에서 앉음) */
+  .sk-card-course .sk-cc-stops .sk-stagger-late > .sk-stop {
+    animation: sk-stop-in 300ms var(--sk-e-place) backwards;
+  }
+
+  .sk-card-course .sk-cc-stops .sk-stagger-late > .sk-stop:nth-child(1) { animation-delay: 200ms; }
+  .sk-card-course .sk-cc-stops .sk-stagger-late > .sk-stop:nth-child(2) { animation-delay: 350ms; }
+  .sk-card-course .sk-cc-stops .sk-stagger-late > .sk-stop:nth-child(3) { animation-delay: 500ms; }
+  .sk-card-course .sk-cc-stops .sk-stagger-late > .sk-stop:nth-child(n + 4) { animation-delay: 650ms; }
+
+  /* 장소 이름·설명은 정류지가 앉은 뒤 아주 조금 늦게 열린다 */
+  .sk-card-course .sk-stop-name,
+  .sk-card-course .sk-stop-desc {
+    animation: sk-fade-in 240ms linear backwards;
+  }
+
+  .sk-card-course .sk-stop:nth-child(1) .sk-stop-name { animation-delay: 300ms; }
+  .sk-card-course .sk-stop:nth-child(1) .sk-stop-desc { animation-delay: 340ms; }
+  .sk-card-course .sk-stop:nth-child(2) .sk-stop-name { animation-delay: 450ms; }
+  .sk-card-course .sk-stop:nth-child(2) .sk-stop-desc { animation-delay: 490ms; }
+  .sk-card-course .sk-stop:nth-child(3) .sk-stop-name { animation-delay: 600ms; }
+  .sk-card-course .sk-stop:nth-child(3) .sk-stop-desc { animation-delay: 640ms; }
+
+  /* =========================================================
+     코스 정류지 (CourseStopList) — 지도/저장 화면과 함께 쓰는 컴포넌트라
+     여기 기본값은 지금 화면과 완전히 같아야 한다. 채팅 카드 안에서만
+     달라지는 부분은 아래 데스크톱 블록의 .sk-card-course 스코프에 있다.
+     ========================================================= */
+  .sk-stop-thumb {
+    width: 60px; /* was: h-[60px] w-[60px] */
+    height: 60px;
+  }
+
+  .sk-stop-body {
+    padding-bottom: 0.25rem; /* was: pb-1 */
+  }
+
+  .sk-stop-name {
+    font-size: 15px; /* was: text-[15px] */
+  }
+
+  .sk-stop-desc {
+    font-size: 12px; /* was: text-[12px] */
   }
 
   /* =========================================================
@@ -1026,30 +2006,33 @@ body {
     background: radial-gradient(circle, rgba(255, 214, 120, 0.55) 0%, rgba(255, 214, 120, 0) 70%);
   }
 
-  /* 흐림·구름 — 회청색 덩어리가 넓게 퍼져 천천히 밀려간다 */
+  /* 흐림·구름 — 예전엔 회청색만 써서 흐린 날엔 배경이 거의 안 보였다(실측: 오늘
+     대구가 "흐림"이라 웹에서 노랑이 아예 없고 회색만 옅게 깔렸다). 덩어리 수·크기·
+     애니메이션은 그대로 두고 색만 브랜드 색(따뜻한 빛 + 민트)으로 바꾸고, 맑은 날보다
+     옅게 둬서 날씨 차이는 그대로 남긴다. */
   .sk-atmo[data-sky="cloud"] > i:nth-child(1) {
     width: 400px;
-    height: 220px;
+    height: 260px;
     top: -60px;
     left: -130px;
-    opacity: 0.16;
-    background: radial-gradient(circle, rgba(15, 60, 58, 0.45) 0%, rgba(15, 60, 58, 0) 66%);
+    opacity: 0.44;
+    background: radial-gradient(circle, rgba(255, 199, 71, 0.55) 0%, rgba(255, 199, 71, 0) 68%);
   }
   .sk-atmo[data-sky="cloud"] > i:nth-child(2) {
     width: 340px;
-    height: 200px;
+    height: 240px;
     top: 140px;
     right: -110px;
-    opacity: 0.14;
-    background: radial-gradient(circle, rgba(15, 60, 58, 0.4) 0%, rgba(15, 60, 58, 0) 68%);
+    opacity: 0.26;
+    background: radial-gradient(circle, rgba(15, 60, 58, 0.34) 0%, rgba(15, 60, 58, 0) 70%);
   }
   .sk-atmo[data-sky="cloud"] > i:nth-child(3) {
     width: 320px;
     height: 320px;
     top: 380px;
     left: -80px;
-    opacity: 0.16;
-    background: radial-gradient(circle, rgba(30, 201, 184, 0.4) 0%, rgba(30, 201, 184, 0) 70%);
+    opacity: 0.42;
+    background: radial-gradient(circle, rgba(30, 201, 184, 0.5) 0%, rgba(30, 201, 184, 0) 70%);
   }
 
   /* 비·눈 — 넓은 물빛 덩어리 위로 가는 줄이 계속 지나간다 */
@@ -1058,7 +2041,7 @@ body {
     height: 300px;
     top: -80px;
     left: -110px;
-    opacity: 0.2;
+    opacity: 0.28;
     background: radial-gradient(circle, rgba(56, 130, 180, 0.45) 0%, rgba(56, 130, 180, 0) 68%);
   }
   .sk-atmo[data-sky="rain"] > i:nth-child(2) {
@@ -1066,16 +2049,16 @@ body {
     height: 280px;
     top: 200px;
     right: -90px;
-    opacity: 0.18;
-    background: radial-gradient(circle, rgba(56, 130, 180, 0.4) 0%, rgba(56, 130, 180, 0) 70%);
+    opacity: 0.26;
+    background: radial-gradient(circle, rgba(255, 214, 120, 0.42) 0%, rgba(255, 214, 120, 0) 70%);
   }
   .sk-atmo[data-sky="rain"] > i:nth-child(3) {
     width: 260px;
     height: 260px;
     top: 380px;
     left: -60px;
-    opacity: 0.16;
-    background: radial-gradient(circle, rgba(30, 201, 184, 0.4) 0%, rgba(30, 201, 184, 0) 70%);
+    opacity: 0.3;
+    background: radial-gradient(circle, rgba(30, 201, 184, 0.44) 0%, rgba(30, 201, 184, 0) 70%);
   }
 
   /* 빗줄기는 덩어리 위에 얹힌다(4번째부터) */
@@ -1108,11 +2091,41 @@ body {
     transform-origin: top right;
   }
 
+  /* 저장 화면의 정렬 고르기 — 검색창과 같은 높이·같은 알약 모양.
+     폭은 글자만큼만 쓰고(white-space:nowrap), 남는 폭은 옆 검색창이 가져간다.
+     예전 <select>는 잡힌 폭보다 실제 렌더 폭이 커서 390 화면에서 삐져나갔다. */
+  .sk-sort-btn {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px 10px 14px;
+    border-radius: 999px;
+    background: var(--sk-face);
+    box-shadow: 0 1px 3px rgba(17, 24, 39, 0.05);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-ink-soft);
+    white-space: nowrap;
+  }
+
+  @media (hover: hover) {
+    .sk-sort-btn:hover {
+      color: var(--sk-accent);
+    }
+  }
+
+  .sk-sort-menu {
+    min-width: 152px;
+  }
+
   /* 지도 핀 — 순서대로 떨어져 꽂힌다. 최초 생성 때만 붙인다
-     (선택할 때마다 다시 떨어지면 지도가 산만해진다). */
+     (선택할 때마다 다시 떨어지면 지도가 산만해진다).
+     [M4] 간격에 상한을 뒀다. 주차장 목록처럼 핀이 스무 개씩 되는 화면에서는
+     예전엔 마지막 핀이 1.4초 뒤에야 나타났다 — 여섯 번째부터는 같이 떨어진다. */
   .sk-mappin-drop {
     animation: sk-pin-drop 540ms var(--sk-e-place) backwards;
-    animation-delay: calc(var(--i, 0) * 70ms);
+    animation-delay: calc(min(var(--i, 0), 5) * 70ms);
   }
 
   /* 탭 안에서 옮겨 다니는 얕은 전환과, 한 단계 들어가는 깊은 전환을 구분한다 */
@@ -1258,6 +2271,37 @@ body {
   }
 
   /* =========================================================
+     NAV FLOW — 어느 쪽으로 갔는지가 화면에 남는다.
+     전역 탭(챗·지도·저장·마이)을 옮길 때만 data-dir가 붙는다. 기본값은
+     모바일 문법(가로)이고, 1024부터 세로로 바뀐다.
+     움직이는 것은 이 칸 하나뿐이다 — 하단 탭바와 사이드바는 이 바깥의
+     fixed 요소라 따라 움직이지 않는다. 애니메이션이 끝나면 transform이
+     남지 않으므로(fill 없음) 안쪽 sticky·지도도 평소 상태로 돌아온다.
+     ========================================================= */
+  .sk-page[data-dir] {
+    --sk-nav-from: var(--sk-nav-shift);
+    --sk-nav-to: calc(var(--sk-nav-shift) * -1);
+    animation: sk-nav-x-in 300ms var(--sk-e-place) backwards;
+  }
+
+  .sk-page[data-dir="back"] {
+    --sk-nav-from: calc(var(--sk-nav-shift) * -1);
+    --sk-nav-to: var(--sk-nav-shift);
+  }
+
+  /* 나가는 쪽 — 짧고 가속. forwards로 끝을 잡아 두고, 경로가 바뀌면
+     이 요소 자체가 교체되므로 남지 않는다(안 바뀌면 600ms 안전장치가 푼다). */
+  .sk-page.sk-leave,
+  .sk-page-deep.sk-leave {
+    animation: sk-nav-x-out var(--sk-t-exit) var(--sk-e-exit) forwards;
+  }
+
+  .sk-page.sk-leave:not([data-dir]),
+  .sk-page-deep.sk-leave {
+    --sk-nav-to: calc(var(--sk-nav-shift) * -1);
+  }
+
+  /* =========================================================
      지도 핀 — 마커는 HTML 문자열로 주입되므로 전역 클래스로 잡는다.
      default / selected / current 를 형태로 구분하고, 선택 순간 "잡혔다"는
      pop + settle 과 파문 한 번을 준다. 지도 가독성을 위해 크기는 유지한다.
@@ -1399,6 +2443,867 @@ body {
     outline: 2px solid var(--sk-accent);
     outline-offset: 3px;
   }
+
+  /* =========================================================
+     틀 — 모바일 / 태블릿 / 웹(compact) / 데스크톱
+     =========================================================
+     기본값은 지금 모바일 그대로다(본문 460px 한 줄, 사이드바는 서랍).
+     넓어지는 쪽만 min-width 미디어 쿼리로 더한다 — 좁은 화면은 아무것도 안 바뀐다.
+
+       ~767   모바일   : 본문 460 · 서랍 · 하단 탭바
+       768~  태블릿    : 본문 600 · 서랍 · 하단 탭바
+       1024~ 웹 compact: 본문 760 · 아이콘 레일(기본 접힘, 펼칠 수 있음) · 탭바 없음
+       1200~ 데스크톱  : 본문 760 · 레일 256(접으면 68) · 탭바 없음
+
+     레일 폭은 변수 하나(--sk-side)로만 오간다. 사이드바는 그 폭을 그대로 쓰고,
+     본문은 남는 자리를 전부 받는다 — 접으면 왼쪽에 빈 자리가 남지 않는다.
+     html[data-sk-rail]은 "사용자가 직접 고른 상태"만 담는다(없으면 화면 폭별 기본값).
+     탭바가 사라지는 경계(1024)는 Tailwind의 lg:와 같은 값이라, 입력창 sticky 예외
+     (lg:bottom-0)와 하단 여백(lg:pb-6)이 같은 지점에서 함께 바뀐다. */
+  .sk-shell {
+    --sk-side: 0px;
+    margin-inline: auto;
+    display: flex;
+    width: 100%;
+    max-width: 460px;
+    flex: 1 1 auto;
+  }
+
+  .sk-main {
+    margin-inline: auto;
+    display: flex;
+    width: 100%;
+    max-width: 460px;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  /* 홈의 "고르는 줄"(날씨·대기질 + 지역 선택) 래퍼 — 모바일에서는 display:contents라
+     상자가 없는 것처럼 동작한다(부모의 세로 스택·간격이 지금 그대로 적용된다).
+     웹에서만 실제 상자가 되어 두 요소를 한 줄에 세운다. */
+  .sk-home-row {
+    display: contents;
+  }
+
+  /* 홈 본문 스택 · 입력 블록 · 날씨 줄 · 로고 — 모바일 값은 지금(유틸리티)과 같다.
+     display를 유틸리티가 아니라 여기서 들고 있어야 웹에서 격자로 바꿀 수 있다
+     (유틸리티 레이어가 우선이라 flex를 grid로 덮을 수 없다). */
+  .sk-home-stack {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .sk-home-compose {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+  }
+
+  .sk-home-air {
+    padding: 0.75rem 1rem;
+  }
+
+  .sk-home-logo {
+    height: 21px;
+  }
+
+  /* 펼친 보조 검색(장소·문화행사) — 모바일은 지금처럼 세로로 쌓인다.
+     display를 유틸리티가 아니라 여기서 들고 있어야 웹에서 2열로 바꿀 수 있다. */
+  .sk-home-extras {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* 하단 탭바는 본문 컬럼과 같은 폭으로 — 본문만 넓어지고 탭바만 460으로 남으면 어긋난다 */
+  .sk-dock-bar {
+    max-width: 460px;
+  }
+
+  @media (min-width: 768px) {
+    .sk-shell {
+      max-width: 640px;
+    }
+
+    .sk-main,
+    .sk-dock-bar {
+      max-width: 600px;
+    }
+  }
+
+  /* 사이드바(서랍) — 모바일·태블릿에서는 지금과 같은 고정 오버레이다.
+     transform/폭을 유틸리티가 아니라 여기서 들고 있는 이유: 1024 이상에서 흐름 안
+     요소로 바뀔 때 유틸리티(fixed·w-[320px])가 우선순위에서 이겨버리기 때문이다. */
+  .sk-side {
+    position: fixed;
+    inset-block: 0;
+    left: 0;
+    z-index: 50;
+    display: flex;
+    width: 320px;
+    max-width: 85vw;
+    flex-direction: column;
+    overflow-y: auto;
+    background: #ffffff;
+    transform: translateX(-100%);
+    transition: transform var(--sk-t-meso) var(--sk-e-place);
+  }
+
+  .sk-side[data-open="1"] {
+    transform: translateX(0);
+    box-shadow: 0 25px 50px -12px rgba(15, 60, 58, 0.25);
+  }
+
+  /* 펼친 레일의 본문(로고·새 질문·내비·검색·대화 기록) */
+  .sk-side-full {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  /* 레일의 아이콘 버튼 — 터치·클릭 영역 40px */
+  .sk-side-icon {
+    display: inline-flex;
+    height: 40px;
+    width: 40px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    color: var(--color-ink-soft);
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+
+  .sk-side-icon:hover,
+  .sk-side-icon:focus-visible {
+    background: var(--sk-mint-bg);
+    color: var(--sk-accent);
+  }
+
+  /* 지금 보고 있는 화면 — 하단 탭이 트랙으로 알려주는 것과 같은 정보를
+     레일에서는 면과 색으로 알려준다. */
+  .sk-side-icon-on {
+    background: var(--sk-mint-bg);
+    color: var(--sk-accent);
+  }
+
+  /* 펼친 사이드바의 전역 nav 한 줄 */
+  .sk-side-nav {
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+
+  .sk-side-nav:hover,
+  .sk-side-nav:focus-visible {
+    background: var(--sk-mint-bg);
+  }
+
+  .sk-side-nav-on {
+    background: var(--sk-mint-bg);
+    color: var(--sk-accent);
+  }
+
+  /* 접힌 레일에서만 보이는 아이콘 줄 — 서랍(모바일)에서는 항상 숨는다 */
+  .sk-side-mini {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  @media (min-width: 1024px) {
+    /* 사이드바는 화면(뷰포트) 왼쪽 끝에 고정이고, 본문이 비워두는 자리는 레일이
+       접혔든 펼쳤든 항상 68px이다 — 펼친 레일의 나머지 188px은 본문 "위로" 덮인다.
+       그래서 레일을 열고 닫아도 로고·히어로·입력창의 x좌표가 움직이지 않는다. */
+    .sk-shell {
+      --sk-side: 68px;
+      max-width: none;
+      padding-left: 68px;
+    }
+
+    .sk-shell[data-rail="expanded"] {
+      --sk-side: 256px;
+    }
+
+    /* 본문 래퍼는 남는 폭을 전부 쓰고(=배경이 깔릴 캔버스), 읽는 컬럼만 가운데로 둔다.
+       예전엔 래퍼 자체가 760px이라 넓은 화면에서 본문이 "가운데 떠 있는 섬"처럼 보였고,
+       뒤에 깔리는 대기 레이어(.sk-atmo)도 그 폭에서 잘려 띠처럼 보였다. */
+    .sk-main {
+      max-width: none;
+    }
+
+    .sk-main > .sk-page,
+    .sk-main > .sk-page-deep {
+      width: 100%;
+      max-width: 900px;
+      margin-inline: auto;
+    }
+
+    /* 대기 레이어 — 컬럼 밖까지 번지게 두고(바깥은 .sk-main의 overflow-x:clip이 자른다),
+       넓은 화면에 맞게 덩어리도 키운다. 좁은 화면 값은 그대로다. */
+    .sk-atmo {
+      top: -132px;
+      left: -50vw;
+      right: -50vw;
+    }
+
+    /* 덩어리 자리는 상자 모서리(%)가 아니라 "가운데에서 얼마나 떨어졌는지"로 잡는다.
+       상자를 화면 폭만큼 넓혀 놨기 때문에(-50vw) 모서리 기준으로 두면 덩어리가 보이는
+       영역 밖으로 밀려나 배경이 사라진 것처럼 보였다(실측). 가운데 기준이면 어떤 폭에서도
+       본문 뒤에 남는다. */
+    .sk-atmo[data-sky] > i:nth-child(1) {
+      left: 50%;
+      right: auto;
+      margin-left: -7vw;
+      top: -110px;
+      width: min(34vw, 560px);
+      height: min(34vw, 560px);
+    }
+
+    .sk-atmo[data-sky] > i:nth-child(2) {
+      left: 50%;
+      right: auto;
+      margin-left: -30vw;
+      top: 90px;
+      width: min(32vw, 520px);
+      height: min(32vw, 520px);
+    }
+
+    .sk-atmo[data-sky] > i:nth-child(3) {
+      left: 50%;
+      right: auto;
+      margin-left: 15vw;
+      top: 330px;
+      width: min(30vw, 500px);
+      height: min(30vw, 500px);
+    }
+
+    /* 진하기는 자리(data-sky)마다 다르다 — 넓은 화면에서 옅어 보이지 않게 조금 올린다 */
+    .sk-atmo[data-sky="sun"] > i:nth-child(1) { opacity: 0.62; }
+    .sk-atmo[data-sky="sun"] > i:nth-child(2) { opacity: 0.58; }
+    .sk-atmo[data-sky="sun"] > i:nth-child(3) { opacity: 0.5; }
+    .sk-atmo[data-sky="cloud"] > i:nth-child(1) { opacity: 0.66; height: min(26vw, 420px); }
+    .sk-atmo[data-sky="cloud"] > i:nth-child(2) { opacity: 0.4; height: min(24vw, 380px); }
+    .sk-atmo[data-sky="cloud"] > i:nth-child(3) { opacity: 0.6; }
+    .sk-atmo[data-sky="rain"] > i:nth-child(1) { opacity: 0.4; }
+    .sk-atmo[data-sky="rain"] > i:nth-child(2) { opacity: 0.4; }
+    .sk-atmo[data-sky="rain"] > i:nth-child(3) { opacity: 0.44; }
+
+    /* 빗줄기도 보이는 영역 안쪽으로 모은다 */
+    .sk-atmo[data-sky="rain"] > i:nth-child(4) { left: calc(50% - 22vw); }
+    .sk-atmo[data-sky="rain"] > i:nth-child(5) { left: 50%; }
+    .sk-atmo[data-sky="rain"] > i:nth-child(6) { left: calc(50% + 20vw); }
+
+    /* 홈 상단 — 로고와 날씨 배지가 양 끝으로 벌어져 따로 놀지 않게 한 덩어리로 */
+    .sk-bar.sk-bar-plain {
+      justify-content: flex-start;
+      gap: 0.875rem;
+      padding-top: 1.75rem;
+      padding-bottom: 0.25rem;
+    }
+
+    /* Hero — 위아래 빈 자리를 줄이고 왼쪽 정렬로 본문 줄에 맞춘다 */
+    .sk-hero {
+      padding-top: 36px;
+      padding-bottom: 26px;
+      text-align: left;
+    }
+
+    .sk-hero-title {
+      font-size: 40px;
+    }
+
+    .sk-hero-sub {
+      margin-top: 14px;
+      font-size: 15px;
+    }
+
+    /* 홈 본문 — 세로 한 줄 스택을 격자로 바꾼다. DOM 순서는 그대로 두고 자리만 잡는다.
+       (히어로·날씨 줄·입력 블록의 래퍼는 display:contents라 자식이 곧 격자 칸이 된다.)
+
+         [ 제목        ][ 설명        ]
+         [ 제목        ][ 미세먼지·날씨 ]
+         [ 지역 ][ 질문 입력 + 보내기  ]
+         [ 빠른 질문 칩 ][ 이렇게도 찾아보세요 ]
+         [ 펼친 보조 검색(2열)            ]
+
+       세로로 정중앙에 띄우지 않는다 — 위에서 적당히 내려와 시작하고, 내용이 길어지면
+       (보조 검색을 펼치면) 그대로 아래로 이어진다. */
+    .sk-home-stack {
+      display: grid;
+      grid-template-columns: 240px 130px minmax(0, 1fr);
+      grid-template-areas:
+        "title title info"
+        "title title air"
+        "region work work"
+        "chips chips toggle"
+        "extras extras extras";
+      column-gap: 1rem;
+      row-gap: 1rem;
+      /* 상단 바 아래 "남은 높이" 안에서 가운데에 놓되(=화면 높이가 달라도 비슷한
+         비율), 아래쪽에 여백을 더 줘서 수학적 정중앙보다 살짝 위에 앉게 한다.
+         safe: 내용이 길어져 남은 높이를 넘으면(보조 검색 펼침) 가운데 정렬을 포기하고
+         위에서부터 쌓인다 — 위가 잘리지 않고 그대로 스크롤된다. */
+      align-content: safe center;
+      padding-top: 24px;
+      padding-bottom: clamp(48px, 13vh, 180px);
+    }
+
+    /* 히어로는 상자를 없애고 제목·설명이 직접 격자 칸에 들어간다 */
+    .sk-hero {
+      display: contents;
+    }
+
+    .sk-hero-title {
+      grid-area: title;
+      align-self: start;
+      font-size: 40px;
+      line-height: 1.18;
+      /* 한글은 기본값이면 글자 단위로 끊긴다("나가볼까 / 요?") — 단어 단위로 끊는다 */
+      word-break: keep-all;
+      animation: sk-settle 260ms var(--sk-ease) backwards;
+    }
+
+    .sk-hero-sub {
+      grid-area: info;
+      align-self: start;
+      margin-top: 6px;
+      font-size: 16px;
+      line-height: 1.75;
+      animation: sk-settle 260ms var(--sk-ease) 40ms backwards;
+    }
+
+    .sk-home-row {
+      display: contents;
+    }
+
+    /* 미세먼지·날씨는 카드가 아니라 설명 아래 한 줄로 — 손이 가는 줄(지역·입력)은
+       비워 둔다. 값이 없으면 이 칸은 아예 비고 격자는 그대로 유지된다. */
+    .sk-home-air {
+      grid-area: air;
+      align-self: start;
+      padding: 0;
+      border: 0;
+      background: none;
+      box-shadow: none;
+    }
+
+    .sk-home-region {
+      grid-area: region;
+      align-self: center;
+      margin-top: 12px;
+      min-width: 0;
+    }
+
+    /* 입력 블록도 상자를 없애 자식(입력창·칩)이 각자 자리로 간다 */
+    .sk-home-compose {
+      display: contents;
+    }
+
+    .sk-home-compose > form.sk-input {
+      grid-area: work;
+      margin-top: 12px;
+    }
+
+    .sk-home-compose > .sk-reel {
+      grid-area: chips;
+      flex-wrap: wrap;
+      overflow: visible;
+      -webkit-mask-image: none;
+      mask-image: none;
+      padding-top: 0;
+      padding-bottom: 0;
+      align-content: start;
+    }
+
+    /* 지역이 하나도 없을 때만 뜨는 안내 — 격자에서는 입력줄 아래 한 줄로 */
+    .sk-home-compose > p {
+      grid-area: chips;
+      align-self: start;
+    }
+
+    /* "이렇게도 찾아보세요"는 칩 줄 오른쪽 끝으로. 양옆 구분선은 웹에서 지운다 */
+    .sk-home-toggle-row {
+      grid-area: toggle;
+      margin-top: 0;
+      justify-content: flex-end;
+      align-self: center;
+    }
+
+    .sk-home-toggle-row > span {
+      display: none;
+    }
+
+    /* 상단 로고는 작업 영역 폭에 맞춰 조금 키운다 */
+    .sk-bar-plain .sk-home-logo {
+      height: 26px;
+    }
+
+    /* 펼친 보조 검색(장소·문화행사)은 좌우로 나란히, 작업 영역 전체 폭 */
+    .sk-home-extras {
+      grid-area: extras;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+      gap: 1rem;
+    }
+
+    /* 화면 왼쪽 끝에 고정 — 앱 전체를 가운데로 모으는 컨테이너 안에 넣지 않는다.
+       어떤 폭에서도 left는 0이다. 펼치면 폭만 68 → 256으로 늘어나 본문 위에 얹힌다. */
+    .sk-side {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 45;
+      height: 100dvh;
+      width: var(--sk-side);
+      max-width: none;
+      flex: none;
+      transform: none;
+      border-right: 1px solid var(--sk-hairline);
+      box-shadow: none;
+      transition: width var(--sk-t-meso) var(--sk-e-place), box-shadow var(--sk-t-meso) var(--sk-e-place);
+    }
+
+    /* 펼친 상태는 본문 위에 올라와 있으므로 그림자로 층을 표시한다 */
+    .sk-shell[data-rail="expanded"] .sk-side {
+      box-shadow: 0 18px 44px -22px rgba(15, 60, 58, 0.45);
+    }
+
+    /* 펼침/접힘에 따라 같은 항목을 텍스트 줄 / 아이콘 줄로 바꿔 보여준다 */
+    .sk-shell:not([data-rail="expanded"]) .sk-side-full {
+      display: none;
+    }
+
+    .sk-shell:not([data-rail="expanded"]) .sk-side-mini {
+      display: flex;
+    }
+
+    /* =====================================================
+       NAV FLOW (웹) — 같은 방향 규칙을 세로로 바꾼다.
+       사이드바가 왼쪽에 고정이라 가로 이동은 사이드바를 밀어내는 것처럼
+       읽힌다. 이동량도 22px로 줄여 모바일보다 절제한다.
+       ===================================================== */
+    .sk-page[data-dir] {
+      --sk-nav-from: var(--sk-nav-lift);
+      --sk-nav-to: calc(var(--sk-nav-lift) * -1);
+      animation-name: sk-nav-y-in;
+      animation-duration: 260ms;
+    }
+
+    .sk-page[data-dir="back"] {
+      --sk-nav-from: calc(var(--sk-nav-lift) * -1);
+      --sk-nav-to: var(--sk-nav-lift);
+    }
+
+    .sk-page.sk-leave,
+    .sk-page-deep.sk-leave {
+      animation-name: sk-nav-y-out;
+      animation-duration: 110ms;
+    }
+
+    .sk-page.sk-leave:not([data-dir]),
+    .sk-page-deep.sk-leave {
+      --sk-nav-to: calc(var(--sk-nav-lift) * -1);
+    }
+
+    /* =====================================================
+       채팅 / 추천 결과 — 웹 읽기 폭과 위계
+       작업 영역(1040 / compact 900) 안에서 스레드를 960 컬럼으로 모은다.
+       compact에서는 남는 폭이 860이라 그대로 전폭이 된다.
+       ===================================================== */
+    .sk-thread {
+      width: 100%;
+      max-width: 960px;
+      margin-inline: auto;
+      /* 한 턴 안(질문↔답)은 12px 그대로 두고, 턴과 턴 사이만 벌린다 */
+      gap: 2rem;
+    }
+
+    /* 오류 알림은 스레드 밖(형제)이라 같은 축을 따로 맞춰준다 */
+    .sk-thread-al {
+      width: 100%;
+      max-width: 960px;
+      margin-inline: auto;
+    }
+
+    /* 내 질문 — 오른쪽 정렬은 그대로, 폭만 읽기 좋게.
+       고치는 중인 상자도 같은 폭이어야 말풍선이 그 자리에서 열린 것으로 읽힌다. */
+    .sk-ask-bubble {
+      max-width: 640px;
+    }
+
+    .sk-edit-box {
+      max-width: 640px;
+    }
+
+    /* 설명문은 추천 카드의 "한 단계 아래" 보조 영역이다.
+       카드와 같은 무게(흰 면 + 그림자 + 18px 모서리)로 두면 두 번째 카드처럼 읽히고,
+       반대로 면을 통째로 걷으면 글자가 허공에 뜬다. 그래서 아주 옅은 민트 면 +
+       거의 안 보이는 1px 선 + 카드보다 작은 모서리 + 그림자 없음으로 잡는다. */
+    .sk-ai-text {
+      max-width: 740px;
+      /* 부모(.sk-ai-body)의 gap 8px과 합쳐 카드와 12px 떨어진다 */
+      margin-top: 4px;
+      padding: 15px 16px;
+      border: 1px solid var(--sk-line-soft);
+      /* 카드는 18px — 보조 영역이라 한 단계 작게 */
+      border-radius: 10px 10px 4px 10px;
+      background: color-mix(in srgb, var(--sk-mint-bg) 55%, #ffffff);
+      box-shadow: none;
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    /* 되묻기(추가 정보 요청)는 질문이라 패널을 유지하고 폭만 제한한다 */
+    .sk-ai-ask {
+      max-width: 740px;
+    }
+
+    /* 마지막 후속 액션 — 응답 덩어리의 끝에 붙되 더 가볍게 */
+    .sk-ai-more {
+      margin-top: 6px;
+    }
+
+    .sk-ai-more > .sk-notice-btn {
+      padding: 5px 10px;
+      font-size: 12px;
+      color: var(--sk-muted);
+    }
+
+    /* 입력 영역 — 스레드와 같은 축·같은 폭. 얇은 경계선과 여백만으로
+       "답변 끝 → 새 질문 시작"을 가른다(하단 바처럼 띄우지 않는다). */
+    .sk-compose-chat {
+      width: 100%;
+      max-width: 960px;
+      margin-inline: auto;
+      padding-inline: 0;
+      padding-top: 0.875rem;
+      padding-bottom: 0.75rem;
+    }
+
+    /* ---- 추천 카드 ---- */
+    .sk-card-course {
+      padding: 1.25rem;
+    }
+
+    .sk-cc-title {
+      font-size: 17px;
+    }
+
+    .sk-cc-sub {
+      font-size: 13px;
+    }
+
+    /* 제목 묶음과 장소 목록 사이의 얇은 가름선 — 카드 안 1층/2층 */
+    .sk-cc-stops {
+      margin-top: 0.875rem;
+      padding-top: 0.875rem;
+      border-top: 1px solid var(--sk-line-soft);
+    }
+
+    /* ---- 정류지: 채팅 카드 안에서만 ---- */
+    /* CourseStopList는 지도 탭·저장한 코스에서도 쓰므로 반드시 스코프한다. */
+    .sk-card-course .sk-stop-thumb {
+      width: 72px;
+      height: 72px;
+    }
+
+    .sk-card-course .sk-stop-name {
+      font-size: 16px;
+    }
+
+    .sk-card-course .sk-stop-desc {
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .sk-card-course .sk-stop-body {
+      padding-bottom: 0.625rem;
+    }
+
+    .sk-card-course .sk-stop + .sk-stop {
+      margin-top: 6px;
+    }
+
+    /* 요금·운영정보는 LLM 문장이라 길다 — 한 줄에 우겨넣지 않고 줄을 바꾼다 */
+    .sk-card-course .sk-stop-tags {
+      gap: 5px 6px;
+    }
+
+    .sk-card-course .sk-stop-tags .sk-tag-flow {
+      max-width: 100%;
+      padding-block: 4px;
+      line-height: 1.55;
+      text-align: left;
+    }
+
+    /* ---- 마이페이지: 1024부터는 손가락이 아니라 커서라 줄 간격을 조금 넓힌다.
+       2열 전환은 1200부터다(860 폭에서 340+24+496을 만들면 질문 문장이 자주 잘린다). */
+    .sk-my-row {
+      padding: 12px 10px;
+    }
+
+    .sk-my-thumb,
+    .sk-my-avatar {
+      height: 48px;
+      width: 48px;
+    }
+
+    .sk-my-row-title {
+      font-size: 15px;
+    }
+
+    .sk-my-sum {
+      padding: 16px 18px;
+    }
+  }
+
+  /* compact(1024~1199)는 작업 영역이 900이라 칩 4개가 반쪽 폭에서 두 줄로 접힌다 —
+     여기서만 칩을 한 줄 전체로 두고 "이렇게도 찾아보세요"를 그 아래 오른쪽에 둔다. */
+  @media (min-width: 1024px) and (max-width: 1199px) {
+    .sk-home-stack {
+      grid-template-areas:
+        "title title info"
+        "title title air"
+        "region work work"
+        "chips chips chips"
+        "toggle toggle toggle"
+        "extras extras extras";
+    }
+  }
+
+  /* 1200~1499 — 화면이 좁아 본문 컬럼의 왼쪽 여백만으로는 펼친 레일(256)을 피할 수
+     없다. 레일 상태와 무관한 "고정" 여백을 본문 영역에 둬서, 펼쳐도 본문을 가리지 않고
+     접어도 본문이 움직이지 않게 한다(여백은 항상 있으므로 좌표가 변하지 않는다). */
+  @media (min-width: 1200px) and (max-width: 1499px) {
+    .sk-main {
+      padding-left: 188px;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    .sk-shell {
+      --sk-side: 256px;
+    }
+
+    /* 일반 데스크톱 — 작업 영역 1040, compact(1024~1199)는 위의 900을 쓴다 */
+    .sk-main > .sk-page,
+    .sk-main > .sk-page-deep {
+      max-width: 1040px;
+    }
+
+    .sk-home-stack {
+      grid-template-columns: 280px 140px minmax(0, 1fr);
+    }
+
+    .sk-hero-title {
+      font-size: 52px;
+    }
+
+    .sk-shell[data-rail="collapsed"] {
+      --sk-side: 68px;
+    }
+
+    .sk-shell[data-rail="collapsed"] .sk-side-full {
+      display: none;
+    }
+
+    .sk-shell[data-rail="collapsed"] .sk-side-mini {
+      display: flex;
+    }
+
+    .sk-shell:not([data-rail="collapsed"]) .sk-side-full {
+      display: flex;
+    }
+
+    .sk-shell:not([data-rail="collapsed"]) .sk-side-mini {
+      display: none;
+    }
+
+    /* =====================================================
+       추천 카드 — 일반 데스크톱에서만 제목줄을 좌우로 쓴다.
+       DOM 순서는 그대로 두고 격자로만 앉힌다(order를 쓰면 카드 안 링크·버튼의
+       Tab 순서가 화면 순서와 어긋난다). compact(1024~1199)는 지금처럼
+       제목 아래 줄에 환경 정보가 내려간다.
+       ===================================================== */
+    .sk-card-course {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "title meta"
+        "sub   sub"
+        "stops stops"
+        "tags  tags"
+        "actions actions";
+      align-items: start;
+    }
+
+    .sk-cc-title {
+      grid-area: title;
+      align-self: center;
+      font-size: 18px;
+    }
+
+    /* 환경 정보는 제목보다 약하게 — 제목이 먼저 읽혀야 한다 */
+    .sk-cc-meta {
+      grid-area: meta;
+      align-self: center;
+      justify-content: flex-end;
+      margin-top: 0;
+      padding-left: 16px;
+    }
+
+    .sk-cc-meta .sk-tag {
+      font-size: 11px;
+      opacity: 0.85;
+    }
+
+    .sk-cc-sub {
+      grid-area: sub;
+    }
+
+    .sk-cc-stops {
+      grid-area: stops;
+    }
+
+    .sk-cc-tags {
+      grid-area: tags;
+    }
+
+    /* 액션 한 줄 — "이 코스로 출발"만 primary, 나머지 둘은 같은 무게의 보조 */
+    .sk-cc-actions {
+      grid-area: actions;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sk-cc-go {
+      width: 232px;
+      flex: none;
+    }
+
+    .sk-cc-sub-actions {
+      display: flex;
+      flex: 1;
+      justify-content: flex-start;
+    }
+
+    .sk-cc-sub-actions > button {
+      flex: none;
+      padding-inline: 18px;
+    }
+
+    /* =====================================================
+       마이페이지 — 2열. DOM 순서(프로필 → 추천 기록 → 저장한 장소 → 선호 조건
+       → 최근 질문 → 설정)는 그대로 두고 자리만 격자로 잡는다. order를 쓰지 않으므로
+       Tab 순서가 화면 순서와 어긋나지 않는다.
+       왼쪽(340)은 짧고 고정적인 것, 오른쪽은 계속 늘어나는 리스트.
+       ===================================================== */
+    .sk-my {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      grid-template-areas:
+        "head  head"
+        "sum   sum"
+        "saved hist"
+        "pref  hist"
+        "set   recent";
+      align-items: start;
+      column-gap: 24px;
+      row-gap: 24px;
+      width: 100%;
+      max-width: 1000px;
+      margin-inline: auto;
+      padding-inline: 1.25rem;
+    }
+
+    /* ScreenHeader가 자기 안에 20px 여백을 갖고 있어, 컨테이너 여백과 겹치지 않게 뺀다 */
+    .sk-my-head {
+      grid-area: head;
+      margin-inline: -1.25rem;
+      margin-bottom: -10px;
+    }
+
+    .sk-my-a-hist {
+      grid-area: hist;
+    }
+
+    .sk-my-a-saved {
+      grid-area: saved;
+    }
+
+    .sk-my-a-pref {
+      grid-area: pref;
+    }
+
+    .sk-my-a-recent {
+      grid-area: recent;
+    }
+
+    .sk-my-a-set {
+      grid-area: set;
+    }
+
+    .sk-my-sec {
+      margin-inline: 0;
+    }
+
+    /* 1000px을 가로로 다 쓰되, 이름과 통계가 양 끝으로 벌어져 보이지 않게
+       한 줄 안에서 이름 묶음 + 세로선 + 통계 묶음으로 붙여 둔다. */
+    .sk-my-sum {
+      grid-area: sum;
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      margin-inline: 0;
+      padding: 18px 22px;
+      border-radius: 16px;
+    }
+
+    /* 이름 묶음은 글자만큼만 쓰고(짧은 이름이면 짧게), 남는 폭은 통계가 나눠 갖는다.
+       반반으로 고정하면 "ㅅㅁ" 같은 짧은 이름에서 가운데가 통째로 비어 보였다. */
+    .sk-my-sum-id {
+      min-width: 0;
+      flex: 0 1 auto;
+      max-width: 52%;
+    }
+
+    .sk-my-stats {
+      flex: 1 1 0%;
+      margin-top: 0;
+      border-top: 0;
+      border-left: 1px solid var(--sk-line-soft);
+      padding-top: 0;
+      padding-left: 28px;
+    }
+
+    .sk-my-stat {
+      align-items: flex-start;
+      min-width: 0;
+    }
+
+    .sk-my-avatar {
+      height: 52px;
+      width: 52px;
+    }
+
+    .sk-my-name {
+      font-size: 18px;
+    }
+
+    .sk-my-sub {
+      font-size: 13px;
+    }
+
+    .sk-my-stat-v {
+      font-size: 26px;
+    }
+  }
 }
 
 /* --- 키프레임 (레이어 밖) ------------------------------------ */
@@ -1469,6 +3374,43 @@ body {
 @keyframes sk-page-in {
   0% { opacity: 0; transform: translateY(8px); }
   100% { opacity: 1; transform: translateY(0); }
+}
+
+/* 모바일: 옆에서 들어와 살짝 지나쳤다 앉는다(--sk-e-place가 그 overshoot을 준다) */
+/* 들어오는 쪽은 0에서 시작하지 않는다 — 나가는 쪽이 빠진 직후 한 프레임이 비어
+   보이는 것을 막는다. 45%에서 이미 또렷해지고 남은 절반은 자리를 찾는 데 쓴다. */
+@keyframes sk-nav-x-in {
+  0% { opacity: 0.25; transform: translate3d(var(--sk-nav-from), 0, 0); }
+  45% { opacity: 1; }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* 나가는 쪽은 절반까지 거의 그대로 보이다가 빠르게 빠진다 */
+@keyframes sk-nav-x-out {
+  0% { opacity: 1; transform: translate3d(0, 0, 0); }
+  55% { opacity: 0.8; }
+  100% { opacity: 0; transform: translate3d(var(--sk-nav-to), 0, 0); }
+}
+
+/* 웹: 같은 규칙을 세로로. 이동량이 더 작아 차분하다 */
+@keyframes sk-nav-y-in {
+  0% { opacity: 0.25; transform: translate3d(0, var(--sk-nav-from), 0); }
+  45% { opacity: 1; }
+  100% { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* 칩이 켜질 때 — 눌린 자리에서 한 번 올라왔다 앉는다. 왜곡(scale)은 3%뿐이라
+   글자가 흔들려 보이지 않고, 느껴지는 건 타이밍이다. */
+@keyframes sk-chip-set {
+  0% { transform: translateY(1px) scale(0.97); }
+  55% { transform: translateY(-1px) scale(1.03); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes sk-nav-y-out {
+  0% { opacity: 1; transform: translate3d(0, 0, 0); }
+  55% { opacity: 0.8; }
+  100% { opacity: 0; transform: translate3d(0, var(--sk-nav-to), 0); }
 }
 
 /* 탭 아이콘이 한 번 튀어오른다 */
@@ -1690,7 +3632,29 @@ body {
   .sk-enter,
   .sk-stagger > *,
   .sk-page,
+  .sk-page[data-dir],
+  .sk-page.sk-leave,
+  .sk-page-deep.sk-leave,
+  .sk-my-chip-on,
   .sk-page-deep,
+  /* M2 — 장면 모션은 전부 끈다. 정보가 늦게 뜨면 안 되므로 지연도 같이 사라진다. */
+  .sk-home-stack .sk-hero-title,
+  .sk-home-stack .sk-hero-sub,
+  .sk-home-stack .sk-home-air,
+  .sk-home-stack .sk-home-region,
+  .sk-home-stack .sk-home-compose > form.sk-input,
+  .sk-home-stack .sk-home-compose > .sk-reel > *,
+  .sk-home-stack .sk-home-toggle-row,
+  .sk-user-row,
+  .sk-user-row .sk-edit-btn,
+  .sk-ai-avatar,
+  .sk-ai-label,
+  .sk-ai-body > *,
+  .sk-prog-out > *,
+  .sk-card-course.sk-stagger > *,
+  .sk-card-course .sk-cc-stops .sk-stagger-late > .sk-stop,
+  .sk-card-course .sk-stop-name,
+  .sk-card-course .sk-stop-desc,
   .sk-swap,
   .sk-drop,
   .sk-scrim,
@@ -1715,9 +3679,80 @@ body {
     display: none;
   }
 
-  .sk-step-link::after,
-  .sk-under-overlay {
+  /* M3 — 관리 화면: 큰 이동·stagger 없이 정보를 바로 보여준다.
+     여기서는 opacity를 1로 덮지 않는다. 이 선택자들은 목록의 "자식 전부"를
+     가리키는데, 그 안에는 비활성 줄처럼 흐리게 보이는 것이 정당한 요소가 섞여 있다
+     (설정의 '알림 설정' 줄 = opacity 0.7). 덮으면 꺼진 줄이 켜진 줄처럼 보인다(실측).
+     등장 애니메이션은 전부 backwards fill이라 animation을 끄면 원래 값으로 돌아간다. */
+  [data-reveal="in"],
+  .sk-my-head,
+  .sk-my-sum,
+  .sk-my-av,
+  .sk-my-id,
+  .sk-my-stats,
+  .sk-my-list > *,
+  .sk-my-empty,
+  .sk-empty,
+  .sk-sv-tabs,
+  .sk-sv-find,
+  .sk-sv-list > *,
+  .sk-set > * {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  /* 관찰자가 켜기를 기다리지 않는다 — 정보가 늦게 뜨면 안 된다 */
+  [data-reveal="wait"] {
+    opacity: 1 !important;
+  }
+
+  /* M4 — 지도 계층.
+     핀은 떨어지지 않고 그냥 거기 있고, 패널 내용은 옆에서 들어오지 않고 그냥 바뀐다.
+     경로는 lib/mapMotion.ts가 같은 설정을 읽어 계단 없이 최종 상태로 한 번에 그린다.
+     지도 카메라(fitBounds)는 그대로 둔다 — 그건 장식이 아니라 "어디를 보라"는 정보다.
+     여기서도 opacity를 1로 덮지 않는다: 비활성 요소가 흐린 건 상태 표시지 모션이 아니다. */
+  .sk-mappin-drop,
+  .sk-mappin-off,
+  .sk-mapmode,
+  .sk-mapcard,
+  .sk-swap-x,
+  .sk-swap-t {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .sk-seg-pill,
+  .sk-seg-btn,
+  .sk-seg-on,
+  .sk-press,
+  .sk-glide-bottom,
+  .sk-glide-top {
     transition: none !important;
+  }
+
+  /* 줄 삭제는 접힘 없이 즉시 사라진다 */
+  .sk-row-out {
+    animation: none !important;
+    display: none !important;
+  }
+
+  .sk-step-link::after,
+  .sk-under-overlay,
+  .sk-prog-wrap,
+  .sk-my-row-body,
+  .sk-my-chev,
+  .sk-my-row,
+  .sk-my-chip,
+  .sk-side-icon,
+  .sk-side-nav,
+  .sk-sort-btn {
+    transition: none !important;
+  }
+
+  /* 방향 있는 전환도 이동은 빼고 불투명도만 남긴다 */
+  .sk-my-row:hover .sk-my-row-body,
+  .sk-my-row:hover .sk-my-chev {
+    transform: none !important;
   }
 
   /* 줄은 그대로 옆으로 넘어가되 즉시 이동한다(스냅·가장자리 페이드는 유지) */
