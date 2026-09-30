@@ -155,7 +155,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
         {p.imageUrl ? (
           <div className="relative">
             {/* eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리 */}
-            <img src={p.imageUrl} alt={p.name} className="h-48 w-full rounded-2xl object-cover" />
+            <img src={p.imageUrl} alt="" className="h-48 w-full rounded-2xl object-cover" />
             <button
               onClick={reportImage}
               disabled={imageReported}
