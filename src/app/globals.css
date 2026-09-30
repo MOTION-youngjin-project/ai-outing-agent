@@ -115,6 +115,7 @@ body {
   /* 모바일 하단 탭바 높이 — 고정 입력창과 본문 하단 여백이 같이 참조한다.
      나들플랜 앱 안에서는 AppShell이 마운트 시 0px로 낮춘다(BottomNav가 null이라
      이 높이만큼 탭바가 실제로 없음 — see AppShell.tsx). */
+  --sk-safe-b: env(safe-area-inset-bottom); /* 앱 안에서는 AppShell이 0px로 — 네이티브 탭바가 하단 인셋을 이미 처리하는데 WebView는 여전히 시스템 내비바 높이를 보고한다. */
   --sk-dock: 76px; /* 실측(getBoundingClientRect): BottomNav 실제 높이 75.5px. 84px는 과추정이었다. */
 
   --sk-r: 14px;
