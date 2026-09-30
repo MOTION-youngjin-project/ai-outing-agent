@@ -30,7 +30,7 @@ export type SavedPlaceResult = {
   // "YYYY-MM-DD" 또는 null(방문 예정 아님).
   plannedVisitAt: string | null;
 };
-export type RecentQuestion = { id: string; question: string; askedAt: string };
+export type RecentQuestion = { id: string; question: string; askedAt: string; pinned: boolean };
 
 // 지금은 대구권 데이터만 있는 앱이라(핸드오프 2026-09-14), 지역 선택지를 대구광역시 +
 // 그 구/군으로 좁힌다. 다른 지역 데이터가 쌓이면 이 필터부터 걷어낼 것.
@@ -406,6 +406,21 @@ export async function fetchConversation(conversationId: string): Promise<Convers
   if (!res.ok) throw new Error("대화를 찾을 수 없습니다.");
   const data = await res.json();
   return data.data;
+}
+
+// 사이드바 대화 메뉴 — 고정/고정 해제, 이름 변경.
+export async function updateConversation(conversationId: string, patch: { pinned?: boolean; title?: string }) {
+  const res = await fetch(`/api/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error("대화를 변경하지 못했습니다.");
+}
+
+export async function deleteConversation(conversationId: string) {
+  const res = await fetch(`/api/conversations/${conversationId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("대화를 삭제하지 못했습니다.");
 }
 
 // /recommend/[runId]/place/[placeId]/parking/[pkltId] 새로고침/직링크 복원용.

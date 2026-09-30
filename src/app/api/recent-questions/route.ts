@@ -28,7 +28,7 @@ export async function GET() {
       where,
       orderBy: { startedAt: "desc" },
       take: SCAN_LIMIT,
-      select: { id: true, conversationId: true, userQuery: true, title: true, startedAt: true },
+      select: { id: true, conversationId: true, userQuery: true, title: true, startedAt: true, pinnedAt: true },
     }),
     prisma.agentRun.count({ where }),
   ]);
@@ -37,24 +37,26 @@ export async function GET() {
   // 대화의 여러 turn을 사이드바 한 항목으로 묶는다. 라벨은 AI가 요약한 title이 있으면
   // 그걸 쓰고(대화의 첫 턴에서만 채워짐), 아직 없으면(요약 실패·구버전 대화) 첫 질문
   // 원문으로 대체한다.
-  const groups = new Map<string, { id: string; question: string; title: string | null; latestAt: Date }>();
+  const groups = new Map<string, { id: string; question: string; title: string | null; latestAt: Date; pinned: boolean }>();
   for (const run of runs) {
     const key = run.conversationId ?? run.id;
     const existing = groups.get(key);
     if (!existing) {
-      groups.set(key, { id: key, question: run.userQuery!, title: run.title, latestAt: run.startedAt });
+      groups.set(key, { id: key, question: run.userQuery!, title: run.title, latestAt: run.startedAt, pinned: !!run.pinnedAt });
     } else {
       // runs가 최신순이라 뒤로 갈수록 더 이전 turn이다 — 계속 덮어써서 결국 가장 오래된
       // (그 대화의 첫) 질문·제목이 라벨로 남는다.
       existing.question = run.userQuery!;
       if (run.title) existing.title = run.title;
+      if (run.pinnedAt) existing.pinned = true;
     }
   }
 
   const data = [...groups.values()]
-    .sort((a, b) => b.latestAt.getTime() - a.latestAt.getTime())
+    // 고정한 대화는 RECENT_LIMIT에 밀려 잘리지 않게 먼저 세운다.
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.latestAt.getTime() - a.latestAt.getTime())
     .slice(0, RECENT_LIMIT)
-    .map((g) => ({ id: g.id, question: g.title ?? g.question, askedAt: g.latestAt.toISOString() }));
+    .map((g) => ({ id: g.id, question: g.title ?? g.question, askedAt: g.latestAt.toISOString(), pinned: g.pinned }));
 
   return NextResponse.json({ data, totalCount });
 }

@@ -10,6 +10,7 @@ import { Logo, LogoMark } from "@/components/Logo";
 import { summarize } from "@/hooks/useRecommendationFlow";
 import { useAppStore } from "@/lib/store";
 import { Icon } from "@/components/Icon";
+import { ConversationItem } from "@/components/ConversationItem";
 import type { ChatTurn } from "@/lib/agent";
 
 function isSameDay(a: Date, b: Date) {
@@ -23,15 +24,17 @@ function groupByDay(questions: RecentQuestion[]) {
   yesterday.setDate(now.getDate() - 1);
 
   const groups: { label: string; items: RecentQuestion[] }[] = [
+    { label: "고정됨", items: [] },
     { label: "오늘", items: [] },
     { label: "어제", items: [] },
     { label: "이전 기록", items: [] },
   ];
   for (const q of questions) {
     const d = new Date(q.askedAt);
-    if (isSameDay(d, now)) groups[0].items.push(q);
-    else if (isSameDay(d, yesterday)) groups[1].items.push(q);
-    else groups[2].items.push(q);
+    if (q.pinned) groups[0].items.push(q);
+    else if (isSameDay(d, now)) groups[1].items.push(q);
+    else if (isSameDay(d, yesterday)) groups[2].items.push(q);
+    else groups[3].items.push(q);
   }
   return groups.filter((g) => g.items.length > 0);
 }
@@ -63,6 +66,7 @@ export function Sidebar() {
   const setRecommendations = useAppStore((s) => s.setRecommendations);
   const setConversationId = useAppStore((s) => s.setConversationId);
   const setRegionId = useAppStore((s) => s.setRegionId);
+  const conversationId = useAppStore((s) => s.conversationId);
   const router = useRouter();
   const pathname = usePathname();
   const { status } = useSession();
@@ -233,16 +237,17 @@ export function Sidebar() {
                   <h2 className="pb-2 text-[12px] font-semibold text-muted">{group.label}</h2>
                   <div className="flex flex-col gap-1">
                     {group.items.map((q) => (
-                      <button
+                      <ConversationItem
                         key={q.id}
-                        onClick={() => openConversationMutation.mutate(q.id)}
+                        item={q}
+                        time={formatEntryTime(q.askedAt)}
                         disabled={openConversationMutation.isPending}
-                        className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-page disabled:opacity-50"
-                      >
-                        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full border border-hairline" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-ink-soft">{q.question}</span>
-                        <span className="shrink-0 text-[11px] text-muted">{formatEntryTime(q.askedAt)}</span>
-                      </button>
+                        onOpen={() => openConversationMutation.mutate(q.id)}
+                        // 지금 채팅 화면에 떠 있는 대화를 지웠으면 빈 새 질문으로 비운다.
+                        onDeleted={() => {
+                          if (q.id === conversationId) goNewQuestion();
+                        }}
+                      />
                     ))}
                   </div>
                 </div>
