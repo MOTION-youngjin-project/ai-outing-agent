@@ -7,6 +7,7 @@ import type { ChatTurn, Recommendation } from "@/lib/agent";
 import { useAppStore } from "@/lib/store";
 import {
   fetchRegions,
+  postConversationTitle,
   postRecommend,
   postSuggest,
   RecommendError,
@@ -132,6 +133,8 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
   }
 
   const suggestMutation = useMutation({ mutationFn: postSuggest });
+  // 대화의 첫 턴에서만 호출한다(아래 submitTurn) — 사이드바 "대화 기록" 제목을 AI 요약으로 채운다.
+  const titleMutation = useMutation({ mutationFn: postConversationTitle });
 
   // 요청마다 번호를 붙인다 — 다시 시도하거나 질문을 고쳐 보내면 먼저 보낸 요청이
   // 뒤늦게 도착할 수 있는데(서버는 끊을 수 없다), 그 답이 새 대화 위에 덮어쓰이면
@@ -145,12 +148,14 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
     // 응답이 언제 오든 이전 턴 결과를 정확히 이어 붙인다(클로저 값에 기대지 않는다).
     baseRecs: (RecommendResult | null)[];
     seq: number;
+    // 이 대화의 첫 턴이면(아래 submitTurn) true — 성공 시에만 제목 요약을 한 번 트리거한다.
+    isNewConversation: boolean;
   };
 
   const recommendMutation = useMutation({
     mutationFn: ({ historyWithUser, conversationId }: TurnVars) =>
       postRecommend(historyWithUser, conversationId, handleProgress),
-    onSuccess: (rec, { historyWithUser, baseRecs, seq }) => {
+    onSuccess: (rec, { historyWithUser, baseRecs, seq, isNewConversation }) => {
       if (seq !== requestSeq.current) return;
       const historyWithReply: ChatTurn[] = [
         ...historyWithUser,
@@ -167,6 +172,12 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
       window.NativeChatBridge?.postMessage("response-ready");
       suggestMutation.mutate(historyWithReply);
       if (session) {
+        // 제목은 대화당 한 번만 — 첫 턴 응답이 왔을 때만 트리거한다(이후 턴은 그대로 둠).
+        if (isNewConversation) {
+          titleMutation.mutate(rec.agentRunId, {
+            onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recent-questions"] }),
+          });
+        }
         queryClient.invalidateQueries({ queryKey: ["recent-questions"] });
         queryClient.invalidateQueries({ queryKey: ["recommendations"] });
       }
@@ -194,6 +205,7 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
     // 이 대화의 첫 turn이면(사이드바 "새 질문"으로 시작했거나 아직 한 번도 안 보낸 상태)
     // 새 conversationId를 발급한다 — 과거 대화를 이어서 보내는 중이면 이미 store에 있는
     // 값을 그대로 재사용해서 같은 대화로 계속 묶인다.
+    const isNewConversation = !conversationId;
     const activeConversationId = conversationId ?? crypto.randomUUID();
     if (!conversationId) setConversationId(activeConversationId);
     setHistory(historyWithUser);
@@ -209,6 +221,7 @@ export function useRecommendationFlow(initialRegions?: Region[]) {
       conversationId: activeConversationId,
       baseRecs,
       seq: requestSeq.current,
+      isNewConversation,
     });
   }
 

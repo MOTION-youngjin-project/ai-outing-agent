@@ -57,7 +57,11 @@ async function fetchOnce(query: string, apiKey: string): Promise<TourApiItem[]> 
 
 // ponytail: 다른 공공데이터 API들과 동일하게 최대 3회 재시도.
 async function fetchWithRetry(query: string): Promise<TourApiItem[]> {
-  const apiKey = process.env.DATA_GO_KR_API_KEY;
+  // external/tour-api.ts(관광 근거 조회)는 TOUR_API_KEY로 불리던 예전 이름도 폴백으로
+  // 받아주는데 여긴 DATA_GO_KR_API_KEY만 봤다 — 배포 환경에 옛 이름으로 남아있으면
+  // 여기(사진 조회)만 매번 키 없음 에러로 조용히 실패해 사진이 하나도 안 붙는다
+  // (ensurePlaceImage가 실패를 삼켜서 화면엔 그냥 "사진 없음"으로만 보였다).
+  const apiKey = (process.env.DATA_GO_KR_API_KEY || process.env.TOUR_API_KEY)?.trim();
   if (!apiKey) throw new Error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.");
 
   return withRetry(() => fetchOnce(query, apiKey), 3);
@@ -91,7 +95,10 @@ export async function fetchPlaceImage(name: string, regionName?: string | null):
   const item = items.find((i) => !regionName || (i.addr1 ?? "").includes(regionName)) ?? items[0];
   if (!item) return null;
 
-  const apiKey = process.env.DATA_GO_KR_API_KEY!;
+  // fetchWithRetry가 이미 이 키로 성공했으니 여기서도 같은 폴백으로 읽는다 —
+  // 위와 다른 이름만 봤다면 검색은 되고 갤러리 조회만 키 없이 실패하는 반쪽짜리
+  // 상태가 된다.
+  const apiKey = (process.env.DATA_GO_KR_API_KEY || process.env.TOUR_API_KEY)!.trim();
   const gallery = await fetchGalleryFirst(item.contentid, apiKey).catch(() => null);
   if (gallery) return gallery;
 

@@ -25,6 +25,7 @@ import {
   inferEnvironmentMode,
   extractCategoryLabel,
   computeDistanceKm,
+  shortestVisitOrder,
   shortRegionName,
 } from "../src/lib/services/matching.ts";
 import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMapLinks.ts";
@@ -207,6 +208,14 @@ check(
   325
 );
 check("computeDistanceKm origin 없음", computeDistanceKm(null, { latitude: 35.1796, longitude: 129.0756 }), null);
+
+// 2026-09-30 실측 코스: 미술관(수성) → 수목원(달서) → 박물관(수성)으로 왕복하던 동선.
+const museumArt = { latitude: 35.8261, longitude: 128.6725 };
+const arboretum = { latitude: 35.7985, longitude: 128.5227 };
+const museumNat = { latitude: 35.8453, longitude: 128.6384 };
+check("shortestVisitOrder 지그재그 제거", shortestVisitOrder([museumArt, arboretum, museumNat]), [0, 2, 1]);
+check("shortestVisitOrder 좌표 없는 곳은 끝으로", shortestVisitOrder([null, museumArt, arboretum, museumNat]), [1, 3, 2, 0]);
+check("shortestVisitOrder origin 기준 출발", shortestVisitOrder([museumArt, arboretum, museumNat], arboretum), [1, 2, 0]);
 check("computeDistanceKm place 없음", computeDistanceKm({ latitude: 37.5665, longitude: 126.978 }, null), null);
 
 // formatOperatingHours — 24시간 코드와 시간대 문자열("0900") 파싱, 둘 다 없으면 null

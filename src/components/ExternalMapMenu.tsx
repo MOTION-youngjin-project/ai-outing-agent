@@ -5,6 +5,7 @@ import {
   detectPlatform,
   kakaoDirectionsUrl,
   googleDirectionsUrl,
+  googleDirectionsAppUrl,
   buildNaverNavigationPlan,
   openNaverNavigation,
 } from "@/lib/externalMapLinks";
@@ -41,6 +42,10 @@ export function ExternalMapMenu({
     window.open(kakaoDirectionsUrl(latitude, longitude, name), "_blank", "noopener,noreferrer");
   }
   function openGoogle() {
+    if (detectPlatform(navigator.userAgent) === "android-app") {
+      window.location.href = googleDirectionsAppUrl(latitude, longitude);
+      return;
+    }
     window.open(googleDirectionsUrl(latitude, longitude), "_blank", "noopener,noreferrer");
   }
 

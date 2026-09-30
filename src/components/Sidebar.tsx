@@ -50,6 +50,10 @@ function formatEntryTime(iso: string): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
+// develop은 이 자리의 DESKTOP_NAV에서 "저장"이 /mypage로 가던 것을 /saved로 고쳤다.
+// 우리 쪽은 같은 버그를 다른 방식으로 고쳤다 — 목록 자체를 지우고 모바일 BottomNav와
+// 같은 @/lib/nav의 NAV_ITEMS를 쓴다(저장 → /saved). 두 곳에 목록이 있으면 또 어긋나기
+// 때문이고, 그래서 DESKTOP_NAV는 남겨두지 않는다(이 파일 어디에서도 참조하지 않는다).
 export function Sidebar({ onToggleRail }: { onToggleRail: () => void }) {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const closeSidebar = useAppStore((s) => s.closeSidebar);

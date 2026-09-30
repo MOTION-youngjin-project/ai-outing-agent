@@ -18,6 +18,7 @@ export type PlaceResult = {
   daeguDistrict: string | null;
   latitude: number;
   longitude: number;
+  imageUrl: string | null;
 };
 export type CulturalEvent = { title: string; eventPeriod: string; eventSite: string; url: string; imageUrl: string };
 export type SavedPlaceResult = {
@@ -225,6 +226,11 @@ export async function deleteSavedCourse(publicId: string): Promise<boolean> {
   return res.ok;
 }
 
+export async function reportPlaceImage(placeId: string): Promise<boolean> {
+  const res = await fetch(`/api/places/${encodeURIComponent(placeId)}/report-image`, { method: "POST" });
+  return res.ok;
+}
+
 export async function fetchPreferences(): Promise<string[]> {
   const res = await fetch("/api/preferences");
   if (!res.ok) return [];
@@ -427,4 +433,13 @@ export async function postSuggest(history: ChatTurn[]): Promise<string | null> {
   });
   const data = await res.json();
   return data.suggestion ?? null;
+}
+
+// 대화의 첫 턴 응답 직후에만 호출한다 — 사이드바 "대화 기록" 제목을 AI 요약으로 채운다.
+export async function postConversationTitle(agentRunId: string): Promise<void> {
+  await fetch("/api/conversations/title", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agentRunId }),
+  });
 }

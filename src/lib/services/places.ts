@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateDataSource } from "./shared";
 import { pickBestPlaceMatch, pickConfidentPlaceMatch, pickRegionForAddress, rankPlaceMatches, type PlaceMatchHint } from "./matching";
 import { fetchPlaceImage } from "@/lib/tools/tourApi";
+import { fetchWikipediaImage } from "@/lib/tools/wikipedia";
 import { DAEGU_DISTRICTS } from "@/lib/tools/parking";
 import type { Place } from "../../../generated/prisma/client";
 import { coordinate } from "../coordinates";
@@ -79,6 +80,17 @@ export interface CachedPlace {
   phone: string | null;
   websiteUrl: string | null;
   daeguDistrict: (typeof DAEGU_DISTRICTS)[number] | null;
+  imageUrl: string | null;
+}
+
+// ensurePlaceImage가 채워둔 대표 이미지를 꺼내온다 — saved-places/route.ts가 이미 쓰던
+// thumbnailUrl 우선, 없으면 originalUrl 패턴을 여기로 모아서 다른 호출부도 같이 쓴다.
+export async function getPlaceImageUrl(placeId: bigint): Promise<string | null> {
+  // orderBy 없이 findFirst만 쓰면 저장 순서가 우연히 대표(isPrimary)가 아닌 이미지를
+  // 앞세울 수 있다 — sortOrder(0이 대표)로 명시해서 항상 대표 이미지를 돌려준다.
+  // hiddenAt이 있으면(신고 누적으로 관리자가 숨김) 다음 순번 사진으로 넘어간다.
+  const image = await prisma.placeImage.findFirst({ where: { placeId, hiddenAt: null }, orderBy: { sortOrder: "asc" } });
+  return image?.thumbnailUrl ?? image?.originalUrl ?? null;
 }
 
 // 대구광역시 구/군 소속 여부를 region 부모 체인(= 카카오 주소 매칭 결과)으로 판단한다.
@@ -104,6 +116,7 @@ async function toCachedPlace(place: Place): Promise<CachedPlace> {
     phone: place.phone,
     websiteUrl: place.websiteUrl,
     daeguDistrict: await resolveDaeguDistrict(place.regionId),
+    imageUrl: await getPlaceImageUrl(place.id),
   };
 }
 
@@ -180,7 +193,9 @@ async function ensurePlaceImage(place: Place, regionName: string | null): Promis
   if (existing) return;
 
   try {
-    const image = await fetchPlaceImage(place.name, regionName);
+    // 위키백과에 문서가 있는 유명한 곳이면(대구미술관 등) 그 대표 사진을 우선 쓴다 —
+    // 사람이 큐레이션한 사진이라 TourAPI 갤러리보다 신뢰도가 높다. 없으면 기존 로직.
+    const image = (await fetchWikipediaImage(place.name)) ?? (await fetchPlaceImage(place.name, regionName));
     if (!image) return;
     await prisma.placeImage.create({
       data: {

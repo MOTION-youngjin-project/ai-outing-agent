@@ -145,3 +145,33 @@ export function computeDistanceKm(
   if (!origin || !place) return null;
   return Math.round(haversineMeters(origin, place) / 100) / 10;
 }
+
+// LLM은 장소를 "떠오른 순서"로 내놓아서 동선이 지그재그가 된다(2026-09-30 실측: 수성구
+// 미술관 → 달성군 수목원 → 다시 수성구 박물관). 직선거리 합이 최소인 방문 순서를 돌려준다.
+// 코스는 많아야 5~6곳이라 전수 탐색(6! = 720)으로 충분하다. 좌표 없는 장소는 끝에 원래
+// 순서대로 붙인다. origin이 있으면 거기서 출발하는 경로로, 없으면 시작점도 자유롭게 고른다.
+// ponytail: 전수 탐색이라 8곳 넘으면 느려짐 — 그땐 최근접 이웃+2-opt로 바꿀 것.
+export function shortestVisitOrder(
+  points: ({ latitude: number; longitude: number } | null)[],
+  origin?: { latitude: number; longitude: number } | null
+): number[] {
+  const located = points.flatMap((p, i) => (p ? [i] : []));
+  const missing = points.flatMap((p, i) => (p ? [] : [i]));
+  if (located.length > 8) return [...located, ...missing];
+  let best = located;
+  let bestCost = Infinity;
+  const walk = (rest: number[], path: number[], cost: number) => {
+    if (cost >= bestCost) return;
+    if (rest.length === 0) {
+      bestCost = cost;
+      best = path;
+      return;
+    }
+    const last = path.length ? points[path[path.length - 1]] : origin;
+    for (const i of rest) {
+      walk(rest.filter((j) => j !== i), [...path, i], cost + (last ? haversineMeters(last, points[i]!) : 0));
+    }
+  };
+  walk(located, [], 0);
+  return [...best, ...missing];
+}

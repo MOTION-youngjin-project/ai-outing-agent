@@ -17,8 +17,8 @@ import { WALK_DISTANCE_THRESHOLD_M } from "@/lib/travelMode";
 export function CurrentLegView({
   from,
   to,
-  fromLabel,
-  toLabel,
+  toOrder,
+  drivingPath,
   onAdvance,
   advanceLabel,
   dir,
@@ -27,8 +27,11 @@ export function CurrentLegView({
 }: {
   from: PlaceWithMeta;
   to: PlaceWithMeta;
-  fromLabel: string;
-  toLabel: string;
+  // 코스 전체에서의 번호(to). 지도 핀도 이 번호로 찍어야 2→3 구간에서 "1, 2"로 다시
+  // 매겨져 3번이 사라진 것처럼 보이지 않는다.
+  toOrder: number;
+  // 차량 구간의 도로 경로 — 코스 지도가 이미 받아둔 것을 재사용한다.
+  drivingPath?: { latitude: number; longitude: number }[];
   onAdvance: () => void;
   advanceLabel: string;
   // 앞 구간으로 가는지 뒤 구간으로 돌아가는지 — 아래 본문이 들어오는 방향이 달라진다.
@@ -120,8 +123,8 @@ export function CurrentLegView({
     : null;
 
   const spots: MapParkingSpot[] = [
-    { id: "from", name: from.name, latitude: from.latitude!, longitude: from.longitude!, walkMinutes: null, order: 1 },
-    { id: "to", name: to.name, latitude: to.latitude!, longitude: to.longitude!, walkMinutes: null, order: 2 },
+    { id: "from", name: from.name, latitude: from.latitude!, longitude: from.longitude!, walkMinutes: null, order: toOrder - 1 },
+    { id: "to", name: to.name, latitude: to.latitude!, longitude: to.longitude!, walkMinutes: null, order: toOrder },
   ];
 
   return (
@@ -137,10 +140,13 @@ export function CurrentLegView({
           안에 있으면 구간을 넘길 때마다 지도 인스턴스가 새로 만들어진다(비싸고, 카메라도
           매번 튄다). 지도는 그대로 두고 핀·경로·카메라만 prop으로 따라간다. */}
       <NaverMap
+        // 마운트 때 한 번만 그리는 지도라, 구간이나 경로가 바뀌면 key로 새로 그린다
+        // ("다음 장소로"를 눌러도 이전 구간 지도가 그대로 남던 문제).
+        key={`${routeKey}|${(route?.path ?? drivingPath)?.length ?? 0}`}
         center={{ latitude: from.latitude!, longitude: from.longitude! }}
         spots={spots}
         origin={userPos ?? undefined}
-        routePath={route?.path}
+        routePath={route?.path ?? drivingPath}
         fitTo={[
           { latitude: from.latitude!, longitude: from.longitude! },
           { latitude: to.latitude!, longitude: to.longitude! },
@@ -193,7 +199,7 @@ export function CurrentLegView({
       )}
 
       <p className="px-1 text-[13px] text-muted">
-        {fromLabel} 장소 → {toLabel} 장소 구간이에요.
+        {toOrder - 1}번째 장소 → {toOrder}번째 장소 구간이에요.
       </p>
 
       {/* 남은 시간·거리는 걷는 동안 계속 바뀐다 — 자릿수가 줄었다 늘 때 글자 폭이
@@ -228,7 +234,7 @@ export function CurrentLegView({
         <div className="flex items-center gap-3">
           {to.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-            <img src={to.imageUrl} alt={to.name} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
+            <img src={to.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
           ) : (
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
               <Icon name="pin" className="h-5 w-5 text-mint-mid" />

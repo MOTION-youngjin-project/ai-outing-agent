@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { BottomNav } from "@/components/BottomNav";
@@ -70,10 +70,30 @@ function setRail(next: RailChoice) {
   railListeners.forEach((listener) => listener());
 }
 
+// 나들플랜 안드로이드 앱(webview_flutter)이 WebView User-Agent 뒤에 붙이는 식별자.
+// BottomNav.tsx의 같은 상수와 중복이지만, 용도가 다르다(여긴 CSS 변수를 끄는 부수효과,
+// 거긴 렌더링 여부) — 하나로 묶으면 오히려 "왜 이 상수를 쓰는지" 문맥이 흐려진다.
+const NATIVE_APP_UA_MARKER = "NadeulPlanApp";
+
+// 데스크톱(lg+): 사이드바 상시 고정 + 옆에 콘텐츠. 모바일: 사이드바는 오버레이(Sidebar
+// 자체가 fixed 처리), 콘텐츠는 기존 460px 단일 컬럼 + 하단 탭바.
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // 뒤로 버튼이 "앱 안에서 온 곳이 있는지" 판단할 때 쓰는 가벼운 기록(lib/useBack).
   useTrackInAppNavigation();
+
+  // 앱 안에서는 BottomNav가 null을 렌더링해 자리를 안 차지하는데, --sk-dock(76px)은
+  // 웹의 BottomNav 실측값이라 이 페이지 하단 여백과 InputScreen의 sticky 입력창,
+  // ParkingScreen의 지도 높이 계산이 전부 실제로 없는 탭바만큼 공간을 남겨뒀다 —
+  // 그 틈만큼 입력창이 화면 하단에서 떠 보이고(계속 보고된 버그), 주차 지도+시트
+  // 높이도 그만큼 짧게 잘렸다. 세 곳 모두 이 변수 하나를 참조하니 여기서 한 번만
+  // 0으로 낮추면 전부 같이 맞는다.
+  useLayoutEffect(() => {
+    if (navigator.userAgent.includes(NATIVE_APP_UA_MARKER)) {
+      document.documentElement.style.setProperty("--sk-dock", "0px");
+      document.documentElement.style.setProperty("--sk-safe-b", "0px");
+    }
+  }, []);
   // 탭 루트 4개만 "얕은" 화면이다 — 그 밖은 전부 한 단계 들어간 화면으로 본다.
   const isDeep = !["/", "/map", "/saved", "/mypage"].includes(pathname);
   const rail = useSyncExternalStore(subscribeRail, railSnapshot, railServerSnapshot);
@@ -122,7 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           key={pathname}
           data-dir={!isDeep && navDir ? navDir : undefined}
-          className={`${isDeep ? "sk-page-deep" : "sk-page"}${leaving ? " sk-leave" : ""} flex flex-1 flex-col pb-[calc(var(--sk-dock)+12px+env(safe-area-inset-bottom))] lg:pb-6`}
+          className={`${isDeep ? "sk-page-deep" : "sk-page"}${leaving ? " sk-leave" : ""} flex flex-1 flex-col pb-[calc(var(--sk-dock)+12px+var(--sk-safe-b))] lg:pb-6`}
         >
           {children}
         </div>

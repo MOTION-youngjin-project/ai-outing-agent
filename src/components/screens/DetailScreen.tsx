@@ -9,6 +9,7 @@ import {
   fetchAirQuality,
   fetchSavedPlaces,
   putPlannedVisit,
+  reportPlaceImage,
   type PlaceWithMeta,
 } from "@/lib/clientApi";
 import { splitHeadline } from "@/lib/textFormat";
@@ -43,6 +44,7 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
   const pathname = usePathname();
   const [savePending, setSavePending] = useState(false);
   const [shareNotice, setShareNotice] = useState("");
+  const [imageReported, setImageReported] = useState(false);
 
   // 저장 여부를 로컬 state로만 들고 있으면 이미 저장한 장소를 다시 열었을 때 항상
   // "저장 안 됨"으로 보인다 — 서버 목록에서 파생시킨다. 방문 예정일도 여기서 같이 온다.
@@ -107,6 +109,14 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
     }
   }
 
+  async function reportImage() {
+    if (!p.placeId || imageReported) return;
+    setImageReported(true); // 낙관적으로 먼저 막는다 — 연타로 중복 신고돼도 서버가 막을 이유가 없는 로그성 데이터라 되돌릴 필요 없음.
+    const ok = await reportPlaceImage(p.placeId);
+    setShareNotice(ok ? "부적절한 사진으로 신고했습니다." : "신고에 실패했습니다. 다시 시도해 주세요.");
+    if (!ok) setImageReported(false);
+  }
+
   async function share() {
     const text = buildSharePlanText({ needsMoreInfo: false, message: p.oneLineDescription, places: [p] }, p.name);
     try {
@@ -143,8 +153,19 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
       />
       <div className="flex flex-col gap-3 px-5">
         {p.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-          <img src={p.imageUrl} alt={p.name} className="h-48 w-full rounded-2xl object-cover" />
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리 */}
+            <img src={p.imageUrl} alt="" className="h-48 w-full rounded-2xl object-cover" />
+            <button
+              onClick={reportImage}
+              disabled={imageReported}
+              aria-label="부적절한 사진 신고"
+              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white"
+            >
+              <Icon name="triangleAlert" className="h-3.5 w-3.5" />
+              {imageReported ? "신고됨" : "신고"}
+            </button>
+          </div>
         ) : (
           <div className="flex h-48 w-full items-center justify-center rounded-2xl bg-mint-soft">
             <Icon name="pin" className="h-10 w-10 text-mint-mid" />

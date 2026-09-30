@@ -118,7 +118,15 @@ export function BottomNav() {
   return (
     // 현재 탭은 sk-navitem[aria-current]로 3px 솟아오르고 아이콘이 한 번 튄다 —
     // 색을 지워도 "어느 탭에 있는지"가 높이와 트랙 위치로 읽힌다.
-    <nav className="sk-dock-bar fixed bottom-0 left-1/2 z-20 flex w-full -translate-x-1/2 items-end justify-around border-t border-hairline bg-white/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+    // left-1/2 + -translate-x-1/2로 가운데 정렬하면 모바일 Chrome에서 주소창이
+    // 접히고 펼쳐질 때 레이아웃 뷰포트 폭 계산이 어긋나 한쪽에 빈 공간이 생기는
+    // 경우가 있다(실사용자 실측: 오른쪽이 비어 보임) — inset-x-0 + mx-auto는 같은
+    // 컨테이닝 블록의 양쪽 끝에 직접 붙기 때문에 이 문제를 겪지 않는다.
+    //
+    // 폭 상한은 클래스가 아니라 .sk-dock-bar(globals.css)가 들고 있다 — 768 이상에서
+    // 600px로 넓어져야 하는데, Tailwind 유틸리티(max-w-[460px])를 같이 두면
+    // 유틸리티 레이어가 항상 이겨서 그 확장이 먹지 않는다.
+    <nav className="sk-dock-bar fixed inset-x-0 bottom-0 z-20 mx-auto flex w-full items-end justify-around border-t border-hairline bg-white/95 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
       <span aria-hidden className="sk-navrail">
         <i
           style={{

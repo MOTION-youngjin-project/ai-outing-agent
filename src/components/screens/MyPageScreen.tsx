@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { fetchSavedPlaces, fetchPreferences, putPreferences, fetchRecentQuestions } from "@/lib/clientApi";
+import { fetchSavedPlaces, fetchSavedCourses, fetchPreferences, putPreferences, fetchRecentQuestions } from "@/lib/clientApi";
 import { extractCategoryLabel } from "@/lib/services/matching";
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
@@ -55,6 +55,13 @@ export function MyPageScreen() {
   const savedPlacesQuery = useQuery({
     queryKey: ["saved-places"],
     queryFn: () => fetchSavedPlaces(),
+    enabled: authed,
+  });
+  // 코스 저장("이 코스 저장")이 장소 저장보다 흔한데, 여기엔 장소만 보여서 코스를
+  // 저장해도 "아직 저장한 장소가 없어요"만 떴다(2026-09-30 신고). 저장 화면과 같은 캐시.
+  const savedCoursesQuery = useQuery({
+    queryKey: ["saved-courses"],
+    queryFn: fetchSavedCourses,
     enabled: authed,
   });
   const preferencesQuery = useQuery({
@@ -124,7 +131,7 @@ export function MyPageScreen() {
         {/* 숫자를 위로 올려 먼저 읽히게 한다 — 라벨은 그 아래 작은 글씨 */}
         <div className="sk-my-stats">
           {[
-            { icon: "pin", label: "저장한 장소", value: savedPlacesQuery.data?.length ?? 0 },
+            { icon: "pin", label: "저장", value: (savedPlacesQuery.data?.length ?? 0) + (savedCoursesQuery.data?.length ?? 0) },
             { icon: "clock", label: "최근 추천", value: recentQuestionsQuery.data?.totalCount ?? 0 },
             // ponytail: 주차장을 따로 "저장"하는 기능 자체가 아직 없다 — 없는 걸 있는 척
             // 가짜 숫자로 보여주지 않고 정직하게 0. 기능 생기면 그때 실제 카운트로 교체.
@@ -138,9 +145,39 @@ export function MyPageScreen() {
       {/* 3. 내 추천 기록 */}
       <RecommendationHistory userId={session.user.id} />
 
-      {/* 4. 저장한 장소 */}
-      <section ref={savedRef} data-reveal="wait" className="sk-my-sec sk-my-a-saved" aria-label="저장한 장소">
+      {/* 4. 저장 — 코스와 장소.
+          develop이 새로 넣은 "저장한 코스"를 저장한 장소와 같은 섹션에 둔다. develop에서는
+          둘이 "저장" 탭 안에 나란히 있었고, 여기서도 같은 칸(웹 2열의 왼쪽)에 나란히 온다. */}
+      <section ref={savedRef} data-reveal="wait" className="sk-my-sec sk-my-a-saved" aria-label="저장한 코스와 장소">
         <div className="sk-my-sec-head">
+          <h2 className="sk-cap sk-my-title">저장한 코스</h2>
+          <button onClick={() => router.push("/saved")} className="sk-my-more">
+            전체 보기
+            <Icon name="next" className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="sk-my-list">
+          {savedCoursesQuery.data?.length === 0 && (
+            <p className="sk-my-empty">아직 저장한 코스가 없어요.</p>
+          )}
+          {(savedCoursesQuery.data ?? []).slice(0, 3).map((c) => (
+            <button
+              key={c.publicId}
+              onClick={() => router.push(`/saved/${c.publicId}`)}
+              className="sk-my-row w-full text-left"
+            >
+              <div className="sk-my-row-body">
+                <div className="sk-my-row-title truncate">{c.title}</div>
+                <div className="sk-my-row-sub truncate">
+                  {(c.course.places ?? []).map((p) => p.name).join(" → ")}
+                </div>
+              </div>
+              <Icon name="next" className="sk-my-chev" />
+            </button>
+          ))}
+        </div>
+
+        <div className="sk-my-sec-head mt-5">
           <h2 className="sk-cap sk-my-title">저장한 장소</h2>
           <button onClick={() => router.push("/saved")} className="sk-my-more">
             전체 보기
@@ -155,7 +192,7 @@ export function MyPageScreen() {
             <div key={p.placeId} className="sk-my-row">
               {p.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                <img src={p.imageUrl} alt={p.name} className="sk-my-thumb" />
+                <img src={p.imageUrl} alt="" className="sk-my-thumb" />
               ) : (
                 <div className="sk-my-thumb flex items-center justify-center bg-mint-soft">
                   <Icon name="pin" className="h-5 w-5 text-mint-mid" />

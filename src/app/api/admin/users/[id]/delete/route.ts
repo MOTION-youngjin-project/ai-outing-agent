@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { isAdminEmail, logAdminAction } from "@/lib/admin";
+import { absoluteUrlFromRequest, isAdminEmail, logAdminAction } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -27,17 +27,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-  if (!user) return NextResponse.redirect(new URL("/admin", request.url));
+  if (!user) return NextResponse.redirect(absoluteUrlFromRequest(request, "/admin"));
 
   // 관리자 계정을 실수로(또는 다른 관리자가) 지워서 관리자 로그인이 막히는 걸 막는다.
   if (isAdminEmail(user.email)) {
-    return NextResponse.redirect(new URL(`/admin/users/${id}?error=confirm_mismatch`, request.url));
+    return NextResponse.redirect(absoluteUrlFromRequest(request, `/admin/users/${id}?error=confirm_mismatch`));
   }
 
   const form = await request.formData();
   const confirmEmail = String(form.get("confirmEmail") ?? "").trim().toLowerCase();
   if (confirmEmail !== user.email.toLowerCase()) {
-    return NextResponse.redirect(new URL(`/admin/users/${id}?error=confirm_mismatch`, request.url));
+    return NextResponse.redirect(absoluteUrlFromRequest(request, `/admin/users/${id}?error=confirm_mismatch`));
   }
 
   await prisma.$transaction(async (tx) => {
@@ -51,5 +51,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await tx.user.delete({ where: { id: userId } });
   });
   await logAdminAction({ adminEmail: adminEmail!, action: "delete_account", targetUserId: userId, targetEmail: user.email });
-  return NextResponse.redirect(new URL("/admin?deleted=1", request.url));
+  return NextResponse.redirect(absoluteUrlFromRequest(request, "/admin?deleted=1"));
 }

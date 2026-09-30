@@ -80,7 +80,7 @@ export function SavedCourseCard({
               <div className="relative">
                 {p.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                  <img src={p.imageUrl} alt={p.name} className="h-[60px] w-[84px] rounded-xl object-cover" />
+                  <img src={p.imageUrl} alt="" className="h-[60px] w-[84px] rounded-xl object-cover" />
                 ) : (
                   <div className="flex h-[60px] w-[84px] items-center justify-center rounded-xl bg-mint-soft">
                     <Icon name="pin" className="h-5 w-5 text-mint-mid" />

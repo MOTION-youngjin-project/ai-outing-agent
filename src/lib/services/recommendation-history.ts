@@ -9,8 +9,11 @@ export async function readRecommendation(
   userId?: string | null,
   sessionKeyHash?: string | null
 ): Promise<(RecommendResult & { isOwner: boolean }) | null> {
+  // expiresAt 필터 없음 — 사이드바(recent-questions)·대화 복원(conversations)과 같은 정책.
+  // 여기만 24시간으로 거르면 지난 대화를 열어 지도로 들어간 뒤 재조회에서 404가 나
+  // "추천 결과를 찾을 수 없습니다"로 튕겼다(2026-09-30 신고).
   const run = await prisma.agentRun.findFirst({
-    where: { id, expiresAt: { gt: new Date() }, status: { in: ["completed", "partial"] } },
+    where: { id, status: { in: ["completed", "partial"] } },
     select: { userId: true, sessionKeyHash: true, recommendationJson: true },
   });
   if (!run) return null;

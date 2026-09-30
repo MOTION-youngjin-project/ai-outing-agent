@@ -74,9 +74,14 @@ export default async function AdminUsersPage({
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-10 text-ink">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">관리자 · 계정 관리</h1>
-        <Link href="/admin/audit-log" className="text-sm text-accent-deep hover:underline">
-          관리자 작업 이력 →
-        </Link>
+        <div className="flex gap-4">
+          <Link href="/admin/photo-reports" className="text-sm text-accent-deep hover:underline">
+            신고된 사진 →
+          </Link>
+          <Link href="/admin/audit-log" className="text-sm text-accent-deep hover:underline">
+            관리자 작업 이력 →
+          </Link>
+        </div>
       </div>
 
       {deleted === "1" && (
