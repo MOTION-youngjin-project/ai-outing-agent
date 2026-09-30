@@ -335,7 +335,7 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
                 <button onClick={() => openDetail(p)} aria-label={`${p.name} 상세 보기`} className="shrink-0">
                   {p.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                    <img src={p.imageUrl} alt={p.name} className="sk-thumb h-[76px] w-[76px]" />
+                    <img src={p.imageUrl} alt="" className="sk-thumb h-[76px] w-[76px]" />
                   ) : (
                     <span className="sk-slot h-[76px] w-[76px]">
                       <Icon name="pin" className="h-6 w-6 text-mint-mid" />

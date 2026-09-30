@@ -72,7 +72,7 @@ export function PlannedVisitsScreen() {
               >
                 {p.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지
-                  <img src={p.imageUrl} alt={p.name} className="sk-thumb h-14 w-14 shrink-0" />
+                  <img src={p.imageUrl} alt="" className="sk-thumb h-14 w-14 shrink-0" />
                 ) : (
                   <div className="sk-slot h-14 w-14">
                     <Icon name="pin" className="h-5 w-5 text-mint-mid" />

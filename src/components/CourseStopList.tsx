@@ -40,7 +40,7 @@ export function CourseStopList({
           <>
             {p.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-              <img src={p.imageUrl} alt={p.name} className="sk-thumb h-[60px] w-[60px] shrink-0" />
+              <img src={p.imageUrl} alt="" className="sk-thumb h-[60px] w-[60px] shrink-0" />
             ) : (
               <div className="sk-slot h-[60px] w-[60px]">
                 <Icon name="pin" className="h-6 w-6 text-mint-mid" />
