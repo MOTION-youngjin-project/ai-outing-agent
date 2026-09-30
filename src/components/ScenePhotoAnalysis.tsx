@@ -5,6 +5,7 @@ import { PhotoInput } from "./PhotoInput";
 import type { PhotoSelection } from "@/lib/photo-input";
 import { scenePhotoSchema, type ScenePhotoAnalysis as Analysis, type SceneDraft } from "@/lib/scene-photo";
 import { SITUATION_LABELS } from "@/lib/trip-situation";
+import { ui } from "./tripUi";
 
 export function ScenePhotoAnalysis({ onApply, onReset }: { onApply: (draft: SceneDraft) => void; onReset: () => void }) {
   const [photo, setPhoto] = useState<PhotoSelection | null>(null);
@@ -37,17 +38,17 @@ export function ScenePhotoAnalysis({ onApply, onReset }: { onApply: (draft: Scen
       if (pending.current === controller) { pending.current = null; setBusy(false); }
     }
   }
-  return <div className="space-y-3" role="group" aria-label="현장 사진 분석">
+  return <div className="flex flex-col gap-3" role="group" aria-label="현장 사진 분석">
     <PhotoInput title="현장 사진" onChange={reset} analysisEnabled />
-    <button type="button" className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50" disabled={!photo || busy} onClick={analyze}>{busy ? "사진 분석 중…" : "사진 분석"}</button>
-    {busy && <p role="status" className="text-sm">안내문과 현장 상황을 읽고 있습니다. 사진을 삭제하면 분석을 취소합니다.</p>}
-    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-    {analysis && <div className="space-y-2 rounded-lg border p-3">
-      <h4 className="font-semibold">분석 결과 · 확인 전 초안</h4>
-      <p className="whitespace-pre-wrap text-sm">사진에서 읽은 내용: {analysis.observedText || "읽을 수 있는 안내문이 없습니다."}</p>
-      <p className="text-sm">{analysis.uncertainty}</p>
-      <p className="text-xs">사진만으로 현재 휴무·혼잡 여부를 확정할 수 없습니다. 날짜와 대상 장소를 직접 확인해 주세요.</p>
-      {analysis.readable ? <><p className="text-sm">제안: {SITUATION_LABELS[analysis.reason]}</p><p className="whitespace-pre-wrap text-sm">{analysis.detail}</p><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => onApply({ reason: analysis.reason, detail: analysis.detail })}>상황 입력에서 확인·수정</button></> : <p className="text-sm">상황을 판독하기 어렵습니다. 다른 사진을 선택하거나 아래에서 직접 입력해 주세요.</p>}
+    <button type="button" className={`${ui.btn} self-start`} disabled={!photo || busy} onClick={analyze}>{busy ? "사진 분석 중…" : "사진 분석"}</button>
+    {busy && <p role="status" className={ui.text}>안내문과 현장 상황을 읽고 있습니다. 사진을 삭제하면 분석을 취소합니다.</p>}
+    {error && <p role="alert" className={ui.error}>{error}</p>}
+    {analysis && <div className={`${ui.sub} bg-white`}>
+      <h4 className={ui.title}>분석 결과 · 확인 전 초안</h4>
+      <p className={`${ui.text} whitespace-pre-wrap`}>사진에서 읽은 내용: {analysis.observedText || "읽을 수 있는 안내문이 없습니다."}</p>
+      <p className={ui.text}>{analysis.uncertainty}</p>
+      <p className={ui.note}>사진만으로 현재 휴무·혼잡 여부를 확정할 수 없습니다. 날짜와 대상 장소를 직접 확인해 주세요.</p>
+      {analysis.readable ? <><p className={ui.text}>제안: {SITUATION_LABELS[analysis.reason]}</p><p className={`${ui.text} whitespace-pre-wrap`}>{analysis.detail}</p><button type="button" className={`${ui.btn} self-start`} onClick={() => onApply({ reason: analysis.reason, detail: analysis.detail })}>상황 입력에서 확인·수정</button></> : <p className={ui.text}>상황을 판독하기 어렵습니다. 다른 사진을 선택하거나 아래에서 직접 입력해 주세요.</p>}
     </div>}
   </div>;
 }

@@ -31,7 +31,7 @@ export const photoPlaceSchema = z.object({
 export type PhotoPlace = z.infer<typeof photoPlaceSchema>;
 
 export const PHOTO_TIME_LABELS = { daylight: "밝은 낮", "before-sunset": "일몰 전", "after-sunset": "일몰 후" } as const;
-export const PHOTO_CATALOG_NOTICE = "촬영 태그·시간대·구도·체류 시간은 motion의 제안입니다. 운영시간은 확인일 기준이며 방문일의 휴무·촬영 허용 여부를 다시 확인해 주세요. 좌표는 장소 대표 위치이며 촬영 지점이나 출입구를 보장하지 않습니다. 노을·야경은 날짜와 날씨에 따라 달라집니다.";
+export const PHOTO_CATALOG_NOTICE = "촬영 태그·시간대·구도·체류 시간은 나들플랜의 제안입니다. 운영시간은 확인일 기준이며 방문일의 휴무·촬영 허용 여부를 다시 확인해 주세요. 좌표는 장소 대표 위치이며 촬영 지점이나 출입구를 보장하지 않습니다. 노을·야경은 날짜와 날씨에 따라 달라집니다.";
 
 export function filterPhotoPlaces(places: readonly PhotoPlace[], query: z.infer<typeof photoPlaceQuerySchema>) {
   return places.filter((place) => (!query.tag || place.tags.includes(query.tag)) && (!query.environment || place.environment === query.environment));

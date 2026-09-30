@@ -4,8 +4,9 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
 import { PHOTO_ACCEPT, preparePhoto, type PhotoSelection } from "@/lib/photo-input";
+import { ui } from "./tripUi";
 
-const button = "rounded-lg border border-accent/30 px-3 py-2 text-sm disabled:opacity-50";
+const button = ui.btn;
 
 type Props = { title: string; onChange?: (photo: PhotoSelection | null) => void; analysisEnabled?: boolean };
 
@@ -51,20 +52,20 @@ function PhotoInputContent({ title, onChange, analysisEnabled = false }: Props) 
     setPhoto(null); setBusy(false); setError(""); onChange?.(null);
   }
 
-  return <section aria-labelledby={`${id}-title`} className="my-3 space-y-3 rounded-xl border border-accent/30 bg-white p-4">
-    <h3 id={`${id}-title`} className="font-semibold">{title}</h3>
-    <p className="text-xs">사진 1장 · JPEG, PNG, WebP · 최대 10MB. 새 사진을 선택하면 이전 사진이 교체됩니다.</p>
+  return <section aria-labelledby={`${id}-title`} className="flex flex-col gap-2.5 rounded-2xl border border-hairline bg-white p-3.5">
+    <h3 id={`${id}-title`} className={ui.heading}>{title}</h3>
+    <p className={ui.note}>사진 1장 · JPEG, PNG, WebP · 최대 10MB. 새 사진을 선택하면 이전 사진이 교체됩니다.</p>
     <input ref={camera} id={`${id}-camera`} aria-label={`${title} 카메라 파일`} className="sr-only" type="file" accept={PHOTO_ACCEPT} capture="environment" onChange={choose} disabled={busy} />
     <input ref={album} id={`${id}-album`} aria-label={`${title} 앨범 파일`} className="sr-only" type="file" accept={PHOTO_ACCEPT} onChange={choose} disabled={busy} />
-    <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={busy} onClick={() => camera.current?.click()}>{photo ? "다시 촬영" : "카메라로 촬영"}</button><button type="button" className={button} disabled={busy} onClick={() => album.current?.click()}>{photo ? "앨범에서 교체" : "앨범에서 선택"}</button></div>
-    <p className="text-xs">카메라 지원 여부와 권한 요청은 기기·브라우저에 따라 다릅니다. 촬영이 안 되면 앨범에서 선택해 주세요.</p>
-    {busy && <p role="status" className="text-sm">사진 확인 중…</p>}
-    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    <div className={ui.row}><button type="button" className={button} disabled={busy} onClick={() => camera.current?.click()}>{photo ? "다시 촬영" : "카메라로 촬영"}</button><button type="button" className={button} disabled={busy} onClick={() => album.current?.click()}>{photo ? "앨범에서 교체" : "앨범에서 선택"}</button></div>
+    <p className={ui.note}>카메라 지원 여부와 권한 요청은 기기·브라우저에 따라 다릅니다. 촬영이 안 되면 앨범에서 선택해 주세요.</p>
+    {busy && <p role="status" className={ui.text}>사진 확인 중…</p>}
+    {error && <p role="alert" className={ui.error}>{error}</p>}
     {photo && <div className="space-y-2">
-      <Image src={photo.previewUrl} alt={`${title} 미리보기`} width={photo.width} height={photo.height} unoptimized className="max-h-80 w-full rounded-lg object-contain" />
-      <p className="break-all text-sm">{photo.file.name}</p><p className="text-xs">{photo.width} × {photo.height} · {(photo.file.size / 1024 / 1024).toFixed(2)}MB</p>
+      <Image src={photo.previewUrl} alt={`${title} 미리보기`} width={photo.width} height={photo.height} unoptimized className="max-h-80 w-full rounded-2xl bg-page object-contain" />
+      <p className={`${ui.text} break-all`}>{photo.file.name}</p><p className={ui.note}>{photo.width} × {photo.height} · {(photo.file.size / 1024 / 1024).toFixed(2)}MB</p>
     </div>}
     {(photo || busy) && <button type="button" className={button} onClick={remove}>{photo ? "사진 삭제" : "선택 취소"}</button>}
-    <p className="text-xs">{analysisEnabled ? "사진 분석 버튼을 누르면 사진을 서버로 전송하고, 위치 등 메타데이터를 제거한 이미지를 Google Gemini로 보내 분석합니다. 앱은 사진을 파일이나 DB에 저장하지 않습니다. 외부 제공자의 데이터 처리 정책이 적용됩니다. 삭제·화면 이동·새로고침 시 이 화면의 사진은 사라집니다." : "사진은 이 화면에서만 보관하며 서버 전송·영구 저장하지 않습니다. 삭제하거나 화면을 벗어나거나 새로고침하면 사라집니다. 현재 사진은 추천에 반영되지 않습니다."}</p>
+    <p className={ui.note}>{analysisEnabled ? "사진 분석 버튼을 누르면 사진을 서버로 전송하고, 위치 등 메타데이터를 제거한 이미지를 Google Gemini로 보내 분석합니다. 앱은 사진을 파일이나 DB에 저장하지 않습니다. 외부 제공자의 데이터 처리 정책이 적용됩니다. 삭제·화면 이동·새로고침 시 이 화면의 사진은 사라집니다." : "사진은 이 화면에서만 보관하며 서버 전송·영구 저장하지 않습니다. 삭제하거나 화면을 벗어나거나 새로고침하면 사라집니다. 현재 사진은 추천에 반영되지 않습니다."}</p>
   </section>;
 }

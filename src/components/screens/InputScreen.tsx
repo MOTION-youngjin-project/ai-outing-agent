@@ -577,8 +577,9 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           )}
 
           {!inConversation && (
-            <Link href="/photo" className="self-start rounded-lg border border-accent/30 px-3 py-2 text-sm">
-              참고 사진 선택
+            <Link href="/photo" className="sk-my-chip self-start font-medium text-accent">
+              <Icon name="sun" className="h-4 w-4" />
+              사진 찍으러 갈 코스 만들기
             </Link>
           )}
 
