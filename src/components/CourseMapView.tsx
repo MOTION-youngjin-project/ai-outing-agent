@@ -215,7 +215,7 @@ function SelectedStopCard({
         <div className="relative shrink-0">
           {place.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-            <img src={place.imageUrl} alt={place.name} className="h-16 w-16 rounded-xl object-cover" />
+            <img src={place.imageUrl} alt="" className="h-16 w-16 rounded-xl object-cover" />
           ) : (
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-mint-soft">
               <Icon name="pin" className="h-6 w-6 text-mint-mid" />

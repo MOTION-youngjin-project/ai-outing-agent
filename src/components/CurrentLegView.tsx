@@ -221,7 +221,7 @@ export function CurrentLegView({
         <div className="flex items-center gap-3">
           {to.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-            <img src={to.imageUrl} alt={to.name} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
+            <img src={to.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
           ) : (
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
               <Icon name="pin" className="h-5 w-5 text-mint-mid" />
