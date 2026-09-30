@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { RecommendResult } from "@/lib/clientApi";
+import { deleteRecommendation } from "@/lib/services/recommendation-history";
 
 export const runtime = "nodejs";
 
@@ -53,4 +54,47 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       turns,
     },
   });
+}
+
+// 사이드바 대화 메뉴(고정·이름 변경·삭제)가 공통으로 쓰는 "이 계정의 이 대화" 조건 —
+// GET과 같은 규칙(conversationId 도입 전 단일 행은 id가 곧 그룹 키).
+function ownConversation(userId: string, conversationId: string) {
+  return { userId: BigInt(userId), OR: [{ conversationId }, { conversationId: null, id: conversationId }] };
+}
+
+// body: { pinned?: boolean, title?: string }
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ conversationId: string }> }) {
+  const { conversationId } = await params;
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+  const body = await request.json().catch(() => null);
+  const title = typeof body?.title === "string" ? body.title.trim().slice(0, 80) : undefined;
+  const pinned = typeof body?.pinned === "boolean" ? body.pinned : undefined;
+  if (title === "" || (title === undefined && pinned === undefined)) {
+    return NextResponse.json({ error: "변경할 내용이 없습니다." }, { status: 400 });
+  }
+
+  // 사이드바 라벨은 그 대화에서 title이 있는 가장 오래된 turn 것을 쓰므로, 전 turn에 같이 쓴다.
+  const { count } = await prisma.agentRun.updateMany({
+    where: ownConversation(session.user.id, conversationId),
+    data: { ...(title !== undefined && { title }), ...(pinned !== undefined && { pinnedAt: pinned ? new Date() : null }) },
+  });
+  if (count === 0) return NextResponse.json({ error: "대화를 찾을 수 없습니다." }, { status: 404 });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ conversationId: string }> }) {
+  const { conversationId } = await params;
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+  const userId = session.user.id;
+  const runs = await prisma.agentRun.findMany({ where: ownConversation(userId, conversationId), select: { id: true } });
+  if (runs.length === 0) return NextResponse.json({ error: "대화를 찾을 수 없습니다." }, { status: 404 });
+  // 턴마다 딸린 기록(route/tool_calls 등 FK)까지 지우는 기존 추천 삭제 로직을 그대로 쓴다.
+  for (const run of runs) await deleteRecommendation(run.id, userId);
+  return NextResponse.json({ ok: true });
 }

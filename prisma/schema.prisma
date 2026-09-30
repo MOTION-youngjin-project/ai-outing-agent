@@ -513,7 +513,9 @@ model AgentRun {
   // 대화의 첫 turn에서만 AI가 채운다(사이드바 "대화 기록" 제목용) — 이후 turn은
   // null로 둔다. 실패해도 조용히 null로 남고, 그러면 사이드바가 userQuery로 대체한다.
   title                String?               @db.VarChar(80)
-  requestMode          RequestMode           @map("request_mode")
+  // 사이드바 "대화 고정". 대화의 모든 turn에 같은 값을 쓴다 — 대화 테이블이 따로 없어서.
+  pinnedAt             DateTime?             @map("pinned_at") @db.Timestamp(0)
+  requestMode         RequestMode           @map("request_mode")
   currentRegionId      BigInt?               @map("current_region_id") @db.UnsignedBigInt
   environmentMode      EnvironmentMode?      @map("environment_mode")
   status               RunStatus             @default(pending)

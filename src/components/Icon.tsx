@@ -117,6 +117,12 @@ export function Icon({ name, className = "h-5 w-5" }: { name: string; className?
       </>
     ),
     close: <path d="M5 5l14 14M19 5L5 19" />,
+    trash: (
+      <>
+        <path d="M4.5 6.5h15M9.5 6.5V4.5h5v2" />
+        <path d="M6.5 6.5l1 13h9l1-13M10 10.5v5.5M14 10.5v5.5" />
+      </>
+    ),
     edit: (
       <>
         <path d="M4 20h4L19 9l-4-4L4 16v4z" />
