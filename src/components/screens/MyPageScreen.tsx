@@ -10,6 +10,7 @@ import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { RecommendationHistory } from "@/components/RecommendationHistory";
 import { useReveal, useCountUp } from "@/lib/useReveal";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 // FILTER_LABELS(agent.ts의 PLACE_TAGS)와 같은 값 — 선호 조건 칩에 쓸 아이콘만 매핑.
 const PREFERENCE_ICONS: Record<(typeof FILTER_LABELS)[number], string> = {
@@ -190,14 +191,22 @@ export function MyPageScreen() {
           )}
           {(savedPlacesQuery.data ?? []).map((p) => (
             <div key={p.placeId} className="sk-my-row">
-              {p.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                <img src={p.imageUrl} alt="" className="sk-my-thumb" />
-              ) : (
-                <div className="sk-my-thumb flex items-center justify-center bg-mint-soft">
-                  <Icon name="pin" className="h-5 w-5 text-mint-mid" />
-                </div>
-              )}
+              <PlacePhoto
+                placeId={p.placeId}
+                name={p.name}
+                className="shrink-0"
+                imageClassName="sk-my-thumb"
+                fallback={
+                  p.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                    <img src={p.imageUrl} alt="" className="sk-my-thumb" />
+                  ) : (
+                    <div className="sk-my-thumb flex items-center justify-center bg-mint-soft">
+                      <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                    </div>
+                  )
+                }
+              />
               <div className="sk-my-row-body">
                 <div className="sk-my-row-title truncate">{p.name}</div>
                 <div className="sk-my-row-sub truncate">

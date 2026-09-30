@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { WALK_DISTANCE_THRESHOLD_M, estimateWalkMinutes } from "@/lib/travelMode";
 import type { SavedCourseResult } from "@/lib/clientApi";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 function formatSavedDate(iso: string): string {
   const d = new Date(iso);
@@ -78,14 +79,22 @@ export function SavedCourseCard({
             )}
             <div className="flex w-[84px] shrink-0 flex-col items-center gap-1">
               <div className="relative">
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                  <img src={p.imageUrl} alt="" className="h-[60px] w-[84px] rounded-xl object-cover" />
-                ) : (
-                  <div className="flex h-[60px] w-[84px] items-center justify-center rounded-xl bg-mint-soft">
-                    <Icon name="pin" className="h-5 w-5 text-mint-mid" />
-                  </div>
-                )}
+                <PlacePhoto
+                  placeId={p.placeId}
+                  name={p.name}
+                  className="w-[84px] shrink-0"
+                  imageClassName="h-[60px] w-[84px]"
+                  fallback={
+                    p.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                      <img src={p.imageUrl} alt="" className="h-[60px] w-[84px] rounded-xl object-cover" />
+                    ) : (
+                      <div className="flex h-[60px] w-[84px] items-center justify-center rounded-xl bg-mint-soft">
+                        <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                      </div>
+                    )
+                  }
+                />
                 <span className="absolute -left-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-cta text-[10px] font-bold text-white">
                   {i + 1}
                 </span>

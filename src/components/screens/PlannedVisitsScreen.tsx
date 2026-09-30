@@ -7,6 +7,7 @@ import { useBack } from "@/lib/useBack";
 import { Icon } from "@/components/Icon";
 import { fetchSavedPlaces, putPlannedVisit } from "@/lib/clientApi";
 import { formatPlannedDate, todayIso } from "@/lib/textFormat";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 export function PlannedVisitsScreen() {
   const router = useRouter();
@@ -70,14 +71,22 @@ export function PlannedVisitsScreen() {
                 onClick={() => router.push(`/place/${p.placeId}`)}
                 className="flex min-w-0 flex-1 items-center gap-3 text-left"
               >
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지
-                  <img src={p.imageUrl} alt="" className="sk-thumb h-14 w-14 shrink-0" />
-                ) : (
-                  <div className="sk-slot h-14 w-14">
-                    <Icon name="pin" className="h-5 w-5 text-mint-mid" />
-                  </div>
-                )}
+                <PlacePhoto
+                  placeId={p.placeId}
+                  name={p.name}
+                  className="w-14 shrink-0"
+                  imageClassName="h-14 w-14"
+                  fallback={
+                    p.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지
+                      <img src={p.imageUrl} alt="" className="sk-thumb h-14 w-14 shrink-0" />
+                    ) : (
+                      <div className="sk-slot h-14 w-14">
+                        <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                      </div>
+                    )
+                  }
+                />
                 {/* 날짜는 사용자가 직접 지정한 확정값이라 실선 레일,
                     지난 예정은 더 이상 유효하지 않으므로 옅은 레일로 형태가 바뀐다. */}
                 <div className={`flex min-w-0 flex-col gap-0.5 ${past ? "sk-rail-none" : "sk-rail"}`}>

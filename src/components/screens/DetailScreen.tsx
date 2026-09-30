@@ -22,6 +22,7 @@ import { NaverMap } from "@/components/NaverMap";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { buildSharePlanText } from "@/lib/share-plan";
 import { PlaceLifeInfo } from "@/components/PlaceLifeInfo";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 // 실시간 방문자 리뷰(⭐ 평점, 리뷰 텍스트)는 이번 스코프에 없음 — 팀 자체 조사 결과
 // (docs/research/place-reviews-and-mood-data-sources.md) 무료로 실제 데이터를 받을 수
@@ -152,25 +153,33 @@ export function DetailScreen({ place, runId }: { place: PlaceWithMeta; runId: st
         }
       />
       <div className="flex flex-col gap-3 px-5">
-        {p.imageUrl ? (
-          <div className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리 */}
-            <img src={p.imageUrl} alt="" className="h-48 w-full rounded-2xl object-cover" />
-            <button
-              onClick={reportImage}
-              disabled={imageReported}
-              aria-label="부적절한 사진 신고"
-              className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white"
-            >
-              <Icon name="triangleAlert" className="h-3.5 w-3.5" />
-              {imageReported ? "신고됨" : "신고"}
-            </button>
-          </div>
-        ) : (
-          <div className="flex h-48 w-full items-center justify-center rounded-2xl bg-mint-soft">
-            <Icon name="pin" className="h-10 w-10 text-mint-mid" />
-          </div>
-        )}
+        <PlacePhoto
+          placeId={p.placeId}
+          name={p.name}
+          className="w-full"
+          imageClassName="h-48 w-full"
+          fallback={
+            p.imageUrl ? (
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리 */}
+                <img src={p.imageUrl} alt="" className="h-48 w-full rounded-2xl object-cover" />
+                <button
+                  onClick={reportImage}
+                  disabled={imageReported}
+                  aria-label="부적절한 사진 신고"
+                  className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white"
+                >
+                  <Icon name="triangleAlert" className="h-3.5 w-3.5" />
+                  {imageReported ? "신고됨" : "신고"}
+                </button>
+              </div>
+            ) : (
+              <div className="flex h-48 w-full items-center justify-center rounded-2xl bg-mint-soft">
+                <Icon name="pin" className="h-10 w-10 text-mint-mid" />
+              </div>
+            )
+          }
+        />
 
         <div>
           <h2 className="text-[22px] font-bold text-ink">{p.name}</h2>

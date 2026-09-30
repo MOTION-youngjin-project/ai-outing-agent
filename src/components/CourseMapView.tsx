@@ -12,6 +12,7 @@ import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 import { Icon } from "@/components/Icon";
 import { extractCategoryLabel } from "@/lib/services/matching";
 import { WALK_DISTANCE_THRESHOLD_M, estimateWalkMinutes } from "@/lib/travelMode";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 // 코스를 지도(번호 핀 + 구간 폴리라인) + 정류지 목록으로 보여주는 본문. 지도 탭(MapScreen)과
 // 저장한 코스 다시 보기(SavedCourseScreen)가 같은 화면을 쓰기 때문에 따로 뺐다.
@@ -249,14 +250,22 @@ function SelectedStopCard({
       <div key={index} className="sk-swap-x" data-dir={dir}>
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
-          {place.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-            <img src={place.imageUrl} alt="" className="h-16 w-16 rounded-xl object-cover" />
-          ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-mint-soft">
-              <Icon name="pin" className="h-6 w-6 text-mint-mid" />
-            </div>
-          )}
+          <PlacePhoto
+            placeId={place.placeId}
+            name={place.name}
+            className="w-16 shrink-0"
+            imageClassName="h-16 w-16"
+            fallback={
+              place.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                <img src={place.imageUrl} alt="" className="h-16 w-16 rounded-xl object-cover" />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-mint-soft">
+                  <Icon name="pin" className="h-6 w-6 text-mint-mid" />
+                </div>
+              )
+            }
+          />
           <span className="absolute -left-1 -top-1 rounded-full bg-cta px-1.5 py-0.5 text-[10px] font-bold text-white">
             {index + 1}번째 코스
           </span>

@@ -9,6 +9,7 @@ import { NaverMap, type MapParkingSpot } from "@/components/NaverMap";
 import { Icon } from "@/components/Icon";
 import { ExternalMapMenu } from "@/components/ExternalMapMenu";
 import { WALK_DISTANCE_THRESHOLD_M } from "@/lib/travelMode";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 // 디자인/지도(현재구간).png의 실시간 도보 내비게이션. 턴바이턴 안내문구는 Tmap
 // 보행자 경로안내로만 가능하다(docs/research/turn-by-turn-navigation-and-congestion-data-sources.md
@@ -232,14 +233,22 @@ export function CurrentLegView({
       <div className="rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
         <p className="px-1 pb-2 text-[12px] font-semibold text-muted">다음 장소</p>
         <div className="flex items-center gap-3">
-          {to.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-            <img src={to.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
-          ) : (
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
-              <Icon name="pin" className="h-5 w-5 text-mint-mid" />
-            </div>
-          )}
+          <PlacePhoto
+            placeId={to.placeId}
+            name={to.name}
+            className="w-14 shrink-0"
+            imageClassName="h-14 w-14"
+            fallback={
+              to.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                <img src={to.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" />
+              ) : (
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-mint-soft">
+                  <Icon name="pin" className="h-5 w-5 text-mint-mid" />
+                </div>
+              )
+            }
+          />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-bold text-ink">{to.name}</p>
             {to.oneLineDescription && (
