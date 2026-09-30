@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>motion 장소 사진 테스트</title>
+<style>
+  body{margin:0;padding:32px;background:#f4f7f6;color:#20352f;font:16px/1.6 system-ui,sans-serif}
+  main{max-width:850px;margin:auto}h1{font-size:26px} .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
+  article{background:white;border:1px solid #dbe5df;border-radius:16px;overflow:hidden}
+  img,.empty{width:100%;height:220px;object-fit:contain;background:#e9f1ec}
+  .empty{display:flex;align-items:center;justify-content:center;color:#597366}
+  .info{padding:20px}h2{margin:0;font-size:20px}small{display:block;color:#596a61}a{color:#176d50}details{margin-top:12px;font-size:13px}
+</style>
+<main>
+  <h1>장소 사진 표시 테스트</h1>
+  <p>실제 조회에서 확인한 사진으로 만든 화면 샘플입니다. 자동 검색·로그인·DB 연결은 실행하지 않습니다.</p>
+  <div class="grid">
+    <article>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/7/77/Daegu_National_Museum.jpg" alt="국립대구박물관 전경" referrerpolicy="no-referrer">
+      <div class="info"><h2>국립대구박물관</h2><small>촬영일(출처 기재): 2015-10-25</small>
+        <details><summary>사진 출처·이용 조건</summary>
+          <p>Daegu National Museum.jpg · Trainholic · Own work</p>
+          <a href="https://commons.wikimedia.org/wiki/File:Daegu_National_Museum.jpg" target="_blank" rel="noopener noreferrer">원본 보기</a> ·
+          <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 3.0</a>
+          <p>비율 유지 축소 표시</p>
+        </details>
+      </div>
+    </article>
+    <article>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/7/71/계산성당.jpg" alt="계산성당 전경" referrerpolicy="no-referrer">
+      <div class="info"><h2>계산성당</h2><small>촬영일(출처 기재): 2017-09-29</small>
+        <details><summary>사진 출처·이용 조건</summary>
+          <p>계산성당.jpg · 기여자 · Own work</p>
+          <a href="https://commons.wikimedia.org/wiki/File:계산성당.jpg" target="_blank" rel="noopener noreferrer">원본 보기</a> ·
+          <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>
+          <p>비율 유지 축소 표시</p>
+        </details>
+      </div>
+    </article>
+    <article><div class="empty">이용 가능한 사진 없음</div><div class="info"><h2>사진 없는 장소</h2><small>촬영일 미상 · 기본 표시 예시</small></div></article>
+  </div>
+  <p><small>사진을 불러오려면 인터넷 연결이 필요합니다. 최근에 조회한 사진이어도 최근에 촬영한 사진은 아닐 수 있습니다.</small></p>
+</main>
+<script>
+  document.querySelectorAll('img').forEach(img => img.addEventListener('error', () => {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'empty';
+    placeholder.textContent = '사진을 불러오지 못했습니다';
+    img.replaceWith(placeholder);
+  }));
+</script>
+</html>

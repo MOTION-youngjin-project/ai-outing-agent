@@ -3,6 +3,7 @@ import { Icon } from "@/components/Icon";
 import type { PlaceWithMeta } from "@/lib/clientApi";
 import { WALK_DISTANCE_THRESHOLD_M, estimateWalkMinutes } from "@/lib/travelMode";
 import { extractCategoryLabel } from "@/lib/services/matching";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 // 코스 정류지를 번호+점선 타임라인으로 보여주는 목록 — CourseCard(채팅 인라인 카드),
 // MapScreen(지도 탭), 저장한 코스 다시 보기가 같은 구성을 쓴다(디자인/채팅.png, 지도.png, 저장.png).
@@ -38,17 +39,25 @@ export function CourseStopList({
 
         const content = (
           <>
-            {p.imageUrl ? (
-              // alt=""는 develop의 접근성 수정이다 — 바로 옆에 장소 이름이 글로 있어서
-              // 이 이미지는 장식이다. 크기는 .sk-stop-thumb가 들고 있다(데스크톱
-              // 추천 카드 안에서만 커져야 해서).
-              // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-              <img src={p.imageUrl} alt="" className="sk-thumb sk-stop-thumb shrink-0" />
-            ) : (
-              <div className="sk-slot sk-stop-thumb">
-                <Icon name="pin" className="h-6 w-6 text-mint-mid" />
-              </div>
-            )}
+            <PlacePhoto
+              placeId={p.placeId}
+              name={p.name}
+              className="shrink-0"
+              imageClassName="sk-stop-thumb"
+              fallback={
+                p.imageUrl ? (
+                  // alt=""는 develop의 접근성 수정이다 — 바로 옆에 장소 이름이 글로 있어서
+                  // 이 이미지는 장식이다. 크기는 .sk-stop-thumb가 들고 있다(데스크톱
+                  // 추천 카드 안에서만 커져야 해서).
+                  // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                  <img src={p.imageUrl} alt="" className="sk-thumb sk-stop-thumb shrink-0" />
+                ) : (
+                  <div className="sk-slot sk-stop-thumb">
+                    <Icon name="pin" className="h-6 w-6 text-mint-mid" />
+                  </div>
+                )
+              }
+            />
             <div className="min-w-0 flex-1">
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">

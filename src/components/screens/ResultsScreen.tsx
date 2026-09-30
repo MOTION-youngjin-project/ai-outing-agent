@@ -26,6 +26,7 @@ import { PlanShareButton } from "@/components/PlanShareButton";
 import { RecommendationSources } from "@/components/RecommendationSources";
 import { PlaceMatchRecovery } from "@/components/PlaceMatchRecovery";
 import { NearbyPlaces } from "@/components/NearbyPlaces";
+import { PlacePhoto } from "@/components/PlacePhoto";
 
 // 카드에 보여줄 "혼잡도"는 관광지 자체의 실시간 방문자 혼잡도가 아니라(그런 데이터가
 // 없음) 그 장소 근처 대구 주차장의 실시간 혼잡도다 — 이미 주차 상세 화면에 쓰는 것과
@@ -333,14 +334,22 @@ export function ResultsScreen({ recommendation, runId }: { recommendation: Recom
             >
               <div className="flex gap-3">
                 <button onClick={() => openDetail(p)} aria-label={`${p.name} 상세 보기`} className="shrink-0">
-                  {p.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
-                    <img src={p.imageUrl} alt="" className="sk-thumb h-[76px] w-[76px]" />
-                  ) : (
-                    <span className="sk-slot h-[76px] w-[76px]">
-                      <Icon name="pin" className="h-6 w-6 text-mint-mid" />
-                    </span>
-                  )}
+                  <PlacePhoto
+                    placeId={p.placeId}
+                    name={p.name}
+                    className="w-[76px] shrink-0"
+                    imageClassName="h-[76px] w-[76px]"
+                    fallback={
+                      p.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- 외부 공공데이터 이미지, 도메인 사전등록 불필요한 일반 img로 처리
+                        <img src={p.imageUrl} alt="" className="sk-thumb h-[76px] w-[76px]" />
+                      ) : (
+                        <span className="sk-slot h-[76px] w-[76px]">
+                          <Icon name="pin" className="h-6 w-6 text-mint-mid" />
+                        </span>
+                      )
+                    }
+                  />
                 </button>
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="flex items-start gap-2">
