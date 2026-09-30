@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { koreanDate, photoCourseSchema } from "../src/lib/photo-course";
+const url = "http://localhost:3104/api/photo-courses";
+const input = { title: "대구 사진 여행", date: koreanDate(new Date(Date.now() + 86400000)), startTime: "13:00", durationMinutes: 420, transportMode: "walk", originId: "photo:kim-gwangseok", preferences: { tags: ["인물", "노을"], focus: "background", note: "배경 중심" } };
+const post = (body: string) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+const response = await post(JSON.stringify(input));
+assert.equal(response.status, 200);
+const course = photoCourseSchema.parse((await response.json()).course);
+assert.ok(course.stops.length > 0 && course.totalMinutes <= input.durationMinutes);
+assert.equal(response.headers.get("cache-control"), "private, no-store");
+assert.equal((await post("{")).status, 400);
+assert.equal((await post(JSON.stringify({ ...input, originId: "missing" }))).status, 400);
+assert.equal((await post(JSON.stringify({ ...input, date: "2020-01-01" }))).status, 400);
+assert.equal((await post("x".repeat(12001))).status, 413);
+console.log(`PASS 실제 로컬 API: 도보 ${course.stops.length}곳·시간 예산·출처 포함·잘못된 JSON/출발지/날짜·크기 제한`);

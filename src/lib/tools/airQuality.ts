@@ -1,6 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { normalizeSido } from "../region.ts";
+import { withRetry } from "../withRetry.ts";
 
 // 한국환경공단 에어코리아 - 시도별 실시간 측정정보 조회
 // https://www.data.go.kr/data/15073861/openapi.do
@@ -53,33 +54,27 @@ async function fetchOnce(sidoName: string, apiKey: string) {
   return { pm10: avgPm10, grade: gradeFromPm10(avgPm10), stationCount: values.length };
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // ponytail: 에어코리아 API가 SERVICETIMEOUT_ERROR를 자주 반환해(실측 4회 중 3회) 최대 3회 재시도.
 // 계속 실패하면 지수 백오프/재시도 큐 등 정교한 재시도 전략 도입.
 export async function fetchAirQuality(sidoName: string) {
-  const apiKey = process.env.AIRKOREA_API_KEY;
-  if (!apiKey) throw new Error("AIRKOREA_API_KEY가 설정되지 않았습니다.");
+  const apiKey = process.env.DATA_GO_KR_API_KEY;
+  if (!apiKey) throw new Error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(sidoName, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(sidoName, apiKey), 3);
 }
 
 export const airQualityTool = tool(
-  async ({ region }) => {
-    const sidoName = normalizeSido(region);
-    if (!sidoName) {
-      return `"${region}"은(는) 대기질 조회가 가능한 시/도 단위 지역명이 아닙니다. 서울, 부산, 대구 같은 시/도 이름으로 다시 물어봐 주세요.`;
-    }
+  async ({ region, query }) => {
+    // ponytail: 약한 폴백 모델(gemini-3.1/3.5-flash-lite)이 복잡한 다중조건 질문에서 이
+    // 도구 이름을 부르면서 query 인자(다른 도구 스키마)를 채우는 오배선이 실측 확인됨
+    // (2026-09-10, LangSmith 트레이스 — region이 Zod 검증에서 undefined로 막혀 같은 에러를
+    // 못 고치고 25스텝 recursion limit까지 반복 재시도함). region 없으면 query라도 받는다.
+    const input = region ?? query;
+    if (!input) return "지역 정보가 없어 대기질을 조회할 수 없습니다.";
+
+    // 이 앱은 대구 전용이라 "중구"처럼 시/도 없이 구/군만 언급되면(대구 외 지역과
+    // 이름이 겹칠 수 있어) normalizeSido가 못 잡는다 — 대구로 간주한다.
+    const sidoName = normalizeSido(input) ?? "대구";
 
     try {
       const { pm10, grade, stationCount } = await fetchAirQuality(sidoName);
@@ -93,7 +88,8 @@ export const airQualityTool = tool(
     description:
       "특정 지역(시/도 단위)의 실시간 미세먼지(대기질) 정보를 조회한다. 날씨나 컨디션이 애매하게 언급될 때도 먼저 확인해서 실내/야외 활동 판단에 활용한다.",
     schema: z.object({
-      region: z.string().describe("대기질을 조회할 지역명 (예: 대구, 서울)"),
+      region: z.string().optional().describe("대기질을 조회할 지역명 (예: 대구, 서울)"),
+      query: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — region과 동일하게 처리)"),
     }),
   }
 );

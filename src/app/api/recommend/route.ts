@@ -1,6 +1,11 @@
+import { acquireRecommendationRequest, recommendationRequestKey } from "@/lib/recommendation-request-lock";
+import { readRecommendationCache, storeRecommendationCache } from "@/lib/services/recommendation-cache";
 import { NextRequest, NextResponse } from "next/server";
 import { createRecommendationRun, type GeoPoint, type RecommendationProgressEvent } from "@/lib/services/recommendations";
 import type { ChatTurn } from "@/lib/agent";
+import { auth } from "@/lib/auth";
+import { ensureQuestionAllowed, consumeQuestion, type Owner } from "@/lib/ads/quota";
+import { GUEST_COOKIE, guestHash, guestToken } from "@/lib/recommendation-owner";
 
 export const runtime = "nodejs";
 
@@ -30,40 +35,110 @@ function toLine(event: RecommendationProgressEvent | { type: "result"; result: u
 }
 
 export async function POST(req: NextRequest) {
-  const { history, origin } = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "올바른 JSON이 필요합니다." }, { status: 400 });
+  const { history, origin, conversationId } = body;
 
-  if (!Array.isArray(history) || history.length === 0) {
+  if (!Array.isArray(history) || history.length === 0 || history.length > 50 || history.some(h => !h || !["user", "assistant"].includes(h.role) || typeof h.content !== "string" || h.content.length > 10000)) {
     return NextResponse.json({ error: "history가 필요합니다." }, { status: 400 });
   }
+  if (conversationId !== undefined && conversationId !== null && (typeof conversationId !== "string" || !/^[0-9a-f-]{36}$/i.test(conversationId))) {
+    return NextResponse.json({ error: "conversationId 형식이 올바르지 않습니다." }, { status: 400 });
+  }
   const validOrigin = parseOrigin(origin);
+  const session = await auth();
+  const userId = session?.user?.id;
+  // 비로그인 게스트도 쓸 수 있다 — 로그인 사용자만 하루 무료 1건이 추가로 있고,
+  // 게스트는 광고 시청으로 쌓은 질문권만 쓴다(quota.ts가 구분).
+  const token = userId ? undefined : guestToken(req.cookies.get(GUEST_COOKIE)?.value);
+  const sessionKeyHash = userId ? null : guestHash(token);
+  const owner: Owner = userId ? { userId } : { sessionKeyHash: sessionKeyHash! };
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      let closed = false;
-      // runAgentStream의 도구 호출 리스너는 fire-and-forget이라, 최종 결과를 보내고
-      // 컨트롤러를 닫은 뒤에도 뒤늦게 tool_end 이벤트가 들어올 수 있다 — 닫힌 컨트롤러에
-      // enqueue하면 예외가 나므로 조용히 무시한다(클라이언트는 이미 응답을 다 받은 뒤라 영향 없음).
-      const emit = (event: Parameters<typeof toLine>[0]) => {
-        if (closed) return;
+  // 쿼터 게이트는 여기 한 곳이다 — 추천 에이전트로 들어가는 유일한 입구이고,
+  // 스트림을 열기 "전"이라 한도 초과는 평범한 JSON 402로 나간다(NDJSON과 안 섞임).
+  // 같은 사람의 같은 요청이 진행 중이면(더블탭·재전송) 모델·차감에 들어가기 전에 막는다.
+  const lock = acquireRecommendationRequest(
+    recommendationRequestKey(userId ?? `guest:${sessionKeyHash}`, history, validOrigin, conversationId ?? null)
+  );
+  if (!lock.acquired) {
+    return NextResponse.json({
+      error: lock.reason === "duplicate" ? "같은 추천을 생성 중입니다. 진행 중인 요청을 기다려 주세요." : "요청이 많습니다. 잠시 후 다시 시도해 주세요.",
+      code: lock.reason === "duplicate" ? "recommendation_in_progress" : "recommendation_busy",
+    }, { status: lock.reason === "duplicate" ? 409 : 503, headers: { "Cache-Control": "private, no-store" } });
+  }
+  try {
+    // 5분 결과 캐시는 로그인 사용자만 — 취향 태그와 추천 기록 소유권을 DB로 확인하는 구조라
+    // 게스트에는 맞지 않는다. 적중하면 AI 호출·질문권 차감 없이 이전 결과를 그대로 돌려준다.
+    const cache = userId
+      ? await readRecommendationCache(userId, history, validOrigin, conversationId ?? null)
+      : { key: null, preferences: undefined, result: null };
+    if (cache.result) {
+      lock.release();
+      return new NextResponse(toLine({ type: "result", result: cache.result }), { headers: {
+        "Content-Type": "application/x-ndjson", "Cache-Control": "private, no-store", "X-Recommendation-Cache": "hit",
+      } });
+    }
+    const affordability = await ensureQuestionAllowed(owner);
+    if (!affordability.allowed) {
+      lock.release();
+      return NextResponse.json(
+        { error: "오늘 무료 질문을 다 쓰셨어요. 광고를 보면 질문권을 더 받을 수 있어요.", code: "quota_exceeded" },
+        { status: 402 }
+      );
+    }
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        let closed = false;
+        // runAgentStream의 도구 호출 리스너는 fire-and-forget이라, 최종 결과를 보내고
+        // 컨트롤러를 닫은 뒤에도 뒤늦게 tool_end 이벤트가 들어올 수 있다 — 닫힌 컨트롤러에
+        // enqueue하면 예외가 나므로 조용히 무시한다(클라이언트는 이미 응답을 다 받은 뒤라 영향 없음).
+        const emit = (event: Parameters<typeof toLine>[0]) => {
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(toLine(event)));
+          } catch {
+            // 컨트롤러가 그 사이 닫혔어도 무시
+          }
+        };
         try {
-          controller.enqueue(encoder.encode(toLine(event)));
-        } catch {
-          // 컨트롤러가 그 사이 닫혔어도 무시
+          const result = await createRecommendationRun(
+            history as ChatTurn[],
+            emit,
+            validOrigin,
+            userId ?? null,
+            sessionKeyHash,
+            conversationId ?? null,
+            cache.key ? { context: cache.preferences } : undefined
+          );
+          // 차감은 "장소가 담긴 추천이 실제로 나왔을 때"만. 되묻기(needsMoreInfo)는 places가
+          // 없어서 여기서 자연히 빠지고, 실패는 위 try가 못 오게 막는다. 되묻기를 차감하면
+          // 에이전트가 되물을수록 사용자가 손해라 제품이 스스로를 공격하게 된다.
+          if (result.recommendation.places?.length) {
+            await consumeQuestion(owner, affordability.source);
+          }
+          storeRecommendationCache(cache.key, result);
+          emit({ type: "result", result });
+        } catch (err) {
+          // err.message를 그대로 보내지 않는다 — Gemini/Prisma 등 내부 예외 원문이 그대로
+          // 노출된 적이 있었다("[GoogleGenerativeAI Error]: ... 503 Service Unavailable" 등,
+          // 2026-09-28 실사용자 리포트). 원인은 로그로만 남기고 사용자에겐 고정 문구만 보낸다.
+          console.error(err);
+          emit({ type: "error", message: "추천을 만드는 중 문제가 생겼어요. 잠시 후 다시 시도해주세요." });
+        } finally {
+          closed = true;
+          lock.release();
+          try { controller.close(); } catch { /* 클라이언트가 이미 끊었으면 무시 */ }
         }
-      };
-      try {
-        const result = await createRecommendationRun(history as ChatTurn[], emit, validOrigin);
-        emit({ type: "result", result });
-      } catch (err) {
-        console.error(err);
-        emit({ type: "error", message: err instanceof Error ? err.message : "추천 생성 중 오류가 발생했습니다." });
-      } finally {
-        closed = true;
-        controller.close();
-      }
-    },
-  });
+      },
+    });
 
-  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson" } });
+    const response = new NextResponse(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "private, no-store", "X-Recommendation-Cache": "miss" } });
+    if (token) response.cookies.set(GUEST_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365 });
+    return response;
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
 }

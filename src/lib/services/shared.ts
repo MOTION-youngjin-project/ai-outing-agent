@@ -19,6 +19,16 @@ export async function findOrCreateSidoRegion(sidoName: string) {
   });
 }
 
+// 홈 화면(/) 서버 컴포넌트가 시/도 목록을 SSR로 미리 내려줄 때 쓴다. /api/regions와 같은
+// 조회지만, 클라이언트 컴포넌트 prop으로 그대로 넘겨야 해서(BigInt/Decimal은 서버-클라이언트
+// 경계를 못 건넘) 여기서 직접 문자열로 바꿔 반환한다.
+export async function listSidoRegions(): Promise<
+  { id: string; parentId: string | null; name: string; level: string }[]
+> {
+  const rows = await prisma.region.findMany({ where: { level: "시도" }, orderBy: { name: "asc" } });
+  return rows.map((r) => ({ id: r.id.toString(), parentId: r.parentId?.toString() ?? null, name: r.name, level: r.level }));
+}
+
 export async function getOrCreateDataSource(code: string, name: string, sourceType: string) {
   return prisma.dataSource.upsert({
     where: { code },

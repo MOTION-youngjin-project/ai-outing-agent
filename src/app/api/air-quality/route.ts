@@ -15,19 +15,23 @@ export async function GET(request: Request) {
 
   let regionName: string | null = regionParam;
   if (regionIdParam !== null) {
-    const region = await prisma.region.findUnique({ where: { id: BigInt(regionIdParam) } });
+    const region = await prisma.region.findUnique({
+      where: { id: BigInt(regionIdParam) },
+      include: { parent: true },
+    });
     if (!region) {
       return NextResponse.json({ error: "해당 regionId의 지역을 찾을 수 없습니다." }, { status: 400 });
     }
-    regionName = region.name;
+    // 대기질도 시/도 단위로만 조회 가능 — 구/군이 선택된 경우 소속 시/도로 올려서 조회한다.
+    regionName = region.level === "구군" ? (region.parent?.name ?? region.name) : region.name;
   }
 
   if (!regionName) {
     return NextResponse.json({ error: "regionId 또는 region 파라미터가 필요합니다." }, { status: 400 });
   }
 
-  if (!process.env.AIRKOREA_API_KEY) {
-    return NextResponse.json({ error: "AIRKOREA_API_KEY가 설정되지 않았습니다." }, { status: 503 });
+  if (!process.env.DATA_GO_KR_API_KEY) {
+    return NextResponse.json({ error: "DATA_GO_KR_API_KEY가 설정되지 않았습니다." }, { status: 503 });
   }
 
   try {

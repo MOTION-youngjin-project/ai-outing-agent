@@ -146,11 +146,94 @@ model Place {
   routeStops                 RoutePlace[]
   anchoredParkingSuggestions RouteParkingRecommendation[] @relation("ParkingAnchorPlace")
   templateStops              PopularRouteTemplatePlace[]
+  savedByUsers               SavedPlace[]
+  lifeInfoCaches             PlaceLifeInfoCache[]
 
   @@index([normalizedName, latitude, longitude])
   @@index([regionId, isActive])
   @@index([latitude, longitude])
   @@map("places")
+}
+
+model PlaceLifeInfoCache {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  placeId     BigInt   @map("place_id") @db.UnsignedBigInt
+  topic       String   @db.VarChar(40)
+  payloadJson Json     @map("payload_json")
+  sourceCount Int      @default(0) @map("source_count") @db.SmallInt
+  aiUsed      Boolean  @default(false) @map("ai_used")
+  fetchedAt   DateTime @default(now()) @map("fetched_at") @db.Timestamp(0)
+  expiresAt   DateTime @map("expires_at") @db.Timestamp(0)
+  place       Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([placeId, topic])
+  @@index([expiresAt])
+  @@map("place_life_info_caches")
+}
+
+model User {
+  id            BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  email         String        @unique @db.VarChar(255)
+  // 소셜 로그인(구글/카카오/네이버)으로만 가입한 사용자는 비밀번호가 없다.
+  passwordHash  String?       @map("password_hash") @db.VarChar(255)
+  name          String?       @db.VarChar(100)
+  // agent.ts의 PLACE_TAGS(실내/야외/데이트/저비용)와 같은 값만 담는다. 값이 4개뿐이라
+  // 별도 테이블 없이 JSON 배열 하나로 충분하다고 판단.
+  preferredTags Json?         @map("preferred_tags")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamp(0)
+  savedPlaces   SavedPlace[]
+  savedCourses  SavedCourse[]
+  agentRuns     AgentRun[]
+  usages        RecommendationUsage[]
+  wallet        Wallet?
+  payments      Payment[]
+  adCredit      AdCredit?
+
+  @@map("users")
+}
+
+// 사용자가 "코스 저장"으로 담아둔 추천 코스.
+//
+// recommendation_routes를 가리키는 FK가 아니라 코스 내용을 JSON으로 통째 스냅샷해서
+// 들고 있다 — agent_runs는 TTL이 24시간이고(AGENT_RUN_TTL_MS) 만료분을 하드 삭제하는
+// 정리 작업이 예정돼 있어서, 포인터로 두면 저장한 코스가 하루 뒤 빈 껍데기가 된다.
+// "저장"은 그 시점에 본 코스를 그대로 남기는 기능이므로 스냅샷 쪽이 의미상으로도 맞고,
+// route_places.enriched_snapshot이 같은 이유로 이미 쓰는 방식이다.
+// snapshot 형태는 클라이언트가 그대로 받는 RecommendResult(places 포함) 그대로라
+// 저장한 코스 화면이 추천 결과 화면 컴포넌트를 그대로 재사용한다.
+model SavedCourse {
+  id         BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  publicId   String   @unique @default(uuid()) @map("public_id") @db.Char(36)
+  userId     BigInt   @map("user_id") @db.UnsignedBigInt
+  // 어떤 추천 런에서 저장한 코스인지. 같은 코스를 두 번 저장하지 않으려고 유니크를 걸
+  // 뿐이라 agent_runs FK는 일부러 걸지 않는다 — 만료 정리로 런이 지워져도 저장본은
+  // 남아야 한다(그게 이 테이블이 스냅샷을 들고 있는 이유다).
+  agentRunId String?  @map("agent_run_id") @db.Char(36)
+  // 목록 카드 제목. 기본값은 그 코스를 만든 사용자 질문 원문(agent_runs.user_query) —
+  // 요약 문구를 새로 지어내지 않는다.
+  title      String   @db.VarChar(250)
+  snapshot   Json
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, agentRunId])
+  @@index([userId, createdAt])
+  @@map("saved_courses")
+}
+
+model SavedPlace {
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId         BigInt    @map("user_id") @db.UnsignedBigInt
+  placeId        BigInt    @map("place_id") @db.UnsignedBigInt
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  // 방문 예정일. null이면 "그냥 저장한 장소", 값이 있으면 마이페이지 > 방문 예정에
+  // 날짜순으로 뜬다 — 별도 테이블 없이 한 칸으로 두 상태를 표현한다.
+  plannedVisitAt DateTime? @map("planned_visit_at") @db.Date
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  place          Place     @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, placeId])
+  @@map("saved_places")
 }
 
 model PlaceSourceRecord {
@@ -192,12 +275,38 @@ model PlaceImage {
   licenseInfo    String?     @map("license_info") @db.VarChar(300)
   capturedAt     DateTime?   @map("captured_at") @db.Timestamp(0)
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamp(0)
+  // 신고 누적돼 관리자가 부적절하다고 판단해 숨긴 시각. null이 아니면 목록/상세 어디에도
+  // 노출하지 않는다(하드 삭제 대신 숨김만 — 오신고로 지운 걸 되돌릴 수 있어야 한다).
+  hiddenAt       DateTime?   @map("hidden_at") @db.Timestamp(0)
   place          Place       @relation(fields: [placeId], references: [id])
   source         DataSource? @relation(fields: [sourceId], references: [id])
+  reports        PlaceImageReport[]
 
   @@unique([sourceId, sourceImageKey])
   @@index([placeId, sortOrder])
   @@map("place_images")
+}
+
+// 사용자가 부적절하다고 표시한 장소 사진. 자동 숨김/차단은 없고 관리자가
+// /admin/photo-reports에서 신고 누적을 보고 수동으로 hiddenAt을 세팅한다
+// (docs/research 결과 사진 자동 판별 API가 없어 전체 큐레이션은 수동이라던
+// 핸드오프 항목의 후속 — 전수 검토 대신 신고된 것만 보면 되게 좁힌다).
+model PlaceImageReport {
+  id             BigInt      @id @default(autoincrement()) @db.UnsignedBigInt
+  placeImageId   BigInt      @map("place_image_id") @db.UnsignedBigInt
+  // 로그인 사용자만 userId를 채운다. 게스트 신고도 받되(로그인 강제는 신고 문턱만
+  // 높인다) 누구인지 특정 못 하므로 null로 둔다 — ad_credits의 sessionKeyHash 같은
+  // 게스트 식별은 신고 남용 방지에 큰 의미가 없어 여기선 생략.
+  reporterUserId BigInt?     @map("reporter_user_id") @db.UnsignedBigInt
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamp(0)
+  // 관리자가 큐에서 처리(숨기거나 무시)한 시각. null인 것만 대기열에 보인다 —
+  // 없으면 무시로 끝낸 신고가 계속 큐에 남아 매번 다시 걸린다.
+  resolvedAt     DateTime?   @map("resolved_at") @db.Timestamp(0)
+  image          PlaceImage  @relation(fields: [placeImageId], references: [id])
+
+  @@index([placeImageId])
+  @@index([resolvedAt])
+  @@map("place_image_reports")
 }
 
 model PlaceBusinessHour {
@@ -390,9 +499,23 @@ model RagChunk {
 }
 
 model AgentRun {
+  recommendationJson   Json?                 @map("recommendation_json")
   id                   String                @id @default(uuid()) @db.Char(36)
   sessionKeyHash       String?               @map("session_key_hash") @db.VarChar(64)
-  requestMode          RequestMode           @map("request_mode")
+  userId               BigInt?               @map("user_id") @db.UnsignedBigInt
+  // 마이페이지 "최근 질문"에 그대로 보여줄 사용자 원문 메시지(history의 마지막 turn).
+  // 비로그인 요청은 userId/userQuery 둘 다 null로 남는다(추적 안 함).
+  userQuery            String?               @map("user_query") @db.VarChar(1000)
+  // 같은 대화(연속된 turn)의 agent_runs를 묶는 키 — 클라이언트가 대화 시작 시 발급해서
+  // 매 turn마다 그대로 실어보낸다. 이 컬럼 도입 전 행은 전부 null로 남고(백필 없음),
+  // 그룹핑 쪽 애플리케이션 코드가 null이면 그 행의 id 자체를 대체 키로 취급한다.
+  conversationId       String?               @map("conversation_id") @db.Char(36)
+  // 대화의 첫 turn에서만 AI가 채운다(사이드바 "대화 기록" 제목용) — 이후 turn은
+  // null로 둔다. 실패해도 조용히 null로 남고, 그러면 사이드바가 userQuery로 대체한다.
+  title                String?               @db.VarChar(80)
+  // 사이드바 "대화 고정". 대화의 모든 turn에 같은 값을 쓴다 — 대화 테이블이 따로 없어서.
+  pinnedAt             DateTime?             @map("pinned_at") @db.Timestamp(0)
+  requestMode         RequestMode           @map("request_mode")
   currentRegionId      BigInt?               @map("current_region_id") @db.UnsignedBigInt
   environmentMode      EnvironmentMode?      @map("environment_mode")
   status               RunStatus             @default(pending)
@@ -403,6 +526,7 @@ model AgentRun {
   expiresAt            DateTime              @map("expires_at") @db.Timestamp(0)
   errorCode            String?               @map("error_code") @db.VarChar(80)
   errorSummary         String?               @map("error_summary") @db.VarChar(500)
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   currentRegion        Region?               @relation(fields: [currentRegionId], references: [id])
   ingestionEvents      PlaceIngestionEvent[]
   toolCalls            ToolCall[]
@@ -411,6 +535,8 @@ model AgentRun {
   @@index([sessionKeyHash, startedAt])
   @@index([status, startedAt])
   @@index([expiresAt])
+  @@index([userId, startedAt])
+  @@index([conversationId])
   @@map("agent_runs")
 }
 
@@ -513,6 +639,11 @@ model RoutePlace {
   travelDurationMin    Int?                @map("travel_duration_min")
   selectionReason      String?             @map("selection_reason") @db.VarChar(1000)
   verificationRequired Boolean             @default(false) @map("verification_required")
+  // 라우팅 전환용: 새로고침/직링크로 /recommend/[runId]/place/[placeId]를 다시 열 때
+  // LLM이 만든 상세 필드(oneLineDescription/tags/features/visitDuration/suggestedRoute 등,
+  // PlaceWithMeta 그대로)를 재현하는 데 쓴다. Place 테이블엔 이 필드들이 없다(LLM이 이번
+  // 추천에서만 생성한 값이라 장소 고유 정보가 아님).
+  enrichedSnapshot     Json?               @map("enriched_snapshot")
   route                RecommendationRoute @relation(fields: [routeId], references: [id])
   place                Place               @relation(fields: [placeId], references: [id])
   event                CulturalEvent?      @relation(fields: [eventId], references: [id])
@@ -560,6 +691,19 @@ model PopularRouteTemplate {
   @@map("popular_route_templates")
 }
 
+model TourApiQueryCache {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  cacheKey    String   @unique @map("cache_key") @db.Char(64)
+  keyword     String   @db.VarChar(200)
+  resultLimit Int      @map("result_limit") @db.SmallInt
+  payloadJson Json     @map("payload_json")
+  fetchedAt   DateTime @default(now()) @map("fetched_at") @db.Timestamp(0)
+  expiresAt   DateTime @map("expires_at") @db.Timestamp(0)
+
+  @@index([expiresAt])
+  @@map("tour_api_query_caches")
+}
+
 model PopularRouteTemplatePlace {
   templateId     BigInt               @map("template_id") @db.UnsignedBigInt
   sequenceNo     Int                  @map("sequence_no") @db.SmallInt
@@ -571,4 +715,140 @@ model PopularRouteTemplatePlace {
 
   @@id([templateId, sequenceNo])
   @@map("popular_route_template_places")
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+
+  @@map("payment_status")
+}
+
+// 과금 근거가 되는 사용량 카운터. agent_runs를 쓰지 않는 이유는 그쪽이 TTL 24시간에
+// 만료분 하드 삭제 대상이라 하루만 지나면 "몇 번 썼는지"의 근거가 사라지기 때문이다.
+//
+// 증분 컬럼(used_count += 1)이 아니라 "행 1개 = 사용 1회"로 둔다 — 동시 요청에서
+// upsert 경합이 없고, 돈이 오가는 경로의 감사 로그를 겸한다.
+//
+// 차감 시점은 "장소가 담긴 추천이 실제로 나왔을 때"뿐이다. 실패(Gemini 429/503 같은
+// 우리 쪽 장애가 상당수)와 되묻기(needsMoreInfo)는 행을 만들지 않는다.
+model RecommendationUsage {
+  id BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  // 로그인 사용자는 userId, 비로그인 게스트는 sessionKeyHash로 센다(agent_runs와 같은
+  // 소유자 표현). 둘 중 하나만 채워진다. 로그인이 앱 사용의 전제가 된 뒤로 새 행은
+  // 전부 userId만 채워지지만, 컬럼 자체는 과거 데이터 호환을 위해 남긴다.
+  userId         BigInt?  @map("user_id") @db.UnsignedBigInt
+  sessionKeyHash String?  @map("session_key_hash") @db.VarChar(64)
+  // 이 건이 무료였는지(0) 유료로 크레딧에서 차감됐는지(단가). 가격이 나중에 바뀌어도
+  // 과거 행의 실제 차감액은 그대로 남아야 해서 plans.ts 상수를 참조하지 않고 값을 굳힌다.
+  costKrw        Int      @default(0) @map("cost_krw")
+  // 어떤 추천에서 차감됐는지. agent_runs는 만료 삭제되므로 FK를 일부러 걸지 않는다 —
+  // saved_courses.agent_run_id가 같은 이유로 이미 쓰는 방식이다.
+  agentRunId     String?  @map("agent_run_id") @db.Char(36)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([sessionKeyHash, createdAt])
+  @@map("recommendation_usages")
+}
+
+// 사용자당 크레딧 지갑 1개. 선불 크레딧 잔액과 자동충전에 쓰는 빌링키를 들고 있다 —
+// 구독 주기 개념이 없다(무료 질문 소진 후 건당 차감, 잔액 부족 시 자동 충전).
+model Wallet {
+  id     BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  userId BigInt @unique @map("user_id") @db.UnsignedBigInt
+  // 토스페이먼츠 빌링키 발급/승인에 쓰는 고객 식별자. userId를 그대로 쓰면 안 된다 —
+  // 유추 가능한 값을 customerKey로 쓰는 걸 토스가 금지한다. 그래서 별도 UUID를 발급한다.
+  customerKey String  @unique @map("customer_key") @db.Char(36)
+  // 카드 등록 성공 시 받는 키. 이후 자동 충전이 이 키로 나간다. 서버 전용 값이라
+  // 어떤 응답에도 실어 보내지 않는다.
+  billingKey  String? @map("billing_key") @db.VarChar(200)
+  balanceKrw  Int     @default(0) @map("balance_krw")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamp(0)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wallets")
+}
+
+// 승인 요청 1건 = 1행(최초 카드 등록 시 첫 충전, 이후 자동/수동 충전 각각). 승인 API를
+// 부르기 "전에" pending으로 먼저 만들고 그 orderId를 멱등키(Idempotency-Key)로 쓴다 —
+// 네트워크 재시도로 이중 결제가 나는 걸 막는 유일한 수단이고, 응답을 못 받았을 때
+// 무슨 요청이 나갔는지 아는 유일한 기록이다.
+model Payment {
+  id      BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  userId  BigInt @map("user_id") @db.UnsignedBigInt
+  orderId String @unique @map("order_id") @db.Char(36)
+  // 충전 금액. 항상 서버의 TOPUP_AMOUNT_KRW에서 읽은 값이고 클라이언트가 보낸 값이 아니다.
+  amount     Int
+  status     PaymentStatus @default(pending)
+  paymentKey String?       @map("payment_key") @db.VarChar(200)
+  requestedAt DateTime     @default(now()) @map("requested_at") @db.Timestamp(0)
+  approvedAt  DateTime?    @map("approved_at") @db.Timestamp(0)
+  failureMessage String?   @map("failure_message") @db.VarChar(500)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, requestedAt])
+  @@map("payments")
+}
+
+// 결제(billing/*) 대신 광고 기반 무료 한도. 하루 1건은 그냥 무료고, 그 이상은 광고를
+// 봐야 한다(무제한 — 사업자등록 전까지는 돈을 받을 방법이 없어서 이 방식으로 간다).
+// billing/* 테이블·코드는 나중에 사업자등록되면 다시 쓸 수 있게 그대로 둔다.
+model AdCredit {
+  id     BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  // 로그인 사용자는 userId, 비로그인 게스트는 sessionKeyHash로 구분한다(agent_runs와
+  // 같은 소유자 표현). 둘 중 하나만 채워진다 — MySQL unique 인덱스는 NULL을 여러 개
+  // 허용하므로 둘 다 nullable+unique로 둬도 게스트 행이 여러 개 있어도 문제없다.
+  userId         BigInt? @unique @map("user_id") @db.UnsignedBigInt
+  sessionKeyHash String? @unique @map("session_key_hash") @db.VarChar(64)
+  // 광고를 봐서 쌓인 질문권. 하루 무료 1건과 별개로 소진 전까지 계속 쓸 수 있다.
+  credits Int @default(0)
+  // 오늘 무료 1건을 이미 썼는지는 "오늘 날짜와 같은가"로 판정한다 — 자정 지나면 자동으로
+  // 다시 하루치가 찬다(별도 리셋 배치 필요 없음). 게스트(sessionKeyHash)는 계정이 없어
+  // 쿠키만 지우면 무한 리셋되므로 이 하루 무료를 아예 안 준다 — quota.ts에서 막는다.
+  lastFreeAt DateTime? @map("last_free_at") @db.Timestamp(0)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamp(0)
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ad_credits")
+}
+
+// AdMob 서버 측 리워드 검증(SSV) 콜백의 재전송/리플레이 방지. 서명된 콜백 URL이
+// 그대로 다시 호출돼도(구글의 재시도든, 가로챈 URL 재사용이든) transaction_id가
+// 이미 있으면 크레딧을 또 주지 않는다.
+model AdSsvTransaction {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  transactionId String   @unique @map("transaction_id") @db.VarChar(64)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@map("ad_ssv_transactions")
+}
+
+enum AdminActionType {
+  grant_ad_credit
+  reset_daily_free
+  delete_account
+
+  @@map("admin_action_type")
+}
+
+// 관리자 페이지에서 벌어지는 파괴적/과금 관련 조작의 감사 로그. 계정 삭제 같은 액션은
+// 대상 User 행 자체가 사라지므로 targetUserId에 FK를 걸지 않고(삭제 후에도 로그가
+// 남아야 한다) targetEmail을 스냅샷으로 같이 저장한다 — saved_courses가 agent_run_id에
+// FK를 안 거는 것과 같은 이유.
+model AdminActionLog {
+  id           BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  adminEmail   String          @map("admin_email") @db.VarChar(255)
+  action       AdminActionType
+  targetUserId BigInt?         @map("target_user_id") @db.UnsignedBigInt
+  targetEmail  String          @map("target_email") @db.VarChar(255)
+  detail       Json?
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamp(0)
+
+  @@index([targetUserId, createdAt])
+  @@index([createdAt])
+  @@map("admin_action_logs")
 }

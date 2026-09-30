@@ -1,5 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import { coordinate } from "../coordinates";
+import { withRetry } from "../withRetry";
 
 // 대구광역시 통합주차정보시스템 - 민간주차장 API(주차장정보 조회)
 // https://pis.daegu.go.kr/api/mingan/prkInfo
@@ -15,6 +17,12 @@ const REALTIME_URL = "https://pis.daegu.go.kr/api/serviceApply/rltmPrkInfo";
 export const DAEGU_DISTRICTS = [
   "중구", "동구", "서구", "남구", "북구", "수성구", "달서구", "달성군", "군위군",
 ] as const;
+
+export function parkingNumber(value: unknown): number | null {
+  if (value == null || (typeof value === "string" && !value.trim()) || !["string", "number"].includes(typeof value)) return null;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
+}
 
 const DISTRICT_CODES: Record<string, string> = {
   중구: "150",
@@ -67,7 +75,16 @@ async function fetchOnce(sggCd: string, apiKey: string) {
   if (data?.resultCode !== "200") {
     throw new Error(`대구 주차정보 API 오류: ${data?.message ?? "알 수 없는 오류"}`);
   }
-  return (data?.data ?? []) as ParkingItem[];
+  if (!res.ok || !Array.isArray(data?.data)) throw new Error("주차 API 응답 형식 오류");
+  const seen = new Set<string>();
+  return (data.data as ParkingItem[]).filter(i => {
+    const id = i?.prkInfo?.pkltId;
+    if (!id || !i.prkInfo.pkltNm || (i.prkInfo as { useYn?: string }).useYn === "N" || seen.has(id) || !i.prkFcltInfo || !i.prkOperInfo) return false;
+    seen.add(id); return true;
+  }).map(i => {
+    const p = coordinate(i.prkFcltInfo.lat, i.prkFcltInfo.lot);
+    return { ...i, prkFcltInfo: { ...i.prkFcltInfo, lat: p?.latitude ?? null, lot: p?.longitude ?? null } };
+  });
 }
 
 async function fetchRealtimeOnce(pkltId: string, apiKey: string): Promise<number | null> {
@@ -77,9 +94,9 @@ async function fetchRealtimeOnce(pkltId: string, apiKey: string): Promise<number
     signal: AbortSignal.timeout(8000),
   });
   const data = await res.json();
-  if (data?.resultCode !== "200") return null;
+  if (!res.ok || data?.resultCode !== "200") return null;
   const rmnd = data?.data?.[0]?.rltmPrkInfo?.totRmndPrkNocmprt;
-  return typeof rmnd === "number" ? rmnd : null;
+  return parkingNumber(rmnd);
 }
 
 // 전체 344곳 중 실시간 연동된 곳은 일부(109곳)뿐이라, 없으면 null(실시간 정보 없음)로
@@ -94,7 +111,8 @@ async function fetchRealtimeParking(pkltId: string, apiKey: string): Promise<num
 
 export function formatFee(crgLevySeNm: string | null, gnrlOneHrCrg: number | null): string {
   if (crgLevySeNm === "무료") return "무료";
-  if (gnrlOneHrCrg !== null) return `시간당 ${gnrlOneHrCrg}원`;
+  const fee = parkingNumber(gnrlOneHrCrg);
+  if (fee !== null) return `시간당 ${fee}원`;
   return crgLevySeNm ?? "요금정보 없음";
 }
 
@@ -118,11 +136,12 @@ export function formatFeeLines(op: ParkingItem["prkOperInfo"]): string[] | null 
   if (op.crgLevySeNm === "무료") return ["무료"];
 
   const lines: string[] = [];
-  if (op.gnrlFrstCrgLevyHr) lines.push(`최초 ${op.gnrlFrstCrgLevyHr}분 ${op.gnrlFrstCrg ? `${op.gnrlFrstCrg.toLocaleString()}원` : "무료"}`);
-  if (op.gnrlAddCrgLevyHr && op.gnrlMntbyAddCrg !== null) {
-    lines.push(`이후 ${op.gnrlAddCrgLevyHr}분당 ${op.gnrlMntbyAddCrg.toLocaleString()}원`);
+  const first = parkingNumber(op.gnrlFrstCrg), additional = parkingNumber(op.gnrlMntbyAddCrg), daily = parkingNumber(op.gnrlOneDayCrg);
+  if (op.gnrlFrstCrgLevyHr && first !== null) lines.push(`최초 ${op.gnrlFrstCrgLevyHr}분 ${first ? `${first.toLocaleString()}원` : "무료"}`);
+  if (op.gnrlAddCrgLevyHr && additional !== null) {
+    lines.push(`이후 ${op.gnrlAddCrgLevyHr}분당 ${additional.toLocaleString()}원`);
   }
-  if (op.gnrlOneDayCrg !== null) lines.push(`1일 최대 ${op.gnrlOneDayCrg.toLocaleString()}원`);
+  if (daily !== null) lines.push(`1일 최대 ${daily.toLocaleString()}원`);
   if (lines.length > 0) return lines;
 
   const fallback = formatFee(op.crgLevySeNm, op.gnrlOneHrCrg);
@@ -155,30 +174,19 @@ export function estimateWalkMinutes(meters: number): number {
   return Math.max(1, Math.round(meters / 67));
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function fetchParking(sggCd: string) {
   const apiKey = process.env.DAEGU_PARKING_API_KEY;
   if (!apiKey) throw new Error("DAEGU_PARKING_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(sggCd, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(sggCd, apiKey), 3);
 }
 
 export type ParkingSpot = {
   id: string;
   name: string;
   address: string;
-  capacity: number;
+  capacity: number | null;
+  realtimeFetchedAt?: string | null;
   remainingSpaces: number | null;
   fee: string;
   feeLines: string[] | null;
@@ -193,18 +201,10 @@ export type ParkingSpot = {
   remark: string | null;
 };
 
-// LangChain 도구와 /api/parking 라우트가 공유하는 구조화된 조회 함수.
-// 좌표는 API가 주지만 기준점(사용자가 실제로 서있는 위치)이 없어 거리순 정렬은 지원하지 않는다.
-export async function getDaeguParking(district: string): Promise<ParkingSpot[]> {
-  const sggCd = DISTRICT_CODES[district];
-  if (!sggCd) return [];
-
-  // sysgrpyYn(실시간 연동 플래그)이 Y인 주차장이 실제로 실시간 잔여대수를 가질
-  // 확률이 훨씬 높아서(실측 확인함), 앞쪽에 오도록 정렬한 뒤 5개를 뽑는다.
-  const all = await fetchParking(sggCd);
-  const items = [...all]
-    .sort((a, b) => Number(b.prkInfo.sysgrpyYn === "Y") - Number(a.prkInfo.sysgrpyYn === "Y"))
-    .slice(0, 5);
+// 상위 N개로 좁혀진 정적 목록에 실시간 잔여대수를 붙여 ParkingSpot으로 변환한다 —
+// getDaeguParking(실시간연동 우선)과 getDaeguParkingNearby(거리 우선) 둘 다 이 마지막
+// 단계는 동일해서 공유한다.
+async function enrichWithRealtime(items: ParkingItem[]): Promise<ParkingSpot[]> {
   const apiKey = process.env.DAEGU_PARKING_API_KEY;
   const remainingSpacesList = apiKey
     ? await Promise.all(items.map((i) => fetchRealtimeParking(i.prkInfo.pkltId, apiKey)))
@@ -214,8 +214,9 @@ export async function getDaeguParking(district: string): Promise<ParkingSpot[]> 
     id: i.prkInfo.pkltId,
     name: i.prkInfo.pkltNm,
     address: i.prkFcltInfo.lotnoAddr,
-    capacity: i.prkFcltInfo.prkNocmprt,
-    remainingSpaces: remainingSpacesList[idx],
+    capacity: parkingNumber(i.prkFcltInfo.prkNocmprt),
+    remainingSpaces: parkingNumber(i.prkFcltInfo.prkNocmprt) !== null && remainingSpacesList[idx] !== null && remainingSpacesList[idx]! > parkingNumber(i.prkFcltInfo.prkNocmprt)! ? null : remainingSpacesList[idx],
+    realtimeFetchedAt: remainingSpacesList[idx] === null ? null : new Date().toISOString(),
     fee: formatFee(i.prkOperInfo.crgLevySeNm, i.prkOperInfo.gnrlOneHrCrg),
     feeLines: formatFeeLines(i.prkOperInfo),
     latitude: i.prkFcltInfo.lat,
@@ -228,6 +229,69 @@ export async function getDaeguParking(district: string): Promise<ParkingSpot[]> 
     phone: i.prkFcltInfo.telno,
     remark: i.prkOperInfo.rmrk,
   }));
+}
+
+// LangChain 도구가 쓰는 조회 함수. 기준점(사용자가 실제로 서있는 위치)이 없어 거리순
+// 정렬은 지원하지 않는다 — 대신 sysgrpyYn(실시간 연동 플래그)이 Y인 주차장이 실제로
+// 실시간 잔여대수를 가질 확률이 훨씬 높아서(실측 확인함) 그걸 우선한다.
+export async function getDaeguParking(district: string): Promise<ParkingSpot[]> {
+  const sggCd = DISTRICT_CODES[district];
+  if (!sggCd) return [];
+
+  const all = await fetchParking(sggCd);
+  const items = [...all]
+    .sort((a, b) => Number(b.prkInfo.sysgrpyYn === "Y") - Number(a.prkInfo.sysgrpyYn === "Y"))
+    .slice(0, 5);
+  return enrichWithRealtime(items);
+}
+
+// /api/parking 라우트가 쓰는 조회 함수 — 목적지 좌표가 있을 때는 실시간 연동 여부와
+// 무관하게 실제로 가장 가까운 곳을 고른다. 2026-09-08 실측: getDaeguParking처럼
+// "실시간연동 우선, 그 안에서 원본 API 순서"로 5개를 뽑으면 그 순서가 위치와 무관해서
+// 5~6km 떨어진 곳이 뽑히는 문제가 있었음(대구미술관 기준 실제로 재현) — 화면에 이미
+// "거리순"이라고 표시하고 있으니 실제 동작도 그래야 한다. 실시간 데이터 없는 곳은
+// remainingSpaces가 null로 남고 UI가 이미 그 경우를 처리한다.
+export async function getDaeguParkingNearby(
+  district: string,
+  origin: { latitude: number; longitude: number }
+): Promise<ParkingSpot[]> {
+  const sggCd = DISTRICT_CODES[district];
+  if (!sggCd) return [];
+
+  const all = await fetchParking(sggCd);
+  const items = all
+    .filter((i): i is ParkingItem & { prkFcltInfo: { lat: number; lot: number } } =>
+      i.prkFcltInfo.lat !== null && i.prkFcltInfo.lot !== null
+    )
+    .sort(
+      (a, b) =>
+        haversineMeters(origin, { latitude: a.prkFcltInfo.lat, longitude: a.prkFcltInfo.lot }) -
+        haversineMeters(origin, { latitude: b.prkFcltInfo.lat, longitude: b.prkFcltInfo.lot })
+    )
+    .slice(0, 5);
+  return enrichWithRealtime(items);
+}
+
+// /주차장/[pkltId] 상세 라우트의 새로고침/직링크 복원용. getDaeguParking(Nearby)는 상위
+// 5개로 자른 뒤라 그 밖의 pkltId는 못 찾는다 — 여긴 자르기 전 전체 목록에서 찾는다.
+export async function getParkingSpotById(
+  district: string,
+  pkltId: string,
+  origin?: { latitude: number; longitude: number } | null
+): Promise<(ParkingSpot & { distanceMeters: number | null; walkMinutes: number | null }) | null> {
+  const sggCd = DISTRICT_CODES[district];
+  if (!sggCd) return null;
+
+  const all = await fetchParking(sggCd);
+  const item = all.find((i) => i.prkInfo.pkltId === pkltId);
+  if (!item) return null;
+
+  const [spot] = await enrichWithRealtime([item]);
+  if (!origin || spot.latitude === null || spot.longitude === null) {
+    return { ...spot, distanceMeters: null, walkMinutes: null };
+  }
+  const distanceMeters = Math.round(haversineMeters(origin, { latitude: spot.latitude, longitude: spot.longitude }));
+  return { ...spot, distanceMeters, walkMinutes: estimateWalkMinutes(distanceMeters) };
 }
 
 export const parkingTool = tool(

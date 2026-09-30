@@ -10,6 +10,14 @@ export interface CachedWeather {
   summary: string;
   freshnessStatus: "fresh" | "stale";
   cacheHit: boolean;
+  hourly: HourlyWeather[];
+}
+
+export interface HourlyWeather {
+  forecastAt: string;
+  temperatureC: number | null;
+  precipitationProbability: number | null;
+  summary: string;
 }
 
 function kstDateTime(dateStr: string, timeStr: string): Date {
@@ -25,6 +33,14 @@ function toSummary(sky: string, pty: string): string {
   return pty !== "없음" ? `${sky}, 강수형태 ${pty}` : sky;
 }
 
+function findHourlyRows(regionId: bigint, fetchedAt: Date) {
+  return prisma.weatherSnapshot.findMany({ where: { regionId, fetchedAt }, orderBy: { forecastAt: "asc" }, take: 12 });
+}
+
+function serializeHourly(rows: Awaited<ReturnType<typeof findHourlyRows>>): HourlyWeather[] {
+  return rows.map((row) => ({ forecastAt: row.forecastAt.toISOString(), temperatureC: row.temperatureC ? row.temperatureC.toNumber() : null, precipitationProbability: row.precipitationProbability ? row.precipitationProbability.toNumber() : null, summary: row.summary ?? "정보없음" }));
+}
+
 // 기상청 도구(get_weather)와 같은 API를 캐시-어사이드로 감싼다.
 // 신선도 기준: 마지막으로 받아온 시각이 "현재 유효한 발표시각" 이후인가 — 새 발표
 // 주기가 시작됐으면(예: 14시 발표 이후) 11시 발표 기준으로 저장된 캐시는 stale.
@@ -35,7 +51,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
   const region = await findOrCreateSidoRegion(sidoName);
   const latest = await prisma.weatherSnapshot.findFirst({
     where: { regionId: region.id },
-    orderBy: { fetchedAt: "desc" },
+    orderBy: [{ fetchedAt: "desc" }, { forecastAt: "asc" }],
   });
 
   const { base_date, base_time } = latestBaseDateTime(new Date());
@@ -43,6 +59,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
   const isFresh = latest ? latest.fetchedAt >= currentCycleStart : false;
 
   if (latest && isFresh) {
+    const hourly = serializeHourly(await findHourlyRows(region.id, latest.fetchedAt));
     return {
       id: latest.id.toString(),
       temperatureC: latest.temperatureC ? latest.temperatureC.toNumber() : null,
@@ -52,6 +69,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
       summary: latest.summary ?? "",
       freshnessStatus: "fresh",
       cacheHit: true,
+      hourly,
     };
   }
 
@@ -61,21 +79,26 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
     const fetched = await fetchWeather(nx, ny);
     const source = await getOrCreateDataSource("KMA", "기상청", "open_api");
 
-    const temperatureC = fetched.tmp ? Number(fetched.tmp) : null;
-    const precipitationProbability = fetched.pop ? Number(fetched.pop) : null;
-    const summary = toSummary(fetched.sky, fetched.pty);
-
-    const saved = await prisma.weatherSnapshot.create({
-      data: {
+    // fetched_at 컬럼이 @db.Timestamp(0)라 밀리초가 잘린다 — 쓰기/조회 값을
+    // 미리 초 단위로 맞추지 않으면 findFirstOrThrow가 방금 넣은 행을 못 찾는다.
+    const fetchedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+    await prisma.weatherSnapshot.createMany({
+      data: fetched.hourly.map((hour) => ({
         sourceId: source.id,
         regionId: region.id,
-        forecastAt: kstDateTime(fetched.fcstDate, fetched.fcstTime),
-        temperatureC,
-        precipitationProbability,
-        summary,
+        forecastAt: kstDateTime(hour.fcstDate, hour.fcstTime),
+        temperatureC: hour.tmp ? Number(hour.tmp) : null,
+        precipitationProbability: hour.pop ? Number(hour.pop) : null,
+        summary: toSummary(hour.sky, hour.pty),
         freshnessStatus: "fresh",
-      },
+        fetchedAt,
+      })),
     });
+    const saved = await prisma.weatherSnapshot.findFirstOrThrow({ where: { regionId: region.id, fetchedAt }, orderBy: { forecastAt: "asc" } });
+    const temperatureC = saved.temperatureC ? saved.temperatureC.toNumber() : null;
+    const precipitationProbability = saved.precipitationProbability ? saved.precipitationProbability.toNumber() : null;
+    const summary = saved.summary ?? "정보없음";
+    const hourly = serializeHourly(await findHourlyRows(region.id, fetchedAt));
 
     return {
       id: saved.id.toString(),
@@ -84,6 +107,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
       summary,
       freshnessStatus: "fresh",
       cacheHit: false,
+      hourly,
     };
   } catch {
     if (!latest) return null;
@@ -96,6 +120,7 @@ export async function getCachedWeather(regionName: string): Promise<CachedWeathe
       summary: latest.summary ?? "",
       freshnessStatus: "stale",
       cacheHit: false,
+      hourly: serializeHourly(await findHourlyRows(region.id, latest.fetchedAt)),
     };
   }
 }

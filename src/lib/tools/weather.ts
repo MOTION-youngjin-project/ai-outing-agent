@@ -1,6 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { normalizeSido, SIDO_LATLON, latLonToGrid } from "../region.ts";
+import { withRetry } from "../withRetry.ts";
 
 // 기상청 단기예보 조회서비스(getVilageFcst)
 // https://www.data.go.kr/data/15084084/openapi.do
@@ -59,50 +60,45 @@ async function fetchOnce(nx: number, ny: number, apiKey: string) {
     data?.response?.body?.items?.item ?? [];
   if (items.length === 0) throw new Error("예보 데이터를 찾을 수 없습니다.");
 
-  // 가장 이른 fcstDate+fcstTime(다음 예보 시각) 하나를 골라 그 시각의 카테고리 값들을 모은다.
-  const earliest = [...items].sort((a, b) =>
-    (a.fcstDate + a.fcstTime).localeCompare(b.fcstDate + b.fcstTime)
-  )[0];
-  const target = earliest.fcstDate + earliest.fcstTime;
-  const slot = items.filter((i) => i.fcstDate + i.fcstTime === target);
-
-  const get = (category: string) => slot.find((i) => i.category === category)?.fcstValue;
-  return {
-    fcstDate: earliest.fcstDate,
-    fcstTime: earliest.fcstTime,
-    sky: SKY_LABEL[get("SKY") ?? ""] ?? "정보없음",
-    pty: PTY_LABEL[get("PTY") ?? ""] ?? "없음",
-    tmp: get("TMP"),
-    pop: get("POP"),
-  };
+  // 한 응답에 포함된 시간대별 값을 보존한다. 배지를 펼칠 때 기상청을 다시 호출하지 않는다.
+  const grouped = new Map<string, typeof items>();
+  for (const item of items) {
+    const key = item.fcstDate + item.fcstTime;
+    const slot = grouped.get(key) ?? [];
+    slot.push(item);
+    grouped.set(key, slot);
+  }
+  // 슬롯에 TMP가 없다고 통째로 버리면(응답이 부분적으로 잘려온 경우) hourly가
+  // 비어서 아래에서 던지고, 그러면 최초 조회(캐시 없음)인 지역은 날씨 배지 자체가
+  // 사라진다. tmp는 없을 수 있는 값으로 두고 그대로 내보낸다 — 호출부(weatherTool,
+  // getCachedWeather)는 이미 tmp가 없을 때 null/"?"로 대체하도록 돼 있다.
+  const hourly = [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, slot]) => {
+      const get = (category: string) => slot.find((item) => item.category === category)?.fcstValue;
+      return { fcstDate: key.slice(0, 8), fcstTime: key.slice(8), sky: SKY_LABEL[get("SKY") ?? ""] ?? "정보없음", pty: PTY_LABEL[get("PTY") ?? ""] ?? "없음", tmp: get("TMP"), pop: get("POP") };
+    })
+    .slice(0, 12);
+  return { ...hourly[0], hourly };
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ponytail: 에어코리아와 동일하게 SERVICETIMEOUT_ERROR가 잦아 최대 3회 재시도.
 export async function fetchWeather(nx: number, ny: number) {
-  const apiKey = process.env.KMA_API_KEY;
-  if (!apiKey) throw new Error("KMA_API_KEY가 설정되지 않았습니다.");
+  const apiKey = process.env.DATA_GO_KR_API_KEY;
+  if (!apiKey) throw new Error("DATA_GO_KR_API_KEY가 설정되지 않았습니다.");
 
-  const MAX_ATTEMPTS = 3;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      return await fetchOnce(nx, ny, apiKey);
-    } catch (err) {
-      lastError = err;
-      if (attempt < MAX_ATTEMPTS) await sleep(500);
-    }
-  }
-  throw lastError;
+  return withRetry(() => fetchOnce(nx, ny, apiKey), 3);
 }
 
 export const weatherTool = tool(
-  async ({ region }) => {
-    const sidoName = normalizeSido(region);
-    if (!sidoName) {
-      return `"${region}"은(는) 날씨 조회가 가능한 시/도 단위 지역명이 아닙니다. 서울, 부산, 대구 같은 시/도 이름으로 다시 물어봐 주세요.`;
-    }
+  async ({ region, query }) => {
+    // ponytail: get_air_quality와 같은 원인의 같은 방어 — airQuality.ts의 동일 패턴 주석 참고.
+    const input = region ?? query;
+    if (!input) return "지역 정보가 없어 날씨를 조회할 수 없습니다.";
+
+    // get_air_quality와 같은 이유로 같은 방어: 이 앱은 대구 전용이라 구/군만 언급되면
+    // (다른 시/도와 이름이 겹칠 수 있어) normalizeSido가 못 잡는다 — 대구로 간주한다.
+    const sidoName = normalizeSido(input) ?? "대구";
 
     try {
       const { lat, lon } = SIDO_LATLON[sidoName];
@@ -119,7 +115,8 @@ export const weatherTool = tool(
     description:
       "특정 지역(시/도 단위)의 단기 날씨 예보(하늘상태, 강수, 기온)를 조회한다. 날씨나 컨디션이 애매하게 언급될 때 대기질과 함께 확인해서 실내/야외 활동 판단에 활용한다.",
     schema: z.object({
-      region: z.string().describe("날씨를 조회할 지역명 (예: 대구, 서울)"),
+      region: z.string().optional().describe("날씨를 조회할 지역명 (예: 대구, 서울)"),
+      query: z.string().optional().describe("(다른 도구와 헷갈렸을 때 대비 — region과 동일하게 처리)"),
     }),
   }
 );

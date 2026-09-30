@@ -4,9 +4,12 @@
 // 새 테스트 프레임워크는 추가하지 않음 — node:assert면 충분.
 // 실행: node --experimental-strip-types scripts/self-check.ts
 import assert from "node:assert/strict";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { normalizeSido, latLonToGrid } from "../src/lib/region.ts";
+import { formatPlannedDate, todayIso } from "../src/lib/textFormat.ts";
 import { gradeFromPm10 } from "../src/lib/tools/airQuality.ts";
-import { stripTags } from "../src/lib/tools/culturePortal.ts";
+import { stripTags, isEventEnded, inferDtype } from "../src/lib/tools/culturePortal.ts";
+import { isInCooldown, markCooldown, consumeToolCalls } from "../src/lib/agent.ts";
 import {
   formatFee,
   formatOperatingHours,
@@ -22,11 +25,23 @@ import {
   inferEnvironmentMode,
   extractCategoryLabel,
   computeDistanceKm,
+  shortestVisitOrder,
+  shortRegionName,
 } from "../src/lib/services/matching.ts";
+import { detectPlatform, buildNaverNavigationPlan } from "../src/lib/externalMapLinks.ts";
+import { verifyPlace } from "../src/lib/place-verification.ts";
+import { tourismRegionParams } from "../src/lib/external/tour-api-cache.ts";
+import { summarize } from "./place-hit-rate.ts";
+import { FREE_QUESTIONS, PRICE_PER_QUESTION_KRW, resolveFreeRemaining, canAffordNext } from "../src/lib/billing/plans.ts";
+import { isAdminEmail } from "../src/lib/admin.ts";
+import { isFreeAvailable } from "../src/lib/ads/quota.ts";
+import { ssvSignedContent, parseSsvOwner, verifySsvSignature } from "../src/lib/ads/ssv.ts";
 
 let passed = 0;
+// Region.id는 BigInt라 기본 JSON.stringify가 던진다 — 실패 메시지 때문에 체크가 죽으면 안 됨.
+const show = (v: unknown) => JSON.stringify(v, (_k, val) => (typeof val === "bigint" ? `${val}n` : val));
 function check(name: string, actual: unknown, expected: unknown) {
-  assert.deepStrictEqual(actual, expected, `${name}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  assert.deepStrictEqual(actual, expected, `${name}: expected ${show(expected)}, got ${show(actual)}`);
   passed++;
 }
 
@@ -50,6 +65,29 @@ check("gradeFromPm10 매우나쁨 시작(151)", gradeFromPm10(151), "매우나�
 // stripTags — 실제 HTML 태그는 지우되, 제목의 장식용 꺾쇠괄호는 보존
 check("stripTags 실제 태그 제거", stripTags("<p>hello</p>"), "hello");
 check("stripTags 한글 꺾쇠괄호 보존", stripTags("<공간드림 1472> 개인전"), "<공간드림 1472> 개인전");
+
+// inferDtype — 약한 폴백 모델이 dtype 없이 부를 때(2026-09-10 recursion limit 루프 원인)
+// 쓰는 추정 로직. 찾으면 그 분야, 못 찾으면 시스템 프롬프트 기본값(전시)로 떨어져야 한다.
+check("inferDtype 텍스트에 분야명 포함", inferDtype("대구 콘서트 보러 가고 싶어"), "콘서트");
+check("inferDtype 매칭 안 되면 기본값(전시)", inferDtype("대구 아이랑 유모차 무료 반나절"), "전시");
+check("inferDtype 빈 문자열도 기본값(전시)", inferDtype(""), "전시");
+
+// isEventEnded — 2026-09-08 사용자 피드백("끝난 행사가 보임") 재발 방지.
+// now를 주입해서 실제 시계와 무관하게 검증한다.
+const CHECK_NOW = new Date("2026-09-08T12:00:00+09:00").getTime();
+check("isEventEnded 이미 끝남", isEventEnded("20260901 ~ 20260906", CHECK_NOW), true);
+check("isEventEnded 아직 진행중", isEventEnded("20260902 ~ 20260913", CHECK_NOW), false);
+check("isEventEnded 오늘이 마지막날(자정 전까지 진행중 취급)", isEventEnded("20260901 ~ 20260908", CHECK_NOW), false);
+check("isEventEnded 형식이 다르면 숨기지 않음", isEventEnded("상시", CHECK_NOW), false);
+
+// isInCooldown/markCooldown — 2026-09-08 성능 조사에서 추가한 모델별 쿨다운(쿼터 소진뿐
+// 아니라 recursion limit 등 재시도 가능한 에러 전반에 적용). 매 요청마다 이미 문제 있는
+// 모델을 다시 두드리지 않게 하는 로직이라 회귀 시 조용히 다시 느려진다.
+const COOLDOWN_CHECK_MODEL = "__self-check-model__";
+check("isInCooldown 마킹 전에는 false", isInCooldown(COOLDOWN_CHECK_MODEL, 1000), false);
+markCooldown(COOLDOWN_CHECK_MODEL, 1000);
+check("isInCooldown 마킹 직후(쿨다운 내)", isInCooldown(COOLDOWN_CHECK_MODEL, 1000 + 1000), true);
+check("isInCooldown 쿨다운(60초) 지나면 해제", isInCooldown(COOLDOWN_CHECK_MODEL, 1000 + 60_000 + 1), false);
 
 // formatFee — crgLevySeNm이 null일 때 "null" 문자열이 그대로 노출되던 버그
 check("formatFee 무료", formatFee("무료", null), "무료");
@@ -79,30 +117,60 @@ check(
   { place_name: "대구미술관" }
 );
 check(
-  "pickBestPlaceMatch 정확 일치 없으면 첫 결과",
+  "pickBestPlaceMatch 정확 일치 없으면 미매칭",
   pickBestPlaceMatch("전혀다른이름", [{ place_name: "이디야커피" }, { place_name: "스타벅스" }]),
-  { place_name: "이디야커피" }
+  undefined
 );
 check("pickBestPlaceMatch 결과 없음", pickBestPlaceMatch("아무거나", []), undefined);
 
+// 완전일치가 없을 때의 포함관계 폴백 — 2026-09-12 실측으로 확인한 실제 실패 사례.
+// 카카오 공식 명칭에 수식이 붙어 있어서 완전일치만 받던 시절엔 둘 다 미매칭이었다.
+check(
+  "pickBestPlaceMatch 접두어 붙은 공식명 매칭",
+  pickBestPlaceMatch("약령시한의약박물관", [
+    { place_name: "대구약령시한의약박물관" },
+    { place_name: "무인민원발급창구 약령시한의약박물관" },
+  ]),
+  { place_name: "대구약령시한의약박물관" }
+);
+check(
+  "pickBestPlaceMatch 긴 공식명 매칭",
+  pickBestPlaceMatch("의료선교박물관", [{ place_name: "계명대학교 동산의료원 의료선교박물관" }]),
+  { place_name: "계명대학교 동산의료원 의료선교박물관" }
+);
+check(
+  "pickBestPlaceMatch 동명이인은 여전히 미매칭",
+  pickBestPlaceMatch("대구미술관", [{ place_name: "대구미술관" }, { place_name: "대구미술관" }]),
+  undefined
+);
+
 // pickRegionForAddress — 오늘 실제로 났던 버그(정확히 일치 검색이라 "대구"가 "대구광역시" 시드
 // 행을 못 찾고 매번 중복 생성하던 것)의 재발 방지 + 구/군 우선 매칭까지 함께 검증.
+const DAEGU = { id: 1n, name: "대구광역시", level: "시도", parentId: null };
+const SEOUL = { id: 2n, name: "서울특별시", level: "시도", parentId: null };
 const REGION_FIXTURES = [
-  { name: "대구광역시", level: "시도" },
-  { name: "수성구", level: "구군" },
-  { name: "중구", level: "구군" },
+  DAEGU,
+  SEOUL,
+  { id: 11n, name: "수성구", level: "구군", parentId: 1n },
+  { id: 12n, name: "중구", level: "구군", parentId: 1n },
 ];
 check(
   "pickRegionForAddress 구/군 우선",
   pickRegionForAddress("대구 수성구 미술관로 40", REGION_FIXTURES),
-  { name: "수성구", level: "구군" }
+  REGION_FIXTURES[2]
 );
 check(
   "pickRegionForAddress 구/군 없으면 시/도로 완화(축약형 vs 정식명칭)",
   pickRegionForAddress("대구 남구 앞산순환로 574", REGION_FIXTURES),
-  { name: "대구광역시", level: "시도" }
+  DAEGU
 );
-check("pickRegionForAddress 매칭 실패", pickRegionForAddress("서울 강남구 테헤란로", REGION_FIXTURES), null);
+// 구/군 이름은 시/도끼리 겹친다 — 서울 중구 주소에 대구 중구가 붙으면 엉뚱한 주차 정보가 뜬다.
+check(
+  "pickRegionForAddress 다른 시/도의 동명 구/군은 매칭 안 함",
+  pickRegionForAddress("서울 중구 세종대로 110", REGION_FIXTURES),
+  SEOUL
+);
+check("pickRegionForAddress 매칭 실패", pickRegionForAddress("부산 해운대구 우동", REGION_FIXTURES), null);
 
 // inferEnvironmentMode — agent.ts가 구조화된 필드로 안 주는 실내/야외를 텍스트에서 추론.
 const baseRec = { needsMoreInfo: false as const, message: "" };
@@ -128,6 +196,11 @@ check("extractCategoryLabel 계층에서 마지막 항목", extractCategoryLabel
 check("extractCategoryLabel 단일 항목", extractCategoryLabel("카페"), "카페");
 check("extractCategoryLabel null", extractCategoryLabel(null), null);
 
+// shortRegionName — 상단 날씨 배지용 짧은 지역명(디자인/홈 화면이 "대구광역시"가 아니라 "대구"만 씀)
+check("shortRegionName 광역시 접미사 제거", shortRegionName("대구광역시"), "대구");
+check("shortRegionName 특별자치도 접미사 제거", shortRegionName("제주특별자치도"), "제주");
+check("shortRegionName 접미사 없으면 그대로", shortRegionName("세종"), "세종");
+
 // computeDistanceKm — 소수 첫째자리 반올림, origin/place 중 하나라도 없으면 null
 check(
   "computeDistanceKm 서울시청-부산시청 대략 325km",
@@ -135,6 +208,14 @@ check(
   325
 );
 check("computeDistanceKm origin 없음", computeDistanceKm(null, { latitude: 35.1796, longitude: 129.0756 }), null);
+
+// 2026-09-30 실측 코스: 미술관(수성) → 수목원(달서) → 박물관(수성)으로 왕복하던 동선.
+const museumArt = { latitude: 35.8261, longitude: 128.6725 };
+const arboretum = { latitude: 35.7985, longitude: 128.5227 };
+const museumNat = { latitude: 35.8453, longitude: 128.6384 };
+check("shortestVisitOrder 지그재그 제거", shortestVisitOrder([museumArt, arboretum, museumNat]), [0, 2, 1]);
+check("shortestVisitOrder 좌표 없는 곳은 끝으로", shortestVisitOrder([null, museumArt, arboretum, museumNat]), [1, 3, 2, 0]);
+check("shortestVisitOrder origin 기준 출발", shortestVisitOrder([museumArt, arboretum, museumNat], arboretum), [1, 2, 0]);
 check("computeDistanceKm place 없음", computeDistanceKm({ latitude: 37.5665, longitude: 126.978 }, null), null);
 
 // formatOperatingHours — 24시간 코드와 시간대 문자열("0900") 파싱, 둘 다 없으면 null
@@ -175,5 +256,215 @@ check(
 // estimateWalkMinutes — 최소 1분 보장, 67m/분 환산
 check("estimateWalkMinutes 최소 1분", estimateWalkMinutes(10), 1);
 check("estimateWalkMinutes 120m ≈ 2분", estimateWalkMinutes(120), 2);
+
+// 방문 예정일 — 시각 없는 날짜라 타임존에 따라 하루씩 밀리기 쉬운 부분만 고정한다.
+check("formatPlannedDate 요일 계산", formatPlannedDate("2026-09-20"), "9월 20일 (일)");
+check("formatPlannedDate 월초 경계", formatPlannedDate("2026-01-01"), "1월 1일 (목)");
+// UTC 기준으로 읽지 않으면 UTC-5 같은 지역에서 하루 앞당겨져 19일로 나온다.
+check("formatPlannedDate 자정 경계에서 안 밀림", formatPlannedDate("2026-03-01"), "3월 1일 (일)");
+// todayIso는 로컬 날짜여야 한다 — UTC로 읽으면 밤 시간대에 하루 어긋난다.
+// new Date(y, m, d, ...)는 어느 타임존에서 돌리든 그 지역의 해당 날짜를 만들므로
+// 이 검사는 실행 머신 타임존과 무관하게 결정적이다.
+check("todayIso 로컬 자정 직전", todayIso(new Date(2026, 8, 9, 23, 30)), "2026-09-09");
+check("todayIso 로컬 자정 직후", todayIso(new Date(2026, 8, 10, 0, 30)), "2026-09-10");
+
+// detectPlatform / buildNaverNavigationPlan — 네이버 지도는 길찾기 웹 URL이 없어서
+// (NCP 포럼 공식 확인) 플랫폼별로 다른 전략을 타는데, 분기가 틀리면 안드로이드에서
+// iOS용 스킴을 쏘는 등 조용히 아예 안 열리는 버그가 난다.
+check("detectPlatform iOS", detectPlatform("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"), "ios");
+check("detectPlatform Android", detectPlatform("Mozilla/5.0 (Linux; Android 14; SM-S911N)"), "android");
+check("detectPlatform 데스크톱", detectPlatform("Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), "other");
+
+const naverIos = buildNaverNavigationPlan("ios", 35.8281, 128.5779, "수성못");
+check("buildNaverNavigationPlan iOS는 app-with-fallback", naverIos.kind, "app-with-fallback");
+check(
+  "buildNaverNavigationPlan iOS nmap:// 파라미터",
+  naverIos.kind === "app-with-fallback" ? naverIos.appUrl : null,
+  "nmap://route/car?dlat=35.8281&dlng=128.5779&dname=%EC%88%98%EC%84%B1%EB%AA%BB&appname=com.aioutingagent.web"
+);
+
+const naverAndroid = buildNaverNavigationPlan("android", 35.8281, 128.5779, "수성못");
+check("buildNaverNavigationPlan Android는 intent", naverAndroid.kind, "intent");
+check(
+  "buildNaverNavigationPlan Android intent에 Play스토어 폴백 포함",
+  naverAndroid.kind === "intent" ? naverAndroid.url.includes("play.google.com") : false,
+  true
+);
+
+const naverDesktop = buildNaverNavigationPlan("other", 35.8281, 128.5779, "수성못");
+check(
+  "buildNaverNavigationPlan 데스크톱은 위치표시 웹 URL",
+  naverDesktop.kind === "web" ? naverDesktop.url : null,
+  "https://map.naver.com/?lng=128.5779&lat=35.8281&title=%EC%88%98%EC%84%B1%EB%AA%BB"
+);
+
+// consumeToolCalls — 실행 실패 시 langchain이 거부하는 call.output을 삼키는지.
+// 핸들러가 없으면 unhandledRejection으로 프로세스가 죽는다(2026-09-11 프로덕션 실측).
+let leaked: unknown = null;
+process.on("unhandledRejection", (reason) => { leaked = reason; });
+const rejectPending: ((e: Error) => void)[] = [];
+const fakeCalls = ["get_weather", "get_air_quality"].map((name) => ({
+  name,
+  output: new Promise((_resolve, reject) => { rejectPending.push(reject); }),
+  status: Promise.resolve("finished"),
+}));
+const emitted: string[] = [];
+await consumeToolCalls(
+  (async function* () { for (const call of fakeCalls) yield call; })(),
+  () => true,
+  (event) => emitted.push(event.type + ":" + event.tool)
+);
+// 스트림이 끝난 뒤 langchain fail()이 하는 일: 남은 output을 전부 거부한다.
+rejectPending.forEach((reject) => reject(new Error("Recursion limit of 25 reached")));
+await new Promise((resolve) => setTimeout(resolve, 120));
+check(
+  "consumeToolCalls 도구 시작·종료 통지",
+  emitted.sort(),
+  ["tool_end:get_air_quality", "tool_end:get_weather", "tool_start:get_air_quality", "tool_start:get_weather"]
+);
+check("consumeToolCalls 실패한 output 거부를 삼킴", leaked, null);
+
+
+// place-hit-rate의 집계 — 실재율 실험의 측정 도구라 틀리면 실험 결과 전체가 틀린다.
+// placeId가 없는 장소(카카오 검색 실패)만 miss로 세고, 되물은 응답(places 없음)은 제외한다.
+const hitRate = summarize([
+  {
+    startedAt: new Date("2026-09-12T01:00:00Z"),
+    userQuery: "중구 실내",
+    recommendationJson: { places: [{ name: "대구미술관", placeId: "p1" }, { name: "동성로 카페거리 및 실내 체험 공간", placeId: null }] },
+  },
+  { startedAt: new Date("2026-09-12T02:00:00Z"), userQuery: "어디로?", recommendationJson: { places: [] } },
+  {
+    startedAt: new Date("2026-09-13T01:00:00Z"),
+    userQuery: "수성구 아이",
+    recommendationJson: { places: [{ name: "수성못", placeId: "p2" }] },
+  },
+]);
+check("place-hit-rate 날짜별 실재율", hitRate.days, [
+  { 날짜: "2026-09-12", 추천건수: 1, 장소수: 2, 실재: 1, 실재율: "50%" },
+  { 날짜: "2026-09-13", 추천건수: 1, 장소수: 1, 실재: 1, 실재율: "100%" },
+]);
+check("place-hit-rate 실패한 이름만 수집", hitRate.misses.map((m) => m.name), ["동성로 카페거리 및 실내 체험 공간"]);
+
+
+// TourAPI 지역 파라미터 — 오퍼레이션마다 다르다(2026-09-13 실측). 이걸 틀리면 조회가
+// 조용히 0건이 되고 운영시간·요금이 영영 안 나온다.
+check("tourismRegionParams 목록조회는 areaCode", tourismRegionParams("areaBasedList2"), { areaCode: "4" });
+check("tourismRegionParams 키워드검색은 lDongRegnCd", tourismRegionParams("searchKeyword2"), { lDongRegnCd: "27" });
+check("tourismRegionParams 축제검색은 lDongRegnCd", tourismRegionParams("searchFestival2"), { lDongRegnCd: "27" });
+
+// verifyPlace — 두 출처의 주소 표기 차이(관광 API "대구광역시 …" + 상호, 카카오 "대구 …")
+// 때문에 완전일치로는 절대 매칭이 안 됐다. 이름은 여전히 완전일치를 요구한다.
+const tourEvidence = [
+  {
+    name: "대구미술관",
+    address: "대구광역시 수성구 미술관로 40 대구미술관",
+    operatingHours: "10:00~19:00",
+    fee: "성인 1,000원",
+    cachedAt: "2026-09-13T00:00:00.000Z",
+    expiresAt: "2026-09-14T00:00:00.000Z",
+    cache: "hit" as const,
+  },
+];
+const verified = verifyPlace({ name: "대구미술관", address: "대구 수성구 미술관로 40" }, tourEvidence);
+check("verifyPlace 표기 다른 같은 주소를 매칭", [verified.operatingHours, verified.fee], ["10:00~19:00", "성인 1,000원"]);
+check("verifyPlace 출처 표시", verified.verification.source, "tour_api");
+const otherPlace = verifyPlace({ name: "대구미술관", address: "대구 중구 달성공원로 35" }, tourEvidence);
+check("verifyPlace 다른 주소는 미검증", [otherPlace.operatingHours, otherPlace.verification.source], [undefined, "unverified"]);
+
+// 소요시간·유모차는 모델이 아니라 관광 API(spendtime/chkbabycarriage*)만 채운다.
+// 2026-09-13 실측: 모델은 국립대구박물관을 "약 2시간"이라 적었지만 spendtime은 "약 1시간
+// 내외"였고, RAG 코퍼스는 대구미술관을 "유모차 대여 가능"이라 적었지만 실제로는 "없음"이었다.
+const durationEvidence = [{ ...tourEvidence[0], visitDuration: "약 1시간 내외", strollerRental: "없음" as const }];
+const enriched = verifyPlace(
+  { name: "대구미술관", address: "대구 수성구 미술관로 40", features: ["유모차 대여", "수유실"] },
+  durationEvidence
+);
+check("verifyPlace 소요시간을 관광 API 값으로 채움", enriched.visitDuration, "약 1시간 내외");
+check("verifyPlace 유모차 '없음'이면 모델이 적은 유모차 문구를 지움", enriched.features, ["수유실"]);
+const strollerOk = verifyPlace(
+  { name: "대구미술관", address: "대구 수성구 미술관로 40", features: ["수유실"] },
+  [{ ...tourEvidence[0], strollerRental: "가능" as const }]
+);
+check("verifyPlace 유모차 '가능'이면 문구를 붙임", strollerOk.features, ["수유실", "유모차 대여 가능"]);
+// 근거가 없으면 채우지 않는다 — 빈칸이 지어낸 값보다 낫다.
+check("verifyPlace 근거 없으면 소요시간 비움", verified.visitDuration, undefined);
+check("verifyPlace 근거 없으면 features 원본 유지", verifyPlace({ name: "없는곳", features: ["유모차 대여"] }, []).features, ["유모차 대여"]);
+
+// 과금 판정(종량제). 돈이 걸린 규칙이라 경계값(딱 소진된 순간)을 직접 고정해둔다.
+check('무료 미소진이면 남은 횟수 양수', resolveFreeRemaining(FREE_QUESTIONS - 1), 1);
+check('무료 정확히 소진되면 0', resolveFreeRemaining(FREE_QUESTIONS), 0);
+check('무료 초과 사용해도 음수로 안 내려감', resolveFreeRemaining(FREE_QUESTIONS + 5), 0);
+check('무료 남았으면 잔액 0이어도 결제 가능', canAffordNext({ freeRemaining: 1, balanceKrw: 0 }), true);
+check('무료 소진, 잔액 충분하면 결제 가능', canAffordNext({ freeRemaining: 0, balanceKrw: PRICE_PER_QUESTION_KRW }), true);
+check('무료 소진, 잔액 모자라면 결제 불가', canAffordNext({ freeRemaining: 0, balanceKrw: PRICE_PER_QUESTION_KRW - 1 }), false);
+
+// 관리자 판별 — 대소문자/공백 차이로 관리자가 로그인 못 하거나, 반대로 허용목록에
+// 없는 계정이 들어가는 사고를 여기서 막는다.
+process.env.ADMIN_EMAILS = "Admin@Example.com, second@example.com";
+check("허용목록 이메일(대소문자 다름)", isAdminEmail("admin@example.com"), true);
+check("허용목록 이메일(앞뒤 공백)", isAdminEmail("  second@example.com  "), true);
+check("허용목록에 없는 이메일", isAdminEmail("outsider@example.com"), false);
+check("빈 이메일", isAdminEmail(""), false);
+process.env.ADMIN_EMAILS = "";
+check("허용목록 자체가 비면 전부 거부", isAdminEmail("admin@example.com"), false);
+
+// 광고 기반 하루 무료 판정. 자정을 넘기면(날짜가 바뀌면) 다시 쓸 수 있어야 한다.
+check('오늘 아직 무료 안 썼으면(null) 사용 가능', isFreeAvailable(null, new Date('2026-09-21T10:00:00+09:00')), true);
+check('오늘 이미 썼으면 사용 불가', isFreeAvailable(new Date('2026-09-21T01:00:00+09:00'), new Date('2026-09-21T23:00:00+09:00')), false);
+check('날짜가 바뀌면 다시 사용 가능', isFreeAvailable(new Date('2026-09-20T23:59:00+09:00'), new Date('2026-09-21T00:01:00+09:00')), true);
+
+// AdMob SSV — 서명 대상 문자열 재구성(signature/key_id 제외, 나머지 값은 URL 디코딩).
+// 2026-09-23 실제로 이걸 원문(퍼센트 인코딩 유지)째로 붙여서 AdMob 콘솔 "URL 확인"이
+// 계속 400으로 실패했었다 — reward_item 같은 비ASCII 값이 있으면 디코딩 안 하면 항상
+// 서명이 안 맞는다. 그 실제 콜백 예시를 그대로 재발 방지 테스트로 남긴다.
+check(
+  "ssvSignedContent signature/key_id 제외하고 재조립",
+  ssvSignedContent("a=1&b=2&signature=abcd&key_id=1"),
+  "a=1&b=2"
+);
+check(
+  "ssvSignedContent 비ASCII 값은 디코딩해서 붙인다(2026-09-23 실제 400 원인)",
+  ssvSignedContent(
+    "ad_network=5450213213286189855&ad_unit=1234567890&reward_amount=1&reward_item=%EC%A7%88%EB%AC%B8%EA%B6%8C&timestamp=1790129356635&transaction_id=123456789&signature=abcd&key_id=1"
+  ),
+  "ad_network=5450213213286189855&ad_unit=1234567890&reward_amount=1&reward_item=질문권&timestamp=1790129356635&transaction_id=123456789"
+);
+check("ssvSignedContent signature 없으면 그대로(디코딩만)", ssvSignedContent("a=1&b=2"), "a=1&b=2");
+
+// parseSsvOwner — 앱이 실어 보내는 custom_data 포맷 파싱. 형식이 안 맞으면 크레딧을
+// 아무한테도 못 주게 null이어야 한다(엉뚱한 사용자에게 잘못 지급되는 것보다 안전).
+check("parseSsvOwner 로그인 사용자", parseSsvOwner("user:12345"), { userId: "12345" });
+check(
+  "parseSsvOwner 게스트",
+  parseSsvOwner("guest:" + "a".repeat(64)),
+  { sessionKeyHash: "a".repeat(64) }
+);
+check("parseSsvOwner 숫자 아닌 userId 거부", parseSsvOwner("user:abc"), null);
+check("parseSsvOwner 형식 아닌 해시 거부", parseSsvOwner("guest:short"), null);
+check("parseSsvOwner 알 수 없는 포맷", parseSsvOwner("nonsense"), null);
+check("parseSsvOwner null", parseSsvOwner(null), null);
+
+// verifySsvSignature — 실제 EC 키쌍으로 구글의 서명 방식(SHA256withECDSA, DER 인코딩)을
+// 그대로 흉내내서 왕복 검증한다. 위조된 서명/변조된 쿼리는 반드시 거부해야 한다
+// (여기서 통과되면 광고 안 본 사람도 질문권을 받을 수 있다).
+const ssvKeys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+// 구글은 값을 디코딩한 상태로 서명한다 — custom_data=user:1(디코딩)이 서명 대상이고,
+// 쿼리스트링에는 URL 인코딩된 user%3A1로 실려 온다.
+const ssvDecodedContent = "ad_network=1&transaction_id=tx1&custom_data=user:1";
+const ssvRawQuery = "ad_network=1&transaction_id=tx1&custom_data=user%3A1";
+const ssvSig = sign("sha256", Buffer.from(ssvDecodedContent), ssvKeys.privateKey).toString("base64url");
+const ssvPem = ssvKeys.publicKey.export({ type: "spki", format: "pem" }).toString();
+check(
+  "verifySsvSignature 정상 서명 통과(인코딩된 쿼리 vs 디코딩해서 서명한 값)",
+  verifySsvSignature(`${ssvRawQuery}&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
+  true
+);
+check(
+  "verifySsvSignature 변조된 쿼리는 거부",
+  verifySsvSignature(`${ssvRawQuery}&tampered=1&signature=${ssvSig}&key_id=1`, ssvSig, ssvPem),
+  false
+);
+check("verifySsvSignature 잘못된 서명값은 거부", verifySsvSignature(`${ssvRawQuery}&signature=bad&key_id=1`, "bad", ssvPem), false);
 
 console.log(`✓ self-check 통과 (${passed}건)`);
