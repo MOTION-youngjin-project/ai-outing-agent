@@ -27,6 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     if (navigator.userAgent.includes(NATIVE_APP_UA_MARKER)) {
       document.documentElement.style.setProperty("--sk-dock", "0px");
+      document.documentElement.style.setProperty("--sk-safe-b", "0px");
     }
   }, []);
   // 탭 루트 4개만 "얕은" 화면이다 — 그 밖은 전부 한 단계 들어간 화면으로 본다.
@@ -53,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             몸으로 읽히게 한다. */}
         <div
           key={pathname}
-          className={`${isDeep ? "sk-page-deep" : "sk-page"} flex flex-1 flex-col pb-[calc(var(--sk-dock)+12px+env(safe-area-inset-bottom))] lg:pb-6`}
+          className={`${isDeep ? "sk-page-deep" : "sk-page"} flex flex-1 flex-col pb-[calc(var(--sk-dock)+12px+var(--sk-safe-b))] lg:pb-6`}
         >
           {children}
         </div>

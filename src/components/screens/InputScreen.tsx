@@ -593,7 +593,7 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
           <div
             className={
               inConversation
-                ? "sticky bottom-[calc(max(0px,var(--sk-dock)-10px)+env(safe-area-inset-bottom))] z-10 -mx-5 mb-[-22px] mt-auto flex flex-col gap-2 border-t border-[var(--sk-line-soft)] bg-page/95 px-5 pb-3 pt-2.5 backdrop-blur lg:mb-0 lg:bottom-0"
+                ? "sticky bottom-[calc(max(0px,var(--sk-dock)-10px)+var(--sk-safe-b))] z-10 -mx-5 mb-[-22px] mt-auto flex flex-col gap-2 border-t border-[var(--sk-line-soft)] bg-page/95 px-5 pb-3 pt-2.5 backdrop-blur lg:mb-0 lg:bottom-0"
                 : "flex flex-col gap-2 pt-2"
             }
           >
