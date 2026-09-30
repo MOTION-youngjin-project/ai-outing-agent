@@ -77,9 +77,14 @@ export async function createRecommendationRun(
       const user = await prisma.user.findUnique({ where: { id }, select: { preferredTags: true } });
       return user?.preferredTags;
     }),
-    userIdBigInt === undefined ? Promise.resolve([]) : prisma.agentRun.findMany({
-      where: { userId: userIdBigInt, status: { in: ["completed", "partial"] },
-        startedAt: { gte: new Date(Date.now() - 7 * 24 * 3600_000) } },
+    // 반복 방지는 같은 대화 안에서만 — 예전엔 대화와 무관하게 최근 7일·20곳을 뺐더니
+    // 대구 대표 실내 명소(미술관·박물관)가 일주일 내내 빠져 "실내 코스"에 식당만 남았다
+    // (2026-09-30 실측). "다른 곳 추천"처럼 같은 대화에서 이어 물을 때만 겹치지 않게 한다.
+    !conversationId || (userIdBigInt === undefined && !sessionKeyHash) ? Promise.resolve([]) : prisma.agentRun.findMany({
+      where: {
+        conversationId, status: { in: ["completed", "partial"] },
+        ...(userIdBigInt !== undefined ? { userId: userIdBigInt } : { userId: null, sessionKeyHash }),
+      },
       orderBy: { startedAt: "desc" }, take: 5, select: { recommendationJson: true },
     }).catch(() => []),
   ]);
