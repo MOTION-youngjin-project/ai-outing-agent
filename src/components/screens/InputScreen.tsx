@@ -576,6 +576,12 @@ export function InputScreen({ flow }: { flow: RecommendationFlow }) {
             </div>
           )}
 
+          {!inConversation && (
+            <Link href="/photo" className="self-start rounded-lg border border-accent/30 px-3 py-2 text-sm">
+              참고 사진 선택
+            </Link>
+          )}
+
           {/* 실패하면 원인을 보여준다.
             질문 한도 초과면 다시 시도해도 같은 결과라 광고 화면으로 보내고,
             일반 오류면 마지막 질문을 그대로 다시 보낼 수 있게 한다. */}

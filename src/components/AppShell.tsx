@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useSyncExternalStore, type ReactNode } from
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { BottomNav } from "@/components/BottomNav";
+import { ActiveTripPanel } from "@/components/ActiveTripPanel";
 import { useTrackInAppNavigation } from "@/lib/useBack";
 import {
   subscribeNavMotion,
@@ -144,6 +145,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           data-dir={!isDeep && navDir ? navDir : undefined}
           className={`${isDeep ? "sk-page-deep" : "sk-page"}${leaving ? " sk-leave" : ""} flex flex-1 flex-col pb-[calc(var(--sk-dock)+12px+var(--sk-safe-b))] lg:pb-6`}
         >
+          <ActiveTripPanel />
           {children}
         </div>
         <div className="lg:hidden">

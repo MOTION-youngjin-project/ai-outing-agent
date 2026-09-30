@@ -22,6 +22,8 @@ declare global {
             margin?: { top?: number; right?: number; bottom?: number; left?: number }
           ) => void;
           panTo: (latlng: unknown) => void;
+          getCenter: () => { lat: () => number; lng: () => number };
+          destroy: () => void;
         };
         LatLng: new (lat: number, lng: number) => unknown;
         LatLngBounds: new (sw: unknown, ne: unknown) => { extend: (latlng: unknown) => unknown };
@@ -60,10 +62,10 @@ declare global {
 let sdkLoadPromise: Promise<void> | null = null;
 
 // 스크립트 태그를 페이지당 한 번만 주입하고, 이후 호출은 같은 Promise를 재사용한다.
-function loadNaverMapsSdk(clientId: string): Promise<void> {
+export function loadNaverMapsSdk(clientId: string): Promise<void> {
   if (sdkLoadPromise) return sdkLoadPromise;
 
-  sdkLoadPromise = new Promise((resolve, reject) => {
+  sdkLoadPromise = new Promise<void>((resolve, reject) => {
     if (window.naver?.maps) {
       resolve();
       return;
@@ -71,15 +73,22 @@ function loadNaverMapsSdk(clientId: string): Promise<void> {
     const script = document.createElement("script");
     script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${clientId}`;
     script.async = true;
-    script.onload = () => resolve();
+    const timer = setTimeout(() => finish(new Error("지도 연결 시간이 초과되었습니다.")), 12000);
+    function finish(error?: Error) {
+      clearTimeout(timer);
+      script.onload = null;
+      script.onerror = null;
+      if (error) { script.remove(); reject(error); }
+      else resolve();
+    }
+    script.onload = () => finish(window.naver?.maps?.Map ? undefined : new Error("지도 연결을 확인하지 못했습니다."));
     // 실패를 캐시해두면 이후 화면 재진입 시에도 계속 실패만 반복하므로, 다음 시도 때
     // 새로 로드하도록 캐시를 비운다(예: 일시적 네트워크 오류, 도메인 등록 반영 지연).
     script.onerror = () => {
-      sdkLoadPromise = null;
-      reject(new Error("네이버 지도 SDK 로드 실패"));
+      finish(new Error("네이버 지도 SDK 로드 실패"));
     };
     document.head.appendChild(script);
-  });
+  }).catch((error: unknown) => { sdkLoadPromise = null; throw error; });
 
   return sdkLoadPromise;
 }
@@ -543,6 +552,8 @@ export function NaverMap({
     return () => {
       cancelled = true;
       syncRef.current = null;
+      mapRef.current?.destroy();
+      mapRef.current = null;
     };
     // 의존성 없음: 지도 인스턴스는 한 번만 만들고, 이후 변화는 위 sync()가 받는다.
   }, []);
