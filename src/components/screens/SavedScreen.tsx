@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
@@ -10,11 +10,105 @@ import { Icon } from "@/components/Icon";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { SavedCourseCard } from "@/components/SavedCourseCard";
 import { extractCategoryLabel } from "@/lib/services/matching";
+import { useReveal } from "@/lib/useReveal";
 
 type Tab = "course" | "place";
 type SortKey = "recent" | "name";
 
 const savedTabMemory: { tab: Tab } = { tab: "course" };
+
+const SORT_OPTIONS: { id: SortKey; label: string }[] = [
+  { id: "recent", label: "최근 저장순" },
+  { id: "name", label: "이름순" },
+];
+
+// 정렬 고르기.
+//
+// 원래는 브라우저 기본 <select>였다. 두 가지가 문제였다.
+//  1) 운영체제가 그린 목록이 떠서 이 줄만 다른 앱처럼 보였다(RegionPicker와 같은 이유).
+//  2) <select>의 실제 렌더 폭이 브라우저가 레이아웃 때 잡은 폭보다 커서, 390 화면에서
+//     오른쪽으로 44px 삐져나갔다(실측). shrink-0이라 줄어들지도 않았고, 본문의
+//     overflow-x:clip에 잘려서 "화면 밖으로 튀어나간" 모습이 됐다.
+// 이제 평범한 버튼 + 우리 창이라 폭이 글자 그대로 잡히고, 검색창이 남는 폭을 가져간다.
+// 고르는 값(sort)과 올려보내는 값은 <select>와 똑같다 — 화면만 바뀐다.
+function SortPicker({ value, onChange }: { value: SortKey; onChange: (next: SortKey) => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const selected = SORT_OPTIONS.find((o) => o.id === value) ?? SORT_OPTIONS[0];
+
+  return (
+    <div ref={rootRef} className="sk-sort relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label={`정렬: ${selected.label}`}
+        className={`sk-sort-btn ${open ? "relative z-30" : ""}`}
+      >
+        <span className="truncate">{selected.label}</span>
+        <Icon
+          name="down"
+          className={`h-4 w-4 shrink-0 text-muted transition-transform duration-200 ${open ? "-rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <>
+          {/* 가림막은 이 컴포넌트 안에 있어서 바깥 클릭 감지(rootRef.contains)에 걸리지 않는다 —
+              가림막 자신이 닫도록 직접 달아준다. */}
+          <div
+            aria-hidden
+            onPointerDown={() => setOpen(false)}
+            className="sk-scrim fixed inset-0 z-20 bg-ink/5"
+          />
+          <div
+            aria-label="정렬 고르기"
+            className="sk-panel sk-drop sk-drop-right sk-sort-menu absolute right-0 top-[calc(100%+6px)] z-30 overflow-hidden p-1.5"
+          >
+            {SORT_OPTIONS.map((option) => {
+              const active = option.id === value;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    onChange(option.id);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 whitespace-nowrap rounded-[11px] px-3 py-2.5 text-left text-[14px] ${
+                    active ? "bg-mint-bg font-bold text-accent-deep" : "font-medium text-ink"
+                  }`}
+                >
+                  {option.label}
+                  {active && <Icon name="check" className="h-4 w-4 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // 디자인/저장.png — "코스"/"장소" 토글 + 검색 + 정렬. 검색/정렬은 이미 받아온 목록을
 // 그대로 거르는 클라이언트 처리다(저장 개수가 많지 않아 서버 쿼리까지 갈 이유가 없음).
@@ -31,6 +125,7 @@ export function SavedScreen() {
   useEffect(() => {
     savedTabMemory.tab = tab;
   }, [tab]);
+  const listRef = useReveal<HTMLDivElement>();
   const [keyword, setKeyword] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
 
@@ -88,8 +183,8 @@ export function SavedScreen() {
   return (
     <>
       <ScreenHeader title="저장" />
-      <div className="flex flex-col gap-3 px-5">
-        <div className="flex gap-2 rounded-full bg-white p-1 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+      <div className="sk-sv flex flex-col gap-3 px-5">
+        <div className="sk-sv-tabs flex gap-2 rounded-full bg-white p-1 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
           {(
             [
               { id: "course", label: "코스" },
@@ -110,8 +205,8 @@ export function SavedScreen() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex flex-1 items-center gap-2 rounded-full bg-white px-4 py-2.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+        <div className="sk-sv-find flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 py-2.5 shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
             <Icon name="search" className="h-4 w-4 shrink-0 text-muted" />
             <input
               value={keyword}
@@ -120,21 +215,14 @@ export function SavedScreen() {
               className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-muted/60"
             />
           </div>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortKey)}
-            className="shrink-0 rounded-full bg-white px-3 py-2.5 text-[13px] font-medium text-ink-soft shadow-[0_1px_3px_rgba(17,24,39,0.05)] outline-none"
-          >
-            <option value="recent">최근 저장순</option>
-            <option value="name">이름순</option>
-          </select>
+          <SortPicker value={sort} onChange={setSort} />
         </div>
 
         {tab === "course" ? (
-          <div className="flex flex-col gap-3">
+          <div ref={listRef} data-reveal="wait" className="sk-sv-list flex flex-col gap-3">
             {coursesQuery.isLoading && <p className="px-1 text-[13px] text-muted">불러오는 중...</p>}
             {coursesQuery.data && courses.length === 0 && (
-              <p className="px-1 py-6 text-center text-[14px] text-muted">
+              <p className="sk-empty px-1 py-6 text-center text-[14px] text-muted">
                 {query ? "검색 결과가 없어요." : "아직 저장한 코스가 없어요."}
               </p>
             )}
@@ -148,10 +236,10 @@ export function SavedScreen() {
             ))}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+          <div className="sk-sv-list overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]" data-reveal="in">
             {placesQuery.isLoading && <p className="px-4 py-4 text-[13px] text-muted">불러오는 중...</p>}
             {placesQuery.data && places.length === 0 && (
-              <p className="px-4 py-4 text-[14px] text-muted">
+              <p className="sk-empty px-4 py-4 text-[14px] text-muted">
                 {query ? "검색 결과가 없어요." : "아직 저장한 장소가 없어요."}
               </p>
             )}

@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
+import { NAV_ITEMS, activeNavId, navDirection, type NavItemId } from "@/lib/nav";
+import { beginNav, keepsNativeNavigation } from "@/lib/navMotion";
 import { fetchRecentQuestions, fetchConversation, type RecentQuestion } from "@/lib/clientApi";
 import { Logo, LogoMark } from "@/components/Logo";
 import { summarize } from "@/hooks/useRecommendationFlow";
@@ -48,13 +50,7 @@ function formatEntryTime(iso: string): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
-const DESKTOP_NAV = [
-  { label: "추천", href: "/recommend", icon: "compass" },
-  { label: "저장", href: "/mypage", icon: "heart" },
-  { label: "마이페이지", href: "/mypage", icon: "user" },
-] as const;
-
-export function Sidebar() {
+export function Sidebar({ onToggleRail }: { onToggleRail: () => void }) {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const closeSidebar = useAppStore((s) => s.closeSidebar);
   const setHistory = useAppStore((s) => s.setHistory);
@@ -63,10 +59,13 @@ export function Sidebar() {
   const setRecommendations = useAppStore((s) => s.setRecommendations);
   const setConversationId = useAppStore((s) => s.setConversationId);
   const setRegionId = useAppStore((s) => s.setRegionId);
+  const lastRecommendation = useAppStore((s) => s.lastRecommendation);
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const { status } = useSession();
   const authed = status === "authenticated";
+  const activeNav = activeNavId(pathname);
 
   const [search, setSearch] = useState("");
   const recentQuestionsQuery = useQuery({
@@ -103,6 +102,35 @@ export function Sidebar() {
     router.push(`/login?next=${encodeURIComponent(pathname)}`);
   }
 
+  // 전역 nav 이동 — 하단 탭과 같은 방향 규칙을 쓴다(순서: 챗·지도·저장·마이).
+  // 새 질문·대화 기록은 화면 "안"의 이동이라 이 규칙을 쓰지 않는다.
+  function goTab(e: React.MouseEvent, id: NavItemId, push: () => void) {
+    if (keepsNativeNavigation(e)) return;
+    const dir = navDirection(activeNav, id);
+    if (!dir) return;
+    e.preventDefault();
+    beginNav(dir, push);
+  }
+
+  function onMapTab(e: React.MouseEvent) {
+    if (keepsNativeNavigation(e)) return goToMap();
+    const dir = navDirection(activeNav, "map");
+    if (!dir) return goToMap();
+    beginNav(dir, goToMap);
+  }
+
+  // 지도 탭 — 하단 탭(BottomNav.goToMap)과 같은 규칙이다. 방금 받은 추천이 있으면 그
+  // 코스 지도로 바로 간다(캐시를 미리 채워 재요청 없이 뜬다). 없으면 /map.
+  function goToMap() {
+    if (lastRecommendation) {
+      queryClient.setQueryData(["recommend", lastRecommendation.agentRunId], lastRecommendation);
+      router.push(`/map/${lastRecommendation.agentRunId}`);
+    } else {
+      router.push("/map");
+    }
+    closeSidebar();
+  }
+
   function goNewQuestion() {
     setHistory([]);
     setInput("");
@@ -122,16 +150,76 @@ export function Sidebar() {
           className="fixed inset-0 z-40 bg-black/30 lg:hidden"
         />
       )}
+      {/* 폭·자리·열고 닫는 움직임은 globals.css의 .sk-side가 들고 있다(유틸리티로 두면
+          1024 이상에서 흐름 안 요소로 바뀔 때 폭·position을 덮어쓸 수 없다).
+          레일 폭이 실제로 다 바뀐 뒤에 resize를 한 번 알린다 — 네이버 지도는 컨테이너가
+          줄고 늘어난 걸 스스로 알아채지 못해서, 접었다 펴면 잘린 채로 남는다. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[320px] max-w-[85vw] flex-col overflow-y-auto bg-white transition-transform duration-200 lg:z-auto lg:w-[280px] lg:max-w-none lg:translate-x-0 lg:border-r lg:border-hairline ${
-          sidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
-        }`}
+        className="sk-side"
+        data-open={sidebarOpen ? "1" : undefined}
+        onTransitionEnd={(e) => {
+          if (e.propertyName === "width") window.dispatchEvent(new Event("resize"));
+        }}
       >
+        {/* 접힌 레일 — 같은 항목을 아이콘만으로 보여준다(1024 이상에서만 나타난다) */}
+        <div className="sk-side-mini gap-2 px-3 pb-4 pt-5">
+          <LogoMark className="h-7" />
+          <button
+            onClick={onToggleRail}
+            aria-label="사이드바 펼치기"
+            title="사이드바 펼치기"
+            className="sk-side-icon"
+          >
+            <Icon name="next" className="h-5 w-5" />
+          </button>
+          <button onClick={goNewQuestion} aria-label="새 질문" title="새 질문" className="sk sk-primary sk-slot mt-1 h-10 w-10">
+            <Icon name="plus" className="h-4 w-4" />
+          </button>
+          {/* 펼친 상태와 같은 NAV_ITEMS를 돈다 — 두 상태의 목적지가 어긋날 수 없다. */}
+          {NAV_ITEMS.map((item) => {
+            const on = activeNav === item.id;
+            const cls = `sk-side-icon${on ? " sk-side-icon-on" : ""}`;
+            return item.id === "map" ? (
+              <button
+                key={item.id}
+                onClick={onMapTab}
+                aria-label={item.label}
+                title={item.label}
+                aria-current={on ? "page" : undefined}
+                className={cls}
+              >
+                <Icon name={item.icon} className="h-5 w-5" />
+              </button>
+            ) : (
+              <Link
+                key={item.id}
+                href={item.href}
+                onClick={(e) => goTab(e, item.id, () => router.push(item.href))}
+                aria-label={item.label}
+                title={item.label}
+                aria-current={on ? "page" : undefined}
+                className={cls}
+              >
+                <Icon name={item.icon} className="h-5 w-5" />
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="sk-side-full">
         {/* 사이드바 맨 위는 서비스 이름 자리다 — "대화 기록"은 아래 목록의 제목으로 옮겼다 */}
         <div className="flex items-center justify-between px-5 pt-5">
           <Logo className="h-[22px]" />
           <button onClick={closeSidebar} aria-label="닫기" className="p-1 text-ink lg:hidden">
             <Icon name="close" className="h-5 w-5" />
+          </button>
+          <button
+            onClick={onToggleRail}
+            aria-label="사이드바 접기"
+            title="사이드바 접기"
+            className="sk-side-icon hidden lg:inline-flex"
+          >
+            <Icon name="back" className="h-5 w-5" />
           </button>
         </div>
 
@@ -143,28 +231,36 @@ export function Sidebar() {
             <Icon name="plus" className="h-4 w-4" />새 질문
           </button>
 
+          {/* 접힌 레일과 같은 NAV_ITEMS — 같은 이름·아이콘·목적지로 간다(데스크톱 전용 줄) */}
           <div className="hidden gap-2 lg:flex">
-            {DESKTOP_NAV.map((item) =>
-              authed ? (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium text-ink-soft hover:bg-mint-bg"
-                >
-                  <Icon name={item.icon} className="h-5 w-5" />
-                  {item.label}
-                </Link>
-              ) : (
+            {NAV_ITEMS.map((item) => {
+              const on = activeNav === item.id;
+              const cls = `sk-side-nav flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-[11px] ${
+                on ? "sk-side-nav-on font-bold" : "font-medium text-ink-soft"
+              }`;
+              return item.id === "map" ? (
                 <button
-                  key={item.label}
-                  onClick={goLogin}
-                  className="flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium text-muted hover:bg-mint-bg"
+                  key={item.id}
+                  onClick={onMapTab}
+                  aria-current={on ? "page" : undefined}
+                  className={cls}
                 >
                   <Icon name={item.icon} className="h-5 w-5" />
                   {item.label}
                 </button>
-              )
-            )}
+              ) : (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  onClick={(e) => goTab(e, item.id, () => router.push(item.href))}
+                  aria-current={on ? "page" : undefined}
+                  className={cls}
+                >
+                  <Icon name={item.icon} className="h-5 w-5" />
+                  {item.label}
+                </Link>
+              );
+            })}
           </div>
 
           {authed && (
@@ -258,6 +354,7 @@ export function Sidebar() {
               : "대화를 선택하면 이전 추천 흐름을 그대로 이어갈 수 있어요."}
           </p>
         )}
+        </div>
       </aside>
     </>
   );

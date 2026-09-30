@@ -178,7 +178,7 @@ export function ParkingScreen({
               드래그 중엔 transition을 꺼서 손가락을 그대로 따라가게 한다. */}
           <div
             className={`absolute inset-x-0 bottom-0 z-10 flex flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_-2px_16px_rgba(17,24,39,0.1)] ${
-              dragging ? "" : "transition-[top] duration-200 ease-out"
+              dragging ? "" : "sk-glide-top"
             }`}
             style={{ top: `${sheetRatio * 100}%` }}
           >
