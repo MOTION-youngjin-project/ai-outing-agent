@@ -8,7 +8,7 @@ import { getCachedAirQuality } from "./airQuality";
 import { resolvePlaceByName, resolveDaeguDistrict, getPlaceImageUrl } from "./places";
 import { fetchDrivingRoute } from "./naverDirections";
 import { findOrCreateSidoRegion } from "./shared";
-import { inferEnvironmentMode, extractCategoryLabel, computeDistanceKm } from "./matching";
+import { inferEnvironmentMode, extractCategoryLabel, computeDistanceKm, shortestVisitOrder } from "./matching";
 import type { Place } from "../../../generated/prisma/client";
 import { searchDaeguTourismCached } from "../external/tour-api";
 import { verifyPlace } from "../place-verification";
@@ -198,7 +198,16 @@ export async function createRecommendationRun(
     })
   );
 
-  // 코스 순서(카카오로 실제 좌표를 찾은 장소만, LLM 원본 순서 유지)를 따라 이전
+  // LLM 순서는 동선을 고려하지 않으니 이동거리 합이 최소인 순서로 다시 줄 세운다.
+  // resolvedPlaces와 enrichedPlaces는 인덱스로 짝지어 쓰므로 둘을 같은 순서로 바꾼다.
+  const visitOrder = shortestVisitOrder(
+    enrichedPlaces.map((p) => (p.latitude != null && p.longitude != null ? { latitude: p.latitude, longitude: p.longitude } : null)),
+    origin
+  );
+  resolvedPlaces.splice(0, resolvedPlaces.length, ...visitOrder.map((i) => resolvedPlaces[i]));
+  enrichedPlaces.splice(0, enrichedPlaces.length, ...visitOrder.map((i) => enrichedPlaces[i]));
+
+  // 코스 순서(카카오로 실제 좌표를 찾은 장소만, 위에서 정한 순서)를 따라 이전
   // 정류지→이 정류지 자동차 이동시간을 네이버 Directions로 채운다. origin이 있으면
   // 첫 정류지도 "지금 위치→첫 정류지" 구간으로 채운다. 구간마다 독립 호출이라 병렬 처리
   // — 실패한 구간은 travelByIndex에 안 들어가서 null로 남는다(카카오 매칭 실패 처리와
@@ -272,7 +281,7 @@ export async function createRecommendationRun(
     // /recommend/[runId]로 나중에 다시 열면 그때 봤던 장소보다 적게 보일 수 있다 —
     // 기존에도 있던 한계(agentRun.status가 partial로 남는 것과 같은 원인)라 새로 감수하는
     // 트레이드오프는 아니다.
-    // enrichedPlaces는 LLM이 준 원본 순서 그대로라, filter 뒤의 인덱스로 접근하면
+    // enrichedPlaces는 매칭 실패한 장소까지 포함한 순서라, filter 뒤의 인덱스로 접근하면
     // 매칭 실패한 장소가 하나라도 있을 때 스냅샷이 밀려서 엉뚱한 장소에 붙는다 —
     // 원본 인덱스를 들고 다닌 뒤에 거른다.
     const routePlacesData = resolvedPlaces

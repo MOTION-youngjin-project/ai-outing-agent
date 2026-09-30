@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { fetchSavedPlaces, fetchPreferences, putPreferences, fetchRecentQuestions } from "@/lib/clientApi";
+import { fetchSavedPlaces, fetchSavedCourses, fetchPreferences, putPreferences, fetchRecentQuestions } from "@/lib/clientApi";
 import { extractCategoryLabel } from "@/lib/services/matching";
 import { FILTER_LABELS } from "@/lib/placeTags";
 import { Icon } from "@/components/Icon";
@@ -41,6 +41,13 @@ export function MyPageScreen() {
   const savedPlacesQuery = useQuery({
     queryKey: ["saved-places"],
     queryFn: () => fetchSavedPlaces(),
+    enabled: authed,
+  });
+  // 코스 저장("이 코스 저장")이 장소 저장보다 흔한데, 여기엔 장소만 보여서 코스를
+  // 저장해도 "아직 저장한 장소가 없어요"만 떴다(2026-09-30 신고). 저장 화면과 같은 캐시.
+  const savedCoursesQuery = useQuery({
+    queryKey: ["saved-courses"],
+    queryFn: fetchSavedCourses,
     enabled: authed,
   });
   const preferencesQuery = useQuery({
@@ -103,7 +110,7 @@ export function MyPageScreen() {
           </div>
           <div className="mt-4 flex border-t border-hairline pt-3">
             {[
-              { icon: "pin", label: "저장한 장소", value: savedPlacesQuery.data?.length ?? 0 },
+              { icon: "pin", label: "저장", value: (savedPlacesQuery.data?.length ?? 0) + (savedCoursesQuery.data?.length ?? 0) },
               { icon: "clock", label: "최근 추천", value: recentQuestionsQuery.data?.totalCount ?? 0 },
               // ponytail: 주차장을 따로 "저장"하는 기능 자체가 아직 없다 — 없는 걸 있는 척
               // 가짜 숫자로 보여주지 않고 정직하게 0. 기능 생기면 그때 실제 카운트로 교체.
@@ -126,7 +133,7 @@ export function MyPageScreen() {
         <div className="flex rounded-full bg-mint-soft/40 p-1">
           {(
             [
-              { id: "saved", label: "저장한 장소" },
+              { id: "saved", label: "저장" },
               { id: "history", label: "기록" },
             ] as const
           ).map((t) => (
@@ -144,6 +151,36 @@ export function MyPageScreen() {
 
         {mypageTab === "saved" ? (
           <>
+            <div className="flex items-center justify-between px-1 pt-1">
+              <h2 className="text-[15px] font-bold text-ink">저장한 코스</h2>
+              <button
+                onClick={() => router.push("/saved")}
+                className="flex items-center gap-0.5 text-[13px] text-muted"
+              >
+                전체 보기
+                <Icon name="next" className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_3px_rgba(17,24,39,0.05)]">
+              {savedCoursesQuery.data?.length === 0 && (
+                <p className="px-4 py-4 text-[14px] text-muted">아직 저장한 코스가 없어요.</p>
+              )}
+              {(savedCoursesQuery.data ?? []).slice(0, 3).map((c, i) => (
+                <button
+                  key={c.publicId}
+                  onClick={() => router.push(`/saved/${c.publicId}`)}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left ${i > 0 ? "border-t border-hairline" : ""}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[16px] font-bold text-ink">{c.title}</div>
+                    <div className="mt-0.5 truncate text-[13px] text-muted">
+                      {(c.course.places ?? []).map((p) => p.name).join(" → ")}
+                    </div>
+                  </div>
+                  <Icon name="next" className="h-5 w-5 shrink-0 text-slate-300" />
+                </button>
+              ))}
+            </div>
             <div className="flex items-center justify-between px-1 pt-1">
               <h2 className="text-[15px] font-bold text-ink">저장한 장소</h2>
               <button

@@ -17,8 +17,8 @@ import { WALK_DISTANCE_THRESHOLD_M } from "@/lib/travelMode";
 export function CurrentLegView({
   from,
   to,
-  fromLabel,
-  toLabel,
+  toOrder,
+  drivingPath,
   onAdvance,
   advanceLabel,
   onBack,
@@ -26,8 +26,11 @@ export function CurrentLegView({
 }: {
   from: PlaceWithMeta;
   to: PlaceWithMeta;
-  fromLabel: string;
-  toLabel: string;
+  // 코스 전체에서의 번호(to). 지도 핀도 이 번호로 찍어야 2→3 구간에서 "1, 2"로 다시
+  // 매겨져 3번이 사라진 것처럼 보이지 않는다.
+  toOrder: number;
+  // 차량 구간의 도로 경로 — 코스 지도가 이미 받아둔 것을 재사용한다.
+  drivingPath?: { latitude: number; longitude: number }[];
   onAdvance: () => void;
   advanceLabel: string;
   // 헤더의 뒤로 — 선택 카드로 한 단계 돌아간다(하드웨어 뒤로와 같다).
@@ -117,8 +120,8 @@ export function CurrentLegView({
     : null;
 
   const spots: MapParkingSpot[] = [
-    { id: "from", name: from.name, latitude: from.latitude!, longitude: from.longitude!, walkMinutes: null, order: 1 },
-    { id: "to", name: to.name, latitude: to.latitude!, longitude: to.longitude!, walkMinutes: null, order: 2 },
+    { id: "from", name: from.name, latitude: from.latitude!, longitude: from.longitude!, walkMinutes: null, order: toOrder - 1 },
+    { id: "to", name: to.name, latitude: to.latitude!, longitude: to.longitude!, walkMinutes: null, order: toOrder },
   ];
 
   return (
@@ -131,10 +134,13 @@ export function CurrentLegView({
       </div>
 
       <NaverMap
+        // 마운트 때 한 번만 그리는 지도라, 구간이나 경로가 바뀌면 key로 새로 그린다
+        // ("다음 장소로"를 눌러도 이전 구간 지도가 그대로 남던 문제).
+        key={`${routeKey}|${(route?.path ?? drivingPath)?.length ?? 0}`}
         center={{ latitude: from.latitude!, longitude: from.longitude! }}
         spots={spots}
         origin={userPos ?? undefined}
-        routePath={route?.path}
+        routePath={route?.path ?? drivingPath}
         className="relative h-64 w-full overflow-hidden rounded-2xl"
       />
 
@@ -182,7 +188,7 @@ export function CurrentLegView({
       )}
 
       <p className="px-1 text-[13px] text-muted">
-        {fromLabel} 장소 → {toLabel} 장소 구간이에요.
+        {toOrder - 1}번째 장소 → {toOrder}번째 장소 구간이에요.
       </p>
 
       {remaining && (

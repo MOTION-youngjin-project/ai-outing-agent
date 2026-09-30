@@ -50,7 +50,7 @@ function formatEntryTime(iso: string): string {
 
 const DESKTOP_NAV = [
   { label: "추천", href: "/recommend", icon: "compass" },
-  { label: "저장", href: "/mypage", icon: "heart" },
+  { label: "저장", href: "/saved", icon: "heart" },
   { label: "마이페이지", href: "/mypage", icon: "user" },
 ] as const;
 

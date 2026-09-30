@@ -58,6 +58,11 @@ export function CourseMapView({
   });
 
   const routePath = (legsQuery.data ?? []).flatMap((leg) => leg?.path ?? []);
+  // legsQuery는 좌표 있는 정류지 쌍 기준이라, places 인덱스(to)로 해당 구간 경로를 찾는다.
+  const legPathTo = (toIndex: number) => {
+    const k = withCoords.findIndex(({ i }) => i === toIndex) - 1;
+    return k >= 0 && withCoords[k].i === toIndex - 1 ? legsQuery.data?.[k]?.path : undefined;
+  };
   const spots: MapParkingSpot[] = withCoords.map(({ p, i }) => ({
     id: spotId(p, i),
     name: p.name,
@@ -144,6 +149,8 @@ export function CourseMapView({
         </div>
       ) : legActive && selectedPlace && prevPlace ? null : (
         <NaverMap
+          // NaverMap은 마운트 때 한 번만 그린다 — 구간 경로가 나중에 도착하면 다시 그리게 key로 묶는다.
+          key={routePath.length}
           center={{ latitude: withCoords[0].p.latitude, longitude: withCoords[0].p.longitude }}
           spots={spots}
           routePath={routePath.length > 1 ? routePath : undefined}
@@ -157,8 +164,8 @@ export function CourseMapView({
         <CurrentLegView
           from={prevPlace}
           to={selectedPlace}
-          fromLabel={`${selectedIndex}번째`}
-          toLabel={`${selectedIndex + 1}번째`}
+          toOrder={selectedIndex + 1}
+          drivingPath={legPathTo(selectedIndex)}
           advanceLabel={selectedIndex + 1 < places.length ? "다음 장소로" : "코스 마치기"}
           onAdvance={advanceLeg}
           onBack={backFromLeg}
@@ -302,6 +309,14 @@ function SelectedStopCard({
           </span>
         )}
       </div>
+      {/* X(선택 해제)는 작아서 못 찾는다 — 현재 구간 화면과 같은 이름의 버튼을 둔다. */}
+      <button
+        onClick={onClose}
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-hairline py-2 text-[13px] font-medium text-ink-soft"
+      >
+        <Icon name="menu" className="h-3.5 w-3.5" />
+        전체 코스 보기
+      </button>
     </div>
   );
 }
